@@ -5,7 +5,7 @@
 //!
 //! # Producing jobs
 //!
-//! If you want to **submit** jobs to Faktory, use [`Producer`](struct.Producer.html).
+//! If you want to **submit** jobs to Faktory, use `Producer`.
 //!
 //! ```no_run
 //! # use faktory::{Producer, Job};
@@ -16,7 +16,7 @@
 //!
 //! # Consuming jobs (i.e., workers)
 //!
-//! If you want to **accept** jobs from Faktory, use [`Consumer`](struct.Consumer.html).
+//! If you want to **accept** jobs from Faktory, use `Consumer`.
 //!
 //! ```no_run
 //! # use faktory::ConsumerBuilder;

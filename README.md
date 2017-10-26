@@ -11,7 +11,7 @@ This crate provides API bindings for the language-agnostic
 
 ## Producing jobs
 
-If you want to **submit** jobs to Faktory, use [`Producer`](struct.Producer.html).
+If you want to **submit** jobs to Faktory, use `Producer`.
 
 ```rust
 use std::net::TcpStream;
@@ -21,7 +21,7 @@ p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
 
 ## Consuming jobs (i.e., workers)
 
-If you want to **accept** jobs from Faktory, use [`Consumer`](struct.Consumer.html).
+If you want to **accept** jobs from Faktory, use `Consumer`.
 
 ```rust
 use std::io;
