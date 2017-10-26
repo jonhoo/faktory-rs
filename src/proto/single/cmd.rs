@@ -73,7 +73,7 @@ pub struct Fail {
     #[serde(skip_serializing_if = "Vec::is_empty")] backtrace: Vec<String>,
 }
 
-impl FaktoryCommand for Fail {
+impl<'a> FaktoryCommand for &'a Fail {
     fn issue<W: Write>(&self, w: &mut Write) -> serde_json::Result<()> {
         w.write_all(b"FAIL ").map_err(serde_json::Error::io)?;
         serde_json::to_writer(&mut *w, self)?;

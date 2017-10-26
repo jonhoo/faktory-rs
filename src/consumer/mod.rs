@@ -32,6 +32,7 @@ where
     S: Read + Write,
 {
     c: Arc<Mutex<Client<S>>>,
+    last_job_result: Option<Result<String, Fail>>,
     callbacks: HashMap<String, F>,
 }
 
@@ -105,6 +106,7 @@ impl<F, S: Read + Write> From<Client<S>> for Consumer<S, F> {
         Consumer {
             c: Arc::new(Mutex::new(c)),
             callbacks: Default::default(),
+            last_job_result: None,
         }
     }
 }
@@ -167,12 +169,27 @@ where
     where
         Q: AsRef<str>,
     {
+        // get a job
         let job = self.c.lock().unwrap().fetch(queues)?;
+
+        // remember the job id
         let jid = job.jid.clone();
+
+        // process the job
         let r = self.run_job(job);
+
+        // report back
         match r {
             Ok(_) => {
                 // job done -- acknowledge
+                // remember it in case we fail to notify the server (e.g., broken connection)
+                self.last_job_result = Some(Ok(jid));
+                let jid = self.last_job_result
+                    .as_ref()
+                    .unwrap()
+                    .as_ref()
+                    .ok()
+                    .unwrap();
                 self.c.lock().unwrap().issue(Ack::new(jid))?.await_ok()?;
             }
             Err(e) => {
@@ -194,9 +211,19 @@ where
                         f
                     }
                 };
+                self.last_job_result = Some(Err(fail));
+                let fail = self.last_job_result
+                    .as_ref()
+                    .unwrap()
+                    .as_ref()
+                    .err()
+                    .unwrap();
                 self.c.lock().unwrap().issue(fail)?.await_ok()?;
             }
         }
+
+        // we won't have to tell the server again
+        self.last_job_result = None;
         Ok(())
     }
 
@@ -212,6 +239,10 @@ where
     }
 
     /// Run this worker on the given `queues` until an I/O error occurs.
+    ///
+    /// Note that if the worker fails, `reconnect()` should likely be called before calling `run()`
+    /// again. If an error occurred while reporting a job success or failure, the result will be
+    /// re-reported to the server without re-executing the job.
     pub fn run<Q>(mut self, queues: &[Q]) -> io::Error
     where
         Q: AsRef<str>,
@@ -229,13 +260,37 @@ where
             thread::sleep(time::Duration::from_secs(5));
         });
 
+        // retry delivering notification about our last job result
+        if let Some(ref r) = self.last_job_result {
+            let mut c = self.c.lock().unwrap();
+            let r = match *r {
+                Ok(ref jid) => c.issue(Ack::new(jid)),
+                Err(ref fail) => c.issue(fail),
+            };
+
+            if let Err(e) = r {
+                return e;
+            }
+            let r = r.unwrap();
+
+            if let Err(e) = r.await_ok() {
+                // it could be that the server did previously get our ACK/FAIL, and that it was the
+                // resulting OK that failed. in that case, we would get an error response when
+                // re-sending the job response. this should not count as critical. other errors,
+                // however, should!
+                if e.kind() != io::ErrorKind::InvalidInput {
+                    return e;
+                }
+            }
+        }
+        self.last_job_result = None;
+
         loop {
             if let Err(e) = self.run_one(queues) {
                 kill.store(true, atomic::Ordering::SeqCst);
                 hbt.join().unwrap();
                 return e;
             }
-            // TODO: remember the current job if we didn't get to ack/fail it!
         }
     }
 }
