@@ -79,13 +79,24 @@ pub fn read_ok<R: BufRead>(r: R) -> io::Result<()> {
 }
 
 // ----------------------------------------------
+
+pub fn read_str<R: BufRead>(r: R) -> io::Result<String> {
+    let rr = read(r)?;
+    if let RawResponse::String(s) = rr {
+        return Ok(s);
+    }
+
+    Err(bad("server ok", &rr))
+}
+
+// ----------------------------------------------
 //
 // below is the implementation of the Redis RESP protocol
 //
 // ----------------------------------------------
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum RawResponse {
+enum RawResponse {
     String(String),
     Blob(Vec<u8>),
     Number(isize),

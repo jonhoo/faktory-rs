@@ -27,8 +27,9 @@
 //!     println!("{:?}", job);
 //!     Ok(())
 //! });
-//! let e = c.run(&["default"]);
-//! println!("worker failed: {}", e);
+//! if let Err(e) = c.run(&["default"]) {
+//!     println!("worker failed: {}", e);
+//! }
 //! ```
 #![deny(missing_docs)]
 

@@ -1,7 +1,7 @@
 use std::io::prelude::*;
 use std::io;
 use std::error::Error;
-use proto::{Client, ClientOptions, StreamConnector};
+use proto::{Client, ClientOptions, HeartbeatStatus, StreamConnector};
 use std::collections::HashMap;
 use std::sync::{atomic, Arc, Mutex};
 
@@ -24,8 +24,9 @@ use proto::{Ack, Fail, Job};
 ///     println!("{:?}", job);
 ///     Ok(())
 /// });
-/// let e = c.run(&["default"]);
-/// println!("worker failed: {}", e);
+/// if let Err(e) = c.run(&["default"]) {
+///     println!("worker failed: {}", e);
+/// }
 /// ```
 pub struct Consumer<S, F>
 where
@@ -238,12 +239,13 @@ where
         Ok(())
     }
 
-    /// Run this worker on the given `queues` until an I/O error occurs.
+    /// Run this worker on the given `queues` until an I/O error occurs, or until the server tells
+    /// the worker to disengage.
     ///
     /// Note that if the worker fails, `reconnect()` should likely be called before calling `run()`
     /// again. If an error occurred while reporting a job success or failure, the result will be
     /// re-reported to the server without re-executing the job.
-    pub fn run<Q>(mut self, queues: &[Q]) -> io::Error
+    pub fn run<Q>(mut self, queues: &[Q]) -> io::Result<()>
     where
         Q: AsRef<str>,
     {
@@ -253,7 +255,15 @@ where
         let c = self.c.clone();
         let kill: Arc<atomic::AtomicBool> = Default::default();
         let killed = kill.clone();
-        let hbt = thread::spawn(move || while let Ok(_) = c.lock().unwrap().heartbeat() {
+        let hbt = thread::spawn(move || while let Ok(hb) = c.lock().unwrap().heartbeat() {
+            match hb {
+                HeartbeatStatus::Ok => {}
+                HeartbeatStatus::Quiet | HeartbeatStatus::Terminate => {
+                    // TODO: figure out how these two are different
+                    killed.store(true, atomic::Ordering::SeqCst);
+                    break;
+                }
+            }
             if killed.load(atomic::Ordering::SeqCst) {
                 break;
             }
@@ -264,14 +274,9 @@ where
         if let Some(ref r) = self.last_job_result {
             let mut c = self.c.lock().unwrap();
             let r = match *r {
-                Ok(ref jid) => c.issue(Ack::new(jid)),
-                Err(ref fail) => c.issue(fail),
+                Ok(ref jid) => c.issue(Ack::new(jid))?,
+                Err(ref fail) => c.issue(fail)?,
             };
-
-            if let Err(e) = r {
-                return e;
-            }
-            let r = r.unwrap();
 
             if let Err(e) = r.await_ok() {
                 // it could be that the server did previously get our ACK/FAIL, and that it was the
@@ -279,19 +284,20 @@ where
                 // re-sending the job response. this should not count as critical. other errors,
                 // however, should!
                 if e.kind() != io::ErrorKind::InvalidInput {
-                    return e;
+                    return Err(e);
                 }
             }
         }
         self.last_job_result = None;
 
-        loop {
+        while !kill.load(atomic::Ordering::SeqCst) {
             if let Err(e) = self.run_one(queues) {
                 kill.store(true, atomic::Ordering::SeqCst);
                 hbt.join().unwrap();
-                return e;
+                return Err(e);
             }
         }
+        Ok(())
     }
 }
 

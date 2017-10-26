@@ -207,18 +207,34 @@ impl<C: StreamConnector> Client<C> {
 
 pub struct ReadToken<'a, S: Read + Write + 'a>(&'a mut Client<S>);
 
+pub(crate) enum HeartbeatStatus {
+    Ok,
+    Terminate,
+    Quiet,
+}
+
 impl<S: Read + Write> Client<S> {
     pub fn issue<C: self::single::FaktoryCommand>(&mut self, c: C) -> io::Result<ReadToken<S>> {
         single::write_command(&mut self.stream, c)?;
         Ok(ReadToken(self))
     }
 
-    pub fn heartbeat(&mut self) -> io::Result<()> {
+    pub fn heartbeat(&mut self) -> io::Result<HeartbeatStatus> {
         single::write_command(
             &mut self.stream,
             Heartbeat::new(self.opts.wid.as_ref().unwrap()),
         )?;
-        single::read_ok(&mut self.stream)
+
+        let v = single::read_str(&mut self.stream)?;
+        match &*v {
+            "OK" => Ok(HeartbeatStatus::Ok),
+            "terminate" => Ok(HeartbeatStatus::Terminate),
+            "quiet" => Ok(HeartbeatStatus::Quiet),
+            s => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("got unexpected heartbeat response '{}'", s),
+            )),
+        }
     }
 
     pub fn fetch<Q>(&mut self, queues: &[Q]) -> io::Result<Job>
