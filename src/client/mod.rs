@@ -38,6 +38,6 @@ mod tests {
     #[test]
     fn it_works() {
         let mut p = Producer::connect(("127.0.0.1", 7419)).unwrap();
-        p.issue(Job::new("foobar", &["z"])).unwrap();
+        p.issue(Job::new("foobar", vec!["z"])).unwrap();
     }
 }

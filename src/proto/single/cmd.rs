@@ -191,7 +191,7 @@ pub struct Job {
     pub jid: String,
     pub queue: String,
     #[serde(rename = "jobtype")] pub kind: String,
-    pub args: Vec<String>,
+    pub args: Vec<serde_json::Value>,
 
     #[serde(skip_serializing_if = "Option::is_none")] pub created_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")] pub enqueued_at: Option<String>,
@@ -205,11 +205,10 @@ pub struct Job {
 }
 
 impl Job {
-    pub fn new<S, A, AI>(kind: S, args: A) -> Self
+    pub fn new<S, A>(kind: S, args: Vec<A>) -> Self
     where
         S: ToString,
-        AI: ToString,
-        A: IntoIterator<Item = AI>,
+        A: Into<serde_json::Value>,
     {
         use rand::{thread_rng, Rng};
         let random_jid = thread_rng().gen_ascii_chars().take(16).collect();
@@ -219,7 +218,7 @@ impl Job {
             jid: random_jid,
             queue: "default".into(),
             kind: kind.to_string(),
-            args: args.into_iter().map(|s| s.to_string()).collect(),
+            args: args.into_iter().map(|s| s.into()).collect(),
 
             created_at: Some(now.to_rfc3339()),
             enqueued_at: None,

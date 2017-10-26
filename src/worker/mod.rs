@@ -130,7 +130,7 @@ mod tests {
         use client::Producer;
 
         let mut p = Producer::connect(("127.0.0.1", 7419)).unwrap();
-        let mut j = Job::new("foobar", &["z"]);
+        let mut j = Job::new("foobar", vec!["z"]);
         j.queue = "worker_test_1".to_string();
         p.issue(j).unwrap();
 
