@@ -1,0 +1,221 @@
+use std::io::prelude::*;
+use std::io;
+use serde_json;
+
+use super::resp::{self, RawResponse};
+
+mod send;
+mod resp;
+
+pub mod command {
+    use std::collections::HashMap;
+    use serde_json;
+
+    pub struct End;
+
+    #[derive(Serialize, Deserialize)]
+    pub struct Hello {
+        hostname: String,
+        wid: String,
+        pid: usize,
+        labels: Vec<String>,
+
+        /// Hash is hex(sha256(password + salt))
+        #[serde(rename = "pwdhash")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        password_hash: Option<String>,
+    }
+
+    impl Hello {
+        pub fn new<S1, S2, S3>(hostname: S1, wid: S2, pid: usize, labels: &[S3]) -> Self
+        where
+            S1: ToString,
+            S2: ToString,
+            S3: ToString,
+        {
+            Hello {
+                hostname: hostname.to_string(),
+                wid: wid.to_string(),
+                pid,
+                labels: labels.iter().map(|s| s.to_string()).collect(),
+                password_hash: None,
+            }
+        }
+
+        pub fn set_password(&mut self, salt: &str, password: &str) {
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::default();
+            hasher.input(password.as_bytes());
+            hasher.input(salt.as_bytes());
+            self.password_hash = Some(format!("{:x}", hasher.result()));
+        }
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct Failure {
+        retry_count: usize,
+        failed_at: String,
+        #[serde(skip_serializing_if = "Option::is_none")] next_at: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")] message: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(rename = "errtype")]
+        kind: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")] backtrace: Option<Vec<String>>,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct Job {
+        pub jid: String,
+        pub queue: String,
+        #[serde(rename = "jobtype")] pub kind: String,
+        pub args: Vec<String>,
+
+        #[serde(skip_serializing_if = "Option::is_none")] pub created_at: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")] pub enqueued_at: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")] pub at: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")] pub reserve_for: Option<usize>,
+        #[serde(skip_serializing_if = "Option::is_none")] pub retry: Option<usize>,
+        #[serde(skip_serializing_if = "Option::is_none")] pub backtrace: Option<usize>,
+        #[serde(skip_serializing_if = "Option::is_none")] pub failure: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub custom: Option<HashMap<String, serde_json::Value>>,
+    }
+
+    impl Job {
+        pub fn new<S, A, AI>(kind: S, args: A) -> Self
+        where
+            S: ToString,
+            AI: ToString,
+            A: IntoIterator<Item = AI>,
+        {
+            use rand::{thread_rng, Rng};
+            let random_jid = thread_rng().gen_ascii_chars().take(16).collect();
+            use chrono::prelude::*;
+            let now = Utc::now();
+            Job {
+                jid: random_jid,
+                queue: "default".into(),
+                kind: kind.to_string(),
+                args: args.into_iter().map(|s| s.to_string()).collect(),
+
+                created_at: Some(now.to_rfc3339()),
+                enqueued_at: None,
+                at: None,
+                reserve_for: None,
+                retry: Some(25),
+                backtrace: None,
+                failure: None,
+                custom: None,
+            }
+        }
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct Push(Job);
+
+    use std::ops::Deref;
+    impl Deref for Push {
+        type Target = Job;
+        fn deref(&self) -> &Self::Target {
+            &self.0
+        }
+    }
+
+    impl From<Job> for Push {
+        fn from(j: Job) -> Self {
+            Push(j)
+        }
+    }
+}
+
+pub trait FaktoryCommand {
+    fn issue<W: Write>(&self, w: &mut Write) -> serde_json::Result<()>;
+}
+
+impl FaktoryCommand for command::Hello {
+    fn issue<W: Write>(&self, w: &mut Write) -> serde_json::Result<()> {
+        w.write_all(b"HELLO ").map_err(serde_json::Error::io)?;
+        serde_json::to_writer(&mut *w, self)?;
+        w.write_all(b"\r\n").map_err(serde_json::Error::io)
+    }
+}
+
+impl FaktoryCommand for command::Push {
+    fn issue<W: Write>(&self, w: &mut Write) -> serde_json::Result<()> {
+        w.write_all(b"PUSH ").map_err(serde_json::Error::io)?;
+        serde_json::to_writer(&mut *w, &*self)?;
+        w.write_all(b"\r\n").map_err(serde_json::Error::io)
+    }
+}
+
+impl FaktoryCommand for command::End {
+    fn issue<W: Write>(&self, w: &mut Write) -> serde_json::Result<()> {
+        w.write_all(b"END\r\n").map_err(serde_json::Error::io)
+    }
+}
+
+pub fn write_command<W: Write, C: FaktoryCommand>(w: &mut W, command: C) -> io::Result<()> {
+    command.issue::<W>(w)?;
+    w.flush()
+}
+
+pub fn write_command_and_await_ok<X: BufRead + Write, C: FaktoryCommand>(
+    x: &mut X,
+    command: C,
+) -> io::Result<()> {
+    write_command(x, command)?;
+    read_ok(x)
+}
+
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct Hi {
+    #[serde(rename = "v")] pub version: String,
+
+    #[serde(rename = "s")] pub salt: Option<String>,
+}
+
+fn bad(expected: &str, got: &RawResponse) -> io::Error {
+    use std;
+    let stringy = match got {
+        &RawResponse::String(ref s) => Some(&**s),
+        &RawResponse::Blob(ref b) => if let Ok(s) = std::str::from_utf8(b) {
+            Some(s)
+        } else {
+            None
+        },
+        _ => None,
+    };
+
+    match stringy {
+        Some(s) => io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("expected {}, got '{}'", expected, s),
+        ),
+        None => io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("expected {}, got {:?}", expected, got),
+        ),
+    }
+}
+
+pub fn read_hi<R: BufRead>(r: R) -> io::Result<Hi> {
+    let rr = resp::read(r)?;
+    if let RawResponse::String(ref s) = rr {
+        if s.starts_with("HI ") {
+            return Ok(serde_json::from_str(&s[3..])?);
+        }
+    }
+
+    Err(bad("server hi", &rr))
+}
+
+pub fn read_ok<R: BufRead>(r: R) -> io::Result<()> {
+    let rr = resp::read(r)?;
+    if let RawResponse::String(ref s) = rr {
+        if s == "OK" {
+            return Ok(());
+        }
+    }
+
+    Err(bad("server ok", &rr))
+}
