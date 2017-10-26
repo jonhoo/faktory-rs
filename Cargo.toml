@@ -1,7 +1,23 @@
 [package]
 name = "faktory"
 version = "0.1.0"
+
+description = "API bindings for the language-agnostic Faktory work server"
+readme = "README.md"
+
 authors = ["Jon Gjengset <jon@thesquareplanet.com>"]
+
+documentation = "https://docs.rs/faktory"
+homepage = "https://github.com/jonhoo/faktory-rs"
+repository = "https://github.com/jonhoo/faktory-rs.git"
+
+keywords = ["faktory", "api-bindings", "work-server", "job-server"]
+categories = ["api-bindings", "asynchronous", "network-programming"]
+
+license = "MIT/Apache-2.0"
+
+[badges]
+travis-ci = { repository = "jonhoo/faktory-rs" }
 
 [dependencies]
 serde_json = "1.0"

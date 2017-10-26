@@ -247,6 +247,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore]
     fn it_works() {
         Client::<TcpStream>::connect_env(ClientOptions::default()).unwrap();
     }
