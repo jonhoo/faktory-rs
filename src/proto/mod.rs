@@ -4,32 +4,33 @@ use libc::getpid;
 use std::io::prelude::*;
 use std::io;
 use serde;
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::TcpStream;
 
 mod single;
 
 // commands that users can issue
-pub use self::single::{Ack, Fail, Info, Job, Push};
+pub use self::single::{Ack, Fail, Heartbeat, Info, Job, Push};
 
 // responses that users can see
 pub use self::single::Hi;
 
-pub struct ClientOptions {
+#[derive(Clone)]
+pub(crate) struct ClientOptions {
     /// Hostname to advertise to server.
     /// Defaults to machine hostname.
-    hostname: Option<String>,
+    pub(crate) hostname: Option<String>,
 
     /// PID to advertise to server.
     /// Defaults to process ID.
-    pid: Option<usize>,
+    pub(crate) pid: Option<usize>,
 
     /// Worker ID to advertise to server.
     /// Defaults to a GUID.
-    wid: Option<String>,
+    pub(crate) wid: Option<String>,
 
     /// Labels to advertise to server.
     /// Defaults to ["rust"].
-    labels: Vec<String>,
+    pub(crate) labels: Vec<String>,
 }
 
 impl Default for ClientOptions {
@@ -43,12 +44,13 @@ impl Default for ClientOptions {
     }
 }
 
-pub struct Client<S: Read + Write> {
+pub(crate) struct Client<S: Read + Write> {
     stream: BufStream<S>,
+    wid: String,
 }
 
 impl<S: Read + Write> Client<S> {
-    fn init(&mut self, opts: ClientOptions, password: Option<&str>) -> io::Result<()> {
+    fn init(&mut self, opts: ClientOptions, pwd: Option<&str>) -> io::Result<()> {
         let hi = single::read_hi(&mut self.stream)?;
         let hostname = opts.hostname
             .or_else(|| get_hostname())
@@ -58,10 +60,11 @@ impl<S: Read + Write> Client<S> {
             use rand::{thread_rng, Rng};
             thread_rng().gen_ascii_chars().take(32).collect()
         });
-        let mut hello = single::Hello::new(hostname, wid, pid, &opts.labels[..]);
+        let mut hello = single::Hello::new(hostname, &wid, pid, &opts.labels[..]);
+        self.wid = wid;
         if let Some(salt) = hi.salt {
-            if let Some(pwd) = password {
-                hello.set_password(&salt, pwd);
+            if let Some(pwd) = pwd {
+                hello.set_password(&salt, &pwd);
             } else {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
@@ -72,11 +75,12 @@ impl<S: Read + Write> Client<S> {
         single::write_command_and_await_ok(&mut self.stream, hello)
     }
 
-    fn new(stream: S, opts: ClientOptions, password: Option<&str>) -> io::Result<Client<S>> {
+    fn new(stream: S, opts: ClientOptions, pwd: Option<&str>) -> io::Result<Client<S>> {
         let mut s = Client {
             stream: BufStream::new(stream),
+            wid: "".to_string(), // set by init
         };
-        s.init(opts, password)?;
+        s.init(opts, pwd)?;
         Ok(s)
     }
 }
@@ -88,35 +92,85 @@ impl<S: Read + Write> Drop for Client<S> {
 }
 
 impl Client<TcpStream> {
+    /// Connect to an unsecured Faktory server using the standard environment variables.
+    ///
+    /// Will first read `FAKTORY_PROVIDER` to get the name of the environment variable to get the
+    /// address from (defaults to `FAKTORY_URL`), and then read that environment variable to get
+    /// the server address. If the latter environment variable is not defined, the url defaults to:
+    ///
+    /// ```text
+    /// tcp://localhost:7419
+    /// ```
+    pub fn connect_env(opts: ClientOptions) -> io::Result<Client<TcpStream>> {
+        use std::env;
+        let var = env::var("FAKTORY_PROVIDER").unwrap_or_else(|_| "FAKTORY_URL".to_string());
+        let url = env::var(var).unwrap_or_else(|_| "tcp://localhost:7419".to_string());
+        Self::connect(opts, &url)
+    }
+
     /// Connect to an unsecured Faktory server.
-    pub fn connect<A: ToSocketAddrs>(addr: A) -> io::Result<Client<TcpStream>> {
+    ///
+    /// The url is in standard URL form:
+    ///
+    /// ```text
+    /// tcp://[:password@]hostname[:port]
+    /// ```
+    ///
+    /// Port defaults to 7419 if not given.
+    pub fn connect(opts: ClientOptions, url: &str) -> io::Result<Client<TcpStream>> {
+        use url::Url;
+        let url = Url::parse(url).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+        if url.scheme() != "tcp" {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("unknown scheme '{}'", url.scheme()),
+            ));
+        }
+
+        if url.host_str().is_none() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "no hostname given",
+            ));
+        }
+
+        let addr = (url.host_str().unwrap(), url.port().unwrap_or(7419));
         let stream = TcpStream::connect(addr)?;
-        Client::new(stream, ClientOptions::default(), None)
+        Client::new(stream, opts, url.password())
     }
 }
 
+pub struct ReadToken<'a, S: Read + Write + 'a>(&'a mut Client<S>);
+
 impl<S: Read + Write> Client<S> {
-    pub fn issue<C: self::single::FaktoryCommand>(&mut self, c: C) -> io::Result<()> {
-        single::write_command(&mut self.stream, c)
+    pub fn issue<C: self::single::FaktoryCommand>(&mut self, c: C) -> io::Result<ReadToken<S>> {
+        single::write_command(&mut self.stream, c)?;
+        Ok(ReadToken(self))
+    }
+
+    pub fn heartbeat(&mut self) -> io::Result<()> {
+        single::write_command(&mut self.stream, Heartbeat::new(&self.wid))?;
+        single::read_ok(&mut self.stream)
     }
 
     pub fn fetch<Q>(&mut self, queues: &[Q]) -> io::Result<Job>
     where
         Q: AsRef<str>,
     {
-        self::single::write_command(&mut self.stream, single::Fetch::from(queues))?;
-        self.read_json()
+        self.issue(single::Fetch::from(queues))?.read_json()
+    }
+}
+
+impl<'a, S: Read + Write> ReadToken<'a, S> {
+    pub fn await_ok(self) -> io::Result<()> {
+        single::read_ok(&mut self.0.stream)
     }
 
-    pub fn await_ok(&mut self) -> io::Result<()> {
-        single::read_ok(&mut self.stream)
-    }
-
-    pub fn read_json<T>(&mut self) -> io::Result<T>
+    pub fn read_json<T>(self) -> io::Result<T>
     where
         T: serde::de::DeserializeOwned,
     {
-        Ok(single::read_json(&mut self.stream)?)
+        Ok(single::read_json(&mut self.0.stream)?)
     }
 }
 
@@ -126,6 +180,6 @@ mod tests {
 
     #[test]
     fn it_works() {
-        Client::connect(("127.0.0.1", 7419)).unwrap();
+        Client::connect_env(ClientOptions::default()).unwrap();
     }
 }
