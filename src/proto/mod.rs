@@ -47,22 +47,37 @@ impl Default for ClientOptions {
 
 pub(crate) struct Client<S: Read + Write> {
     stream: BufStream<S>,
-    wid: String,
+    opts: ClientOptions,
 }
 
 impl<S: Read + Write> Client<S> {
-    fn init(&mut self, opts: ClientOptions, pwd: Option<&str>) -> io::Result<()> {
+    fn init(&mut self, pwd: Option<&str>) -> io::Result<()> {
         let hi = single::read_hi(&mut self.stream)?;
-        let hostname = opts.hostname
+
+        // fill in any missing options, and remember them for re-connect
+        let hostname = self.opts
+            .hostname
+            .clone()
             .or_else(|| get_hostname())
             .unwrap_or_else(|| "local".to_string());
-        let pid = opts.pid.unwrap_or_else(|| unsafe { getpid() } as usize);
-        let wid = opts.wid.unwrap_or_else(|| {
+        self.opts.hostname = Some(hostname);
+        let pid = self.opts
+            .pid
+            .unwrap_or_else(|| unsafe { getpid() } as usize);
+        self.opts.pid = Some(pid);
+        let wid = self.opts.wid.clone().unwrap_or_else(|| {
             use rand::{thread_rng, Rng};
             thread_rng().gen_ascii_chars().take(32).collect()
         });
-        let mut hello = single::Hello::new(hostname, &wid, pid, &opts.labels[..]);
-        self.wid = wid;
+        self.opts.wid = Some(wid);
+
+        let mut hello = single::Hello::new(
+            self.opts.hostname.as_ref().unwrap(),
+            self.opts.wid.as_ref().unwrap(),
+            self.opts.pid.unwrap(),
+            &self.opts.labels[..],
+        );
+
         if let Some(salt) = hi.salt {
             if let Some(pwd) = pwd {
                 hello.set_password(&salt, &pwd);
@@ -76,13 +91,11 @@ impl<S: Read + Write> Client<S> {
         single::write_command_and_await_ok(&mut self.stream, hello)
     }
 
-    fn new(stream: S, opts: ClientOptions, pwd: Option<&str>) -> io::Result<Client<S>> {
-        let mut s = Client {
+    fn new(stream: S, opts: ClientOptions) -> Client<S> {
+        Client {
             stream: BufStream::new(stream),
-            wid: "".to_string(), // set by init
-        };
-        s.init(opts, pwd)?;
-        Ok(s)
+            opts: opts,
+        }
     }
 }
 
@@ -121,6 +134,12 @@ impl StreamConnector for TcpStream {
 }
 
 impl<C: StreamConnector> Client<C> {
+    fn get_env_url() -> String {
+        use std::env;
+        let var = env::var("FAKTORY_PROVIDER").unwrap_or_else(|_| "FAKTORY_URL".to_string());
+        env::var(var).unwrap_or_else(|_| "tcp://localhost:7419".to_string())
+    }
+
     /// Connect to an unsecured Faktory server using the standard environment variables.
     ///
     /// Will first read `FAKTORY_PROVIDER` to get the name of the environment variable to get the
@@ -131,22 +150,10 @@ impl<C: StreamConnector> Client<C> {
     /// tcp://localhost:7419
     /// ```
     pub fn connect_env(opts: ClientOptions) -> io::Result<Self> {
-        use std::env;
-        let var = env::var("FAKTORY_PROVIDER").unwrap_or_else(|_| "FAKTORY_URL".to_string());
-        let url = env::var(var).unwrap_or_else(|_| "tcp://localhost:7419".to_string());
-        Self::connect(opts, &url)
+        Self::connect(opts, &Self::get_env_url())
     }
 
-    /// Connect to an unsecured Faktory server.
-    ///
-    /// The url is in standard URL form:
-    ///
-    /// ```text
-    /// tcp://[:password@]hostname[:port]
-    /// ```
-    ///
-    /// Port defaults to 7419 if not given.
-    pub fn connect(opts: ClientOptions, url: &str) -> io::Result<Self> {
+    fn url_parse(url: &str) -> io::Result<Url> {
         let url = Url::parse(url).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
         if url.scheme() != "tcp" {
             return Err(io::Error::new(
@@ -162,9 +169,39 @@ impl<C: StreamConnector> Client<C> {
             ));
         }
 
-        let addr = FromUrl::from_url(&url);
-        let stream = C::connect(addr)?;
-        Client::new(stream, opts, url.password())
+        Ok(url)
+    }
+
+    fn stream_from_url(url: &Url) -> io::Result<C> {
+        let addr = FromUrl::from_url(url);
+        C::connect(addr)
+    }
+
+    /// Connect to an unsecured Faktory server.
+    ///
+    /// The url is in standard URL form:
+    ///
+    /// ```text
+    /// tcp://[:password@]hostname[:port]
+    /// ```
+    ///
+    /// Port defaults to 7419 if not given.
+    pub fn connect(opts: ClientOptions, url: &str) -> io::Result<Self> {
+        let url = Self::url_parse(url)?;
+        let stream = Self::stream_from_url(&url)?;
+        let mut c = Client::new(stream, opts);
+        c.init(url.password())?;
+        Ok(c)
+    }
+
+    pub fn reconnect_env(&mut self) -> io::Result<()> {
+        self.reconnect(&Self::get_env_url())
+    }
+
+    pub fn reconnect(&mut self, url: &str) -> io::Result<()> {
+        let url = Self::url_parse(url)?;
+        self.stream = BufStream::new(Self::stream_from_url(&url)?);
+        self.init(url.password())
     }
 }
 
@@ -177,7 +214,10 @@ impl<S: Read + Write> Client<S> {
     }
 
     pub fn heartbeat(&mut self) -> io::Result<()> {
-        single::write_command(&mut self.stream, Heartbeat::new(&self.wid))?;
+        single::write_command(
+            &mut self.stream,
+            Heartbeat::new(self.opts.wid.as_ref().unwrap()),
+        )?;
         single::read_ok(&mut self.stream)
     }
 

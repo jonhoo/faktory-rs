@@ -123,6 +123,17 @@ impl<F, S: StreamConnector> Consumer<S, F> {
     pub fn default() -> io::Result<Self> {
         ConsumerBuilder::default().connect_env()
     }
+
+    /// Re-establish this worker's connection to the Faktory server using default environment
+    /// variables.
+    pub fn reconnect_env(&mut self) -> io::Result<()> {
+        self.c.lock().unwrap().reconnect_env()
+    }
+
+    /// Re-establish this worker's connection to the Faktory server using the given `url`.
+    pub fn reconnect<U: AsRef<str>>(&mut self, url: U) -> io::Result<()> {
+        self.c.lock().unwrap().reconnect(url.as_ref())
+    }
 }
 
 impl<S, E, F> Consumer<S, F>
