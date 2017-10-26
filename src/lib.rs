@@ -9,8 +9,9 @@
 //!
 //! ```no_run
 //! # use faktory::{Producer, Job};
-//! let mut p = Producer::connect(("127.0.0.1", 7419)).unwrap();
-//! p.issue(Job::new("foobar", vec!["z"])).unwrap();
+//! use std::net::TcpStream;
+//! let mut p = Producer::<TcpStream>::connect_env().unwrap();
+//! p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
 //! ```
 //!
 //! # Consuming jobs (i.e., workers)
@@ -20,7 +21,8 @@
 //! ```no_run
 //! # use faktory::ConsumerBuilder;
 //! use std::io;
-//! let mut c = ConsumerBuilder::default().connect_env().unwrap();
+//! use std::net::TcpStream;
+//! let mut c = ConsumerBuilder::default().connect_env::<TcpStream, _>().unwrap();
 //! c.register("foobar", |job| -> io::Result<()> {
 //!     println!("{:?}", job);
 //!     Ok(())
@@ -49,3 +51,4 @@ mod proto;
 pub use consumer::{Consumer, ConsumerBuilder};
 pub use producer::Producer;
 pub use proto::Job;
+pub use proto::{FromUrl, StreamConnector};

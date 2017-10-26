@@ -1,14 +1,14 @@
 use std::io::prelude::*;
 use std::io;
-use std::net::TcpStream;
-use proto::{Client, ClientOptions, Info, Job, Push};
+use proto::{Client, ClientOptions, Info, Job, Push, StreamConnector};
 use serde_json;
 
 /// A `Producer` provides an interface to a Faktory work server that allows enqueuing new jobs.
 ///
 /// ```no_run
-/// # use faktory::Producer;
-/// let mut p = Producer::connect_env().unwrap();
+/// # use faktory::{Producer, Job};
+/// use std::net::TcpStream;
+/// let mut p = Producer::<TcpStream>::connect_env().unwrap();
 /// p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
 /// ```
 // TODO: provide way of inspecting status of job.
@@ -16,7 +16,7 @@ pub struct Producer<S: Read + Write> {
     c: Client<S>,
 }
 
-impl Producer<TcpStream> {
+impl<S: StreamConnector> Producer<S> {
     /// Connect to an unsecured Faktory server.
     ///
     /// The url is in standard URL form:
@@ -26,7 +26,7 @@ impl Producer<TcpStream> {
     /// ```
     ///
     /// Port defaults to 7419 if not given.
-    pub fn connect<S: AsRef<str>>(url: S) -> io::Result<Producer<TcpStream>> {
+    pub fn connect<U: AsRef<str>>(url: U) -> io::Result<Producer<S>> {
         Ok(Producer {
             c: Client::connect(ClientOptions::default(), url.as_ref())?,
         })
@@ -41,7 +41,7 @@ impl Producer<TcpStream> {
     /// ```text
     /// tcp://localhost:7419
     /// ```
-    pub fn connect_env() -> io::Result<Producer<TcpStream>> {
+    pub fn connect_env() -> io::Result<Producer<S>> {
         Ok(Producer {
             c: Client::connect_env(ClientOptions::default())?,
         })
@@ -71,7 +71,9 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let mut p = Producer::connect_env().unwrap();
+        use std::net::TcpStream;
+
+        let mut p = Producer::<TcpStream>::connect_env().unwrap();
         p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
     }
 }

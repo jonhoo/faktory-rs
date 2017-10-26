@@ -5,6 +5,7 @@ use std::io::prelude::*;
 use std::io;
 use serde;
 use std::net::TcpStream;
+use url::Url;
 
 mod single;
 
@@ -91,7 +92,35 @@ impl<S: Read + Write> Drop for Client<S> {
     }
 }
 
-impl Client<TcpStream> {
+/// A type that can be constructed from a Url connection string.
+pub trait FromUrl {
+    /// Construct a new `Self` from the given url.
+    fn from_url(url: &Url) -> Self;
+}
+
+impl FromUrl for String {
+    fn from_url(url: &Url) -> Self {
+        format!("{}:{}", url.host_str().unwrap(), url.port().unwrap_or(7419))
+    }
+}
+
+/// A stream that can be established using a url.
+pub trait StreamConnector: Sized + Read + Write + 'static {
+    /// The address used to connect this kind of stream.
+    type Addr: FromUrl;
+
+    /// Establish a new stream using the given `addr`.
+    fn connect(addr: Self::Addr) -> io::Result<Self>;
+}
+
+impl StreamConnector for TcpStream {
+    type Addr = String;
+    fn connect(addr: Self::Addr) -> io::Result<Self> {
+        TcpStream::connect(&addr)
+    }
+}
+
+impl<C: StreamConnector> Client<C> {
     /// Connect to an unsecured Faktory server using the standard environment variables.
     ///
     /// Will first read `FAKTORY_PROVIDER` to get the name of the environment variable to get the
@@ -101,7 +130,7 @@ impl Client<TcpStream> {
     /// ```text
     /// tcp://localhost:7419
     /// ```
-    pub fn connect_env(opts: ClientOptions) -> io::Result<Client<TcpStream>> {
+    pub fn connect_env(opts: ClientOptions) -> io::Result<Self> {
         use std::env;
         let var = env::var("FAKTORY_PROVIDER").unwrap_or_else(|_| "FAKTORY_URL".to_string());
         let url = env::var(var).unwrap_or_else(|_| "tcp://localhost:7419".to_string());
@@ -117,8 +146,7 @@ impl Client<TcpStream> {
     /// ```
     ///
     /// Port defaults to 7419 if not given.
-    pub fn connect(opts: ClientOptions, url: &str) -> io::Result<Client<TcpStream>> {
-        use url::Url;
+    pub fn connect(opts: ClientOptions, url: &str) -> io::Result<Self> {
         let url = Url::parse(url).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
         if url.scheme() != "tcp" {
             return Err(io::Error::new(
@@ -134,8 +162,8 @@ impl Client<TcpStream> {
             ));
         }
 
-        let addr = (url.host_str().unwrap(), url.port().unwrap_or(7419));
-        let stream = TcpStream::connect(addr)?;
+        let addr = FromUrl::from_url(&url);
+        let stream = C::connect(addr)?;
         Client::new(stream, opts, url.password())
     }
 }
@@ -180,6 +208,6 @@ mod tests {
 
     #[test]
     fn it_works() {
-        Client::connect_env(ClientOptions::default()).unwrap();
+        Client::<TcpStream>::connect_env(ClientOptions::default()).unwrap();
     }
 }

@@ -1,8 +1,7 @@
 use std::io::prelude::*;
 use std::io;
-use std::net::TcpStream;
 use std::error::Error;
-use proto::{Client, ClientOptions};
+use proto::{Client, ClientOptions, StreamConnector};
 use std::collections::HashMap;
 use std::sync::{atomic, Arc, Mutex};
 
@@ -19,7 +18,8 @@ use proto::{Ack, Fail, Job};
 /// ```no_run
 /// # use faktory::ConsumerBuilder;
 /// use std::io;
-/// let mut c = ConsumerBuilder::default().connect_env().unwrap();
+/// use std::net::TcpStream;
+/// let mut c = ConsumerBuilder::default().connect_env::<TcpStream, _>().unwrap();
 /// c.register("foobar", |job| -> io::Result<()> {
 ///     println!("{:?}", job);
 ///     Ok(())
@@ -27,11 +27,9 @@ use proto::{Ack, Fail, Job};
 /// let e = c.run(&["default"]);
 /// println!("worker failed: {}", e);
 /// ```
-pub struct Consumer<S, E, F>
+pub struct Consumer<S, F>
 where
     S: Read + Write,
-    E: Error,
-    F: FnMut(Job) -> Result<(), E>,
 {
     c: Arc<Mutex<Client<S>>>,
     callbacks: HashMap<String, F>,
@@ -76,15 +74,8 @@ impl ConsumerBuilder {
     /// ```text
     /// tcp://localhost:7419
     /// ```
-    pub fn connect_env<E, F>(self) -> io::Result<Consumer<TcpStream, E, F>>
-    where
-        E: Error,
-        F: FnMut(Job) -> Result<(), E>,
-    {
-        Ok(Consumer {
-            c: Arc::new(Mutex::new(Client::connect_env(self.0)?)),
-            callbacks: Default::default(),
-        })
+    pub fn connect_env<S: StreamConnector, F>(self) -> io::Result<Consumer<S, F>> {
+        Ok(Consumer::from(Client::connect_env(self.0)?))
     }
 
     /// Connect to an unsecured Faktory server.
@@ -96,15 +87,11 @@ impl ConsumerBuilder {
     /// ```
     ///
     /// Port defaults to 7419 if not given.
-    pub fn connect<E, F>(self, url: &str) -> io::Result<Consumer<TcpStream, E, F>>
-    where
-        E: Error,
-        F: FnMut(Job) -> Result<(), E>,
-    {
-        Ok(Consumer {
-            c: Arc::new(Mutex::new(Client::connect(self.0, url)?)),
-            callbacks: Default::default(),
-        })
+    pub fn connect<S: StreamConnector, F, U: AsRef<str>>(
+        self,
+        url: U,
+    ) -> io::Result<Consumer<S, F>> {
+        Ok(Consumer::from(Client::connect(self.0, url.as_ref())?))
     }
 }
 
@@ -113,11 +100,16 @@ enum Failed<E: Error> {
     BadJobType(String),
 }
 
-impl<E, F> Consumer<TcpStream, E, F>
-where
-    E: Error,
-    F: FnMut(Job) -> Result<(), E>,
-{
+impl<F, S: Read + Write> From<Client<S>> for Consumer<S, F> {
+    fn from(c: Client<S>) -> Self {
+        Consumer {
+            c: Arc::new(Mutex::new(c)),
+            callbacks: Default::default(),
+        }
+    }
+}
+
+impl<F, S: StreamConnector> Consumer<S, F> {
     /// Construct a new worker with default worker options and the url fetched from environment
     /// variables.
     ///
@@ -133,7 +125,7 @@ where
     }
 }
 
-impl<S, E, F> Consumer<S, E, F>
+impl<S, E, F> Consumer<S, F>
 where
     S: Read + Write + Send + 'static,
     E: Error,
@@ -243,15 +235,17 @@ mod tests {
 
     #[test]
     fn it_works() {
+        use std::net::TcpStream;
+
         use std::io;
         use producer::Producer;
 
-        let mut p = Producer::connect_env().unwrap();
+        let mut p = Producer::<TcpStream>::connect_env().unwrap();
         let mut j = Job::new("foobar", vec!["z"]);
         j.queue = "worker_test_1".to_string();
         p.enqueue(j).unwrap();
 
-        let mut c = Consumer::default().unwrap();
+        let mut c = Consumer::<TcpStream, _>::default().unwrap();
         c.register("foobar", |job| -> io::Result<()> {
             println!("{:?}", job);
             assert_eq!(job.args, vec!["z"]);
