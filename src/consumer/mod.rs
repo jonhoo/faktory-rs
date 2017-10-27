@@ -7,6 +7,10 @@ use std::sync::{atomic, Arc, Mutex};
 
 use proto::{Ack, Fail, Job};
 
+const STATUS_RUNNING: usize = 0;
+const STATUS_QUIET: usize = 1;
+const STATUS_TERMINATING: usize = 2;
+
 /// This struct represents a single Faktory worker.
 ///
 /// The worker consumes jobs fetched from the Faktory server, processes them, and reports the
@@ -253,21 +257,24 @@ where
         use std::thread;
         use std::time;
         let c = self.c.clone();
-        let kill: Arc<atomic::AtomicBool> = Default::default();
-        let killed = kill.clone();
+        let status: Arc<atomic::AtomicUsize> = Default::default();
+        let status_hb = status.clone();
         let hbt = thread::spawn(move || while let Ok(hb) = c.lock().unwrap().heartbeat() {
             match hb {
                 HeartbeatStatus::Ok => {}
-                HeartbeatStatus::Quiet | HeartbeatStatus::Terminate => {
-                    // TODO: figure out how these two are different
-                    killed.store(true, atomic::Ordering::SeqCst);
+                HeartbeatStatus::Quiet => {
+                    status_hb.store(STATUS_QUIET, atomic::Ordering::SeqCst);
+                }
+                HeartbeatStatus::Terminate => {
+                    // TODO: actively shoot down threads after timeout expires
+                    status_hb.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
                     break;
                 }
             }
-            if killed.load(atomic::Ordering::SeqCst) {
+            thread::sleep(time::Duration::from_secs(5));
+            if status_hb.load(atomic::Ordering::SeqCst) == STATUS_TERMINATING {
                 break;
             }
-            thread::sleep(time::Duration::from_secs(5));
         });
 
         // retry delivering notification about our last job result
@@ -290,13 +297,19 @@ where
         }
         self.last_job_result = None;
 
-        while !kill.load(atomic::Ordering::SeqCst) {
+        while status.load(atomic::Ordering::SeqCst) == STATUS_RUNNING {
             if let Err(e) = self.run_one(queues) {
-                kill.store(true, atomic::Ordering::SeqCst);
-                hbt.join().unwrap();
+                status.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
+                // don't wait for the heartbeat thread -- there's no reason to wait the 5 seconds
+                //hbt.join().unwrap();
                 return Err(e);
             }
         }
+
+        // we must now be in QUIET mode, which means we should no longer accept any jobs
+        // heartbeat thread will get TERMINATE to signal when to exit
+        hbt.join().unwrap();
+
         Ok(())
     }
 }
