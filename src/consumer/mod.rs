@@ -266,7 +266,17 @@ where
                     status_hb.store(STATUS_QUIET, atomic::Ordering::SeqCst);
                 }
                 HeartbeatStatus::Terminate => {
-                    // TODO: actively shoot down threads after timeout expires
+                    // TODO
+                    // this is not sufficient. in this case, we should FAIL the current job,
+                    // send END, shutdown the socket, and then exit from `run`. however, that's
+                    // pretty tricky given the current code layout. we'd probably need to "invert"
+                    // it so that the worker is in a thread and the heartbeat handling isn't. we'd
+                    // also then need to share the "current" job id between the two (probably using
+                    // AtomicOption). the hardest part is likely going to be ensuring that
+                    // self.last_job_result is correctly updated (so that we can resume), but this
+                    // might be made easier by having the main thread update it by subscribing to
+                    // messages from the worker thread, and then simply not updating it when
+                    // TERMINATE is given (which is likely what we'd want anyway).
                     status_hb.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
                     break;
                 }
