@@ -65,7 +65,7 @@ impl Heartbeat {
 
 // ----------------------------------------------
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Fail {
     #[serde(rename = "jid")] job_id: String,
     #[serde(rename = "errtype")] kind: String,

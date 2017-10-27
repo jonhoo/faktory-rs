@@ -33,6 +33,7 @@
 //! ```
 #![deny(missing_docs)]
 
+extern crate atomic_option;
 extern crate bufstream;
 extern crate chrono;
 extern crate hostname;

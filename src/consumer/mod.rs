@@ -4,6 +4,7 @@ use std::error::Error;
 use proto::{Client, ClientOptions, HeartbeatStatus, StreamConnector};
 use std::collections::HashMap;
 use std::sync::{atomic, Arc, Mutex};
+use atomic_option::AtomicOption;
 
 use proto::{Ack, Fail, Job};
 
@@ -37,8 +38,10 @@ where
     S: Read + Write,
 {
     c: Arc<Mutex<Client<S>>>,
-    last_job_result: Option<Result<String, Fail>>,
+    last_job_result: Arc<AtomicOption<Result<String, Fail>>>,
+    running_job: Arc<AtomicOption<String>>,
     callbacks: HashMap<String, F>,
+    terminated: bool,
 }
 
 /// Convenience wrapper for building a [`Consumer`](struct.Consumer.html) with non-standard
@@ -111,7 +114,9 @@ impl<F, S: Read + Write> From<Client<S>> for Consumer<S, F> {
         Consumer {
             c: Arc::new(Mutex::new(c)),
             callbacks: Default::default(),
-            last_job_result: None,
+            running_job: Arc::new(AtomicOption::empty()),
+            last_job_result: Arc::new(AtomicOption::empty()),
+            terminated: false,
         }
     }
 }
@@ -147,8 +152,19 @@ impl<S, E, F> Consumer<S, F>
 where
     S: Read + Write + Send + 'static,
     E: Error,
-    F: FnMut(Job) -> Result<(), E>,
+    F: FnMut(Job) -> Result<(), E> + Send + 'static,
 {
+    fn for_worker(&mut self) -> Self {
+        use std::mem;
+        Consumer {
+            c: self.c.clone(),
+            callbacks: mem::replace(&mut self.callbacks, HashMap::default()),
+            running_job: self.running_job.clone(),
+            last_job_result: self.last_job_result.clone(),
+            terminated: self.terminated,
+        }
+    }
+
     /// Register a handler function for the given `kind` of job.
     ///
     /// Whenever a job whose type matches `kind` is fetched from the Faktory, the given handler
@@ -180,6 +196,10 @@ where
         // remember the job id
         let jid = job.jid.clone();
 
+        // keep track of running job in case we're terminated during it
+        self.running_job
+            .swap(Box::new(jid.clone()), atomic::Ordering::SeqCst);
+
         // process the job
         let r = self.run_job(job);
 
@@ -188,13 +208,8 @@ where
             Ok(_) => {
                 // job done -- acknowledge
                 // remember it in case we fail to notify the server (e.g., broken connection)
-                self.last_job_result = Some(Ok(jid));
-                let jid = self.last_job_result
-                    .as_ref()
-                    .unwrap()
-                    .as_ref()
-                    .ok()
-                    .unwrap();
+                self.last_job_result
+                    .swap(Box::new(Ok(jid.clone())), atomic::Ordering::SeqCst);
                 self.c.lock().unwrap().issue(Ack::new(jid))?.await_ok()?;
             }
             Err(e) => {
@@ -216,19 +231,17 @@ where
                         f
                     }
                 };
-                self.last_job_result = Some(Err(fail));
-                let fail = self.last_job_result
-                    .as_ref()
-                    .unwrap()
-                    .as_ref()
-                    .err()
-                    .unwrap();
-                self.c.lock().unwrap().issue(fail)?.await_ok()?;
+
+                let fail2 = fail.clone();
+                self.last_job_result
+                    .swap(Box::new(Err(fail)), atomic::Ordering::SeqCst);
+                self.c.lock().unwrap().issue(&fail2)?.await_ok()?;
             }
         }
 
         // we won't have to tell the server again
-        self.last_job_result = None;
+        self.last_job_result.take(atomic::Ordering::SeqCst);
+        self.running_job.take(atomic::Ordering::SeqCst);
         Ok(())
     }
 
@@ -246,53 +259,35 @@ where
     /// Run this worker on the given `queues` until an I/O error occurs, or until the server tells
     /// the worker to disengage.
     ///
+    /// The value in `Ok()` indicates the number of workers that may still be processing jobs.
+    ///
     /// Note that if the worker fails, `reconnect()` should likely be called before calling `run()`
     /// again. If an error occurred while reporting a job success or failure, the result will be
-    /// re-reported to the server without re-executing the job.
-    pub fn run<Q>(&mut self, queues: &[Q]) -> io::Result<()>
+    /// re-reported to the server without re-executing the job. If the worker was terminated (i.e.,
+    /// `run` returns with an `Ok` response), the worker should **not** try to resume by calling
+    /// `run` again. This will cause a panic.
+    pub fn run<Q>(&mut self, queues: &[Q]) -> io::Result<usize>
     where
         Q: AsRef<str>,
     {
-        // start heartbeat thread
-        use std::thread;
-        use std::time;
-        let c = self.c.clone();
-        let status: Arc<atomic::AtomicUsize> = Default::default();
-        let status_hb = status.clone();
-        let hbt = thread::spawn(move || while let Ok(hb) = c.lock().unwrap().heartbeat() {
-            match hb {
-                HeartbeatStatus::Ok => {}
-                HeartbeatStatus::Quiet => {
-                    status_hb.store(STATUS_QUIET, atomic::Ordering::SeqCst);
-                }
-                HeartbeatStatus::Terminate => {
-                    // TODO
-                    // this is not sufficient. in this case, we should FAIL the current job,
-                    // send END, shutdown the socket, and then exit from `run`. however, that's
-                    // pretty tricky given the current code layout. we'd probably need to "invert"
-                    // it so that the worker is in a thread and the heartbeat handling isn't. we'd
-                    // also then need to share the "current" job id between the two (probably using
-                    // AtomicOption). the hardest part is likely going to be ensuring that
-                    // self.last_job_result is correctly updated (so that we can resume), but this
-                    // might be made easier by having the main thread update it by subscribing to
-                    // messages from the worker thread, and then simply not updating it when
-                    // TERMINATE is given (which is likely what we'd want anyway).
-                    status_hb.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
-                    break;
-                }
-            }
-            thread::sleep(time::Duration::from_secs(5));
-            if status_hb.load(atomic::Ordering::SeqCst) == STATUS_TERMINATING {
-                break;
-            }
-        });
+        assert!(self.terminated, "do not re-run a terminated worker");
+        assert_eq!(Arc::strong_count(&self.last_job_result), 1);
 
-        // retry delivering notification about our last job result
-        if let Some(ref r) = self.last_job_result {
+        // retry delivering notification about our last job result.
+        // we know there's no leftover thread at this point, so there's no race on the option.
+        if let Some(res) = self.last_job_result.take(atomic::Ordering::SeqCst) {
             let mut c = self.c.lock().unwrap();
-            let r = match *r {
-                Ok(ref jid) => c.issue(Ack::new(jid))?,
-                Err(ref fail) => c.issue(fail)?,
+            let r = match *res {
+                Ok(ref jid) => c.issue(Ack::new(jid)),
+                Err(ref fail) => c.issue(fail),
+            };
+
+            let r = match r {
+                Ok(r) => r,
+                Err(e) => {
+                    self.last_job_result.swap(res, atomic::Ordering::SeqCst);
+                    return Err(e);
+                }
             };
 
             if let Err(e) = r.await_ok() {
@@ -301,26 +296,97 @@ where
                 // re-sending the job response. this should not count as critical. other errors,
                 // however, should!
                 if e.kind() != io::ErrorKind::InvalidInput {
+                    self.last_job_result.swap(res, atomic::Ordering::SeqCst);
                     return Err(e);
                 }
             }
         }
-        self.last_job_result = None;
 
-        while status.load(atomic::Ordering::SeqCst) == STATUS_RUNNING {
-            if let Err(e) = self.run_one(queues) {
+        // keep track of the current status of this worker
+        let status: Arc<atomic::AtomicUsize> = Default::default();
+
+        // start a worker thread
+        use std::thread;
+        let mut w = self.for_worker();
+        let w = {
+            let status = status.clone();
+            let queues: Vec<_> = queues.into_iter().map(|s| s.as_ref().to_string()).collect();
+            thread::spawn(move || {
+                while status.load(atomic::Ordering::SeqCst) == STATUS_RUNNING {
+                    if let Err(e) = w.run_one(&queues[..]) {
+                        status.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
+                        return Err(e);
+                    }
+                }
                 status.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
-                // don't wait for the heartbeat thread -- there's no reason to wait the 5 seconds
-                //hbt.join().unwrap();
-                return Err(e);
+                Ok(())
+            })
+        };
+
+        // listen for heartbeats
+        let exit = loop {
+            match self.c.lock().unwrap().heartbeat() {
+                Ok(hb) => {
+                    use std::thread;
+                    use std::time;
+
+                    match hb {
+                        HeartbeatStatus::Ok => {}
+                        HeartbeatStatus::Quiet => {
+                            // tell the worker to eventually terminate
+                            status.store(STATUS_QUIET, atomic::Ordering::SeqCst);
+                        }
+                        HeartbeatStatus::Terminate => {
+                            // tell the worker to terminate
+                            // *and* fail the current job and immediately return
+                            status.store(STATUS_QUIET, atomic::Ordering::SeqCst);
+                            break Ok(true);
+                        }
+                    }
+
+                    thread::sleep(time::Duration::from_secs(5));
+
+                    // has worker terminated?
+                    if status.load(atomic::Ordering::SeqCst) == STATUS_TERMINATING {
+                        break Ok(false);
+                    }
+                }
+                Err(e) => {
+                    // for this to fail, the worker must probably also have failed
+                    status.store(STATUS_QUIET, atomic::Ordering::SeqCst);
+                    break Err(e);
+                }
             }
+        };
+
+        // there are a couple of cases here:
+        //
+        //  - we got TERMINATE, so we should just return, even if worker is still running
+        //  - we got TERMINATE and worker has exited
+        //  - we got an error from heartbeat()
+        //
+        self.terminated = exit.is_ok();
+        match exit {
+            Ok(forced) if forced => {
+                // FAIL currently running job even though it's still running
+                if let Some(jid) = self.running_job.take(atomic::Ordering::SeqCst) {
+                    let f = Fail::new(jid, "unknown", "terminated");
+
+                    // if this fails, we don't want to exit with Err(),
+                    // because we *were* still terminated!
+                    self.c
+                        .lock()
+                        .unwrap()
+                        .issue(&f)
+                        .and_then(|r| r.await_ok())
+                        .is_ok();
+                }
+                self.c.lock().unwrap().end_early().is_ok();
+                Ok(1)
+            }
+            Ok(_) => w.join().unwrap().map(|_| 0),
+            Err(e) => w.join().unwrap().and_then(|_| Err(e)),
         }
-
-        // we must now be in QUIET mode, which means we should no longer accept any jobs
-        // heartbeat thread will get TERMINATE to signal when to exit
-        hbt.join().unwrap();
-
-        Ok(())
     }
 }
 

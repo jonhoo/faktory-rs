@@ -30,3 +30,4 @@ libc = "0.2"
 rand = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 url = "1.5"
+atomic-option = "0.1"

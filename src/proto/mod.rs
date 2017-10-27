@@ -214,6 +214,11 @@ pub(crate) enum HeartbeatStatus {
 }
 
 impl<S: Read + Write> Client<S> {
+    pub fn end_early(&mut self) -> io::Result<()> {
+        // TODO: also shutdown socket
+        single::write_command(&mut self.stream, single::End)
+    }
+
     pub fn issue<C: self::single::FaktoryCommand>(&mut self, c: C) -> io::Result<ReadToken<S>> {
         single::write_command(&mut self.stream, c)?;
         Ok(ReadToken(self))
