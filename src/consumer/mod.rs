@@ -233,7 +233,7 @@ where
     }
 
     #[cfg(test)]
-    pub(crate) fn run_n<Q>(mut self, n: usize, queues: &[Q]) -> io::Result<()>
+    pub(crate) fn run_n<Q>(&mut self, n: usize, queues: &[Q]) -> io::Result<()>
     where
         Q: AsRef<str>,
     {
@@ -249,7 +249,7 @@ where
     /// Note that if the worker fails, `reconnect()` should likely be called before calling `run()`
     /// again. If an error occurred while reporting a job success or failure, the result will be
     /// re-reported to the server without re-executing the job.
-    pub fn run<Q>(mut self, queues: &[Q]) -> io::Result<()>
+    pub fn run<Q>(&mut self, queues: &[Q]) -> io::Result<()>
     where
         Q: AsRef<str>,
     {
