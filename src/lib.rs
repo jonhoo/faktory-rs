@@ -10,7 +10,7 @@
 //! ```no_run
 //! # use faktory::{Producer, Job};
 //! use std::net::TcpStream;
-//! let mut p = Producer::<TcpStream>::connect_env().unwrap();
+//! let mut p = Producer::connect_env::<TcpStream>().unwrap();
 //! p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
 //! ```
 //!
@@ -38,6 +38,7 @@ extern crate bufstream;
 extern crate chrono;
 extern crate hostname;
 extern crate libc;
+extern crate native_tls;
 extern crate rand;
 extern crate serde;
 #[macro_use]

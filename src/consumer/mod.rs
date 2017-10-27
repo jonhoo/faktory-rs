@@ -74,7 +74,7 @@ impl ConsumerBuilder {
         self
     }
 
-    /// Connect to an unsecured Faktory server using the standard environment variables.
+    /// Connect to a Faktory server using the standard environment variables.
     ///
     /// Will first read `FAKTORY_PROVIDER` to get the name of the environment variable to get the
     /// address from (defaults to `FAKTORY_URL`), and then read that environment variable to get
@@ -83,11 +83,11 @@ impl ConsumerBuilder {
     /// ```text
     /// tcp://localhost:7419
     /// ```
-    pub fn connect_env<S: StreamConnector, F>(self) -> io::Result<Consumer<S, F>> {
-        Ok(Consumer::from(Client::connect_env(self.0)?))
+    pub fn connect_env<C: StreamConnector, F>(self) -> io::Result<Consumer<C::Stream, F>> {
+        Ok(Consumer::from(Client::connect_env::<C>(self.0)?))
     }
 
-    /// Connect to an unsecured Faktory server.
+    /// Connect to a Faktory server at the given URL.
     ///
     /// The url is in standard URL form:
     ///
@@ -96,11 +96,11 @@ impl ConsumerBuilder {
     /// ```
     ///
     /// Port defaults to 7419 if not given.
-    pub fn connect<S: StreamConnector, F, U: AsRef<str>>(
+    pub fn connect<C: StreamConnector, F, U: AsRef<str>>(
         self,
         url: U,
-    ) -> io::Result<Consumer<S, F>> {
-        Ok(Consumer::from(Client::connect(self.0, url.as_ref())?))
+    ) -> io::Result<Consumer<C::Stream, F>> {
+        Ok(Consumer::from(Client::connect::<C>(self.0, url.as_ref())?))
     }
 }
 
@@ -121,7 +121,7 @@ impl<F, S: Read + Write> From<Client<S>> for Consumer<S, F> {
     }
 }
 
-impl<F, S: StreamConnector> Consumer<S, F> {
+impl<F, S: Read + Write + 'static> Consumer<S, F> {
     /// Construct a new worker with default worker options and the url fetched from environment
     /// variables.
     ///
@@ -132,40 +132,44 @@ impl<F, S: StreamConnector> Consumer<S, F> {
     ///  - `pid` is the OS PID of this process.
     ///  - `labels` is `["rust"]`.
     ///
-    pub fn default() -> io::Result<Self> {
-        ConsumerBuilder::default().connect_env()
+    pub fn default<C: StreamConnector<Stream = S>>() -> io::Result<Consumer<S, F>> {
+        ConsumerBuilder::default().connect_env::<C, F>()
     }
 
     /// Re-establish this worker's connection to the Faktory server using default environment
     /// variables.
-    pub fn reconnect_env(&mut self) -> io::Result<()> {
-        self.c.lock().unwrap().reconnect_env()
+    pub fn reconnect_env<C: StreamConnector<Stream = S>>(&mut self) -> io::Result<()> {
+        self.c.lock().unwrap().reconnect_env::<C>()
     }
 
     /// Re-establish this worker's connection to the Faktory server using the given `url`.
-    pub fn reconnect<U: AsRef<str>>(&mut self, url: U) -> io::Result<()> {
-        self.c.lock().unwrap().reconnect(url.as_ref())
+    pub fn reconnect<U: AsRef<str>, C: StreamConnector<Stream = S>>(
+        &mut self,
+        url: U,
+    ) -> io::Result<()> {
+        self.c.lock().unwrap().reconnect::<C>(url.as_ref())
     }
 }
 
 impl<S, E, F> Consumer<S, F>
 where
-    S: StreamConnector + Send,
+    S: Read + Write + 'static + Send,
     E: Error,
     F: FnMut(Job) -> Result<(), E> + Send + 'static,
 {
     /// Run this worker until the server tells us to exit or a connection cannot be re-established.
     ///
     /// This function never returns. When the worker decides to exit, the process is terminated.
-    pub fn run_to_completion<Q, U>(mut self, queues: &[Q], url: U) -> !
+    pub fn run_to_completion<Q, U, C>(mut self, queues: &[Q], url: U) -> !
     where
         Q: AsRef<str>,
         U: AsRef<str>,
+        C: StreamConnector<Stream = S>,
     {
         use std::process;
         let url = url.as_ref();
         while self.run(queues).is_err() {
-            if self.reconnect(url).is_err() {
+            if self.reconnect::<_, C>(url).is_err() {
                 break;
             }
         }
@@ -176,13 +180,14 @@ where
     /// Run this worker until the server tells us to exit or a connection cannot be re-established.
     ///
     /// This function never returns. When the worker decides to exit, the process is terminated.
-    pub fn run_to_completion_env<Q>(mut self, queues: &[Q]) -> !
+    pub fn run_to_completion_env<Q, C>(mut self, queues: &[Q]) -> !
     where
         Q: AsRef<str>,
+        C: StreamConnector<Stream = S>,
     {
         use std::process;
         while self.run(queues).is_err() {
-            if self.reconnect_env().is_err() {
+            if self.reconnect_env::<C>().is_err() {
                 break;
             }
         }
@@ -438,12 +443,12 @@ mod tests {
         use std::io;
         use producer::Producer;
 
-        let mut p = Producer::<TcpStream>::connect_env().unwrap();
+        let mut p = Producer::connect_env::<TcpStream>().unwrap();
         let mut j = Job::new("foobar", vec!["z"]);
         j.queue = "worker_test_1".to_string();
         p.enqueue(j).unwrap();
 
-        let mut c = Consumer::<TcpStream, _>::default().unwrap();
+        let mut c = Consumer::default::<TcpStream>().unwrap();
         c.register("foobar", |job| -> io::Result<()> {
             println!("{:?}", job);
             assert_eq!(job.args, vec!["z"]);

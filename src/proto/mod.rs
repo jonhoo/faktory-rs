@@ -6,6 +6,7 @@ use std::io;
 use serde;
 use std::net::TcpStream;
 use url::Url;
+use native_tls::{TlsConnector, TlsStream};
 
 mod single;
 
@@ -111,6 +112,13 @@ pub trait FromUrl {
     fn from_url(url: &Url) -> Self;
 }
 
+impl FromUrl for Url {
+    fn from_url(url: &Url) -> Self {
+        // ugh
+        url.clone()
+    }
+}
+
 impl FromUrl for String {
     fn from_url(url: &Url) -> Self {
         format!("{}:{}", url.host_str().unwrap(), url.port().unwrap_or(7419))
@@ -118,66 +126,76 @@ impl FromUrl for String {
 }
 
 /// A stream that can be established using a url.
-pub trait StreamConnector: Sized + Read + Write + 'static {
+pub trait StreamConnector {
     /// The address used to connect this kind of stream.
     type Addr: FromUrl;
 
+    /// The stream produced by this connector.
+    type Stream: Sized + Read + Write + 'static;
+
     /// Establish a new stream using the given `addr`.
-    fn connect(addr: Self::Addr) -> io::Result<Self>;
+    fn connect(addr: Self::Addr) -> io::Result<Self::Stream>;
 }
 
 impl StreamConnector for TcpStream {
     type Addr = String;
-    fn connect(addr: Self::Addr) -> io::Result<Self> {
+    type Stream = TcpStream;
+    fn connect(addr: Self::Addr) -> io::Result<Self::Stream> {
         TcpStream::connect(&addr)
     }
 }
 
-impl<C: StreamConnector> Client<C> {
-    fn get_env_url() -> String {
-        use std::env;
-        let var = env::var("FAKTORY_PROVIDER").unwrap_or_else(|_| "FAKTORY_URL".to_string());
-        env::var(var).unwrap_or_else(|_| "tcp://localhost:7419".to_string())
+impl StreamConnector for TlsConnector {
+    type Addr = Url;
+    type Stream = TlsStream<TcpStream>;
+    fn connect(url: Self::Addr) -> io::Result<Self::Stream> {
+        let addr = String::from_url(&url);
+        let stream = TcpStream::connect(&addr)?;
+
+        // TODO: how do we allow user to customize the builder?
+        // maybe they have to implement this trait themselves?
+        TlsConnector::builder()
+            .and_then(|b| b.build())
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
+            .and_then(|b| {
+                b.connect(url.host_str().unwrap(), stream)
+                    .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e))
+            })
+    }
+}
+
+fn get_env_url() -> String {
+    use std::env;
+    let var = env::var("FAKTORY_PROVIDER").unwrap_or_else(|_| "FAKTORY_URL".to_string());
+    env::var(var).unwrap_or_else(|_| "tcp://localhost:7419".to_string())
+}
+
+fn url_parse(url: &str) -> io::Result<Url> {
+    let url = Url::parse(url).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    if url.scheme() != "tcp" {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("unknown scheme '{}'", url.scheme()),
+        ));
     }
 
-    /// Connect to an unsecured Faktory server using the standard environment variables.
-    ///
-    /// Will first read `FAKTORY_PROVIDER` to get the name of the environment variable to get the
-    /// address from (defaults to `FAKTORY_URL`), and then read that environment variable to get
-    /// the server address. If the latter environment variable is not defined, the url defaults to:
-    ///
-    /// ```text
-    /// tcp://localhost:7419
-    /// ```
-    pub fn connect_env(opts: ClientOptions) -> io::Result<Self> {
-        Self::connect(opts, &Self::get_env_url())
+    if url.host_str().is_none() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "no hostname given",
+        ));
     }
 
-    fn url_parse(url: &str) -> io::Result<Url> {
-        let url = Url::parse(url).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-        if url.scheme() != "tcp" {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("unknown scheme '{}'", url.scheme()),
-            ));
-        }
+    Ok(url)
+}
 
-        if url.host_str().is_none() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "no hostname given",
-            ));
-        }
+fn stream_from_url<C: StreamConnector>(url: &Url) -> io::Result<C::Stream> {
+    let addr = FromUrl::from_url(url);
+    C::connect(addr)
+}
 
-        Ok(url)
-    }
-
-    fn stream_from_url(url: &Url) -> io::Result<C> {
-        let addr = FromUrl::from_url(url);
-        C::connect(addr)
-    }
-
-    /// Connect to an unsecured Faktory server.
+impl<S: Read + Write + Sized + 'static> Client<S> {
+    /// Connect to a Faktory server with the given URL.
     ///
     /// The url is in standard URL form:
     ///
@@ -186,21 +204,45 @@ impl<C: StreamConnector> Client<C> {
     /// ```
     ///
     /// Port defaults to 7419 if not given.
-    pub fn connect(opts: ClientOptions, url: &str) -> io::Result<Self> {
-        let url = Self::url_parse(url)?;
-        let stream = Self::stream_from_url(&url)?;
+    pub fn connect<C: StreamConnector<Stream = S>>(
+        opts: ClientOptions,
+        url: &str,
+    ) -> io::Result<Client<S>> {
+        let url = url_parse(url)?;
+        let stream = stream_from_url::<C>(&url)?;
         let mut c = Client::new(stream, opts);
         c.init(url.password())?;
         Ok(c)
     }
 
-    pub fn reconnect_env(&mut self) -> io::Result<()> {
-        self.reconnect(&Self::get_env_url())
+    /// Connect to a Faktory server using the standard environment variables.
+    ///
+    /// Will first read `FAKTORY_PROVIDER` to get the name of the environment variable to get the
+    /// address from (defaults to `FAKTORY_URL`), and then read that environment variable to get
+    /// the server address. If the latter environment variable is not defined, the url defaults to:
+    ///
+    /// ```text
+    /// tcp://localhost:7419
+    /// ```
+    pub fn connect_env<C: StreamConnector<Stream = S>>(
+        opts: ClientOptions,
+    ) -> io::Result<Client<S>> {
+        Self::connect::<C>(opts, &get_env_url())
     }
 
-    pub fn reconnect(&mut self, url: &str) -> io::Result<()> {
-        let url = Self::url_parse(url)?;
-        self.stream = BufStream::new(Self::stream_from_url(&url)?);
+    pub fn reconnect_env<C>(&mut self) -> io::Result<()>
+    where
+        C: StreamConnector<Stream = S>,
+    {
+        self.reconnect::<C>(&get_env_url())
+    }
+
+    pub fn reconnect<C>(&mut self, url: &str) -> io::Result<()>
+    where
+        C: StreamConnector<Stream = S>,
+    {
+        let url = url_parse(url)?;
+        self.stream = BufStream::new(stream_from_url::<C>(&url)?);
         self.init(url.password())
     }
 }
@@ -270,6 +312,6 @@ mod tests {
     #[test]
     #[ignore]
     fn it_works() {
-        Client::<TcpStream>::connect_env(ClientOptions::default()).unwrap();
+        Client::connect_env::<TcpStream>(ClientOptions::default()).unwrap();
     }
 }

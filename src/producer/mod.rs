@@ -8,7 +8,7 @@ use serde_json;
 /// ```no_run
 /// # use faktory::{Producer, Job};
 /// use std::net::TcpStream;
-/// let mut p = Producer::<TcpStream>::connect_env().unwrap();
+/// let mut p = Producer::connect_env::<TcpStream>().unwrap();
 /// p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
 /// ```
 // TODO: provide way of inspecting status of job.
@@ -16,7 +16,7 @@ pub struct Producer<S: Read + Write> {
     c: Client<S>,
 }
 
-impl<S: StreamConnector> Producer<S> {
+impl<S: Read + Write + 'static> Producer<S> {
     /// Connect to an unsecured Faktory server.
     ///
     /// The url is in standard URL form:
@@ -26,9 +26,13 @@ impl<S: StreamConnector> Producer<S> {
     /// ```
     ///
     /// Port defaults to 7419 if not given.
-    pub fn connect<U: AsRef<str>>(url: U) -> io::Result<Producer<S>> {
+    pub fn connect<U, C>(url: U) -> io::Result<Producer<S>>
+    where
+        U: AsRef<str>,
+        C: StreamConnector<Stream = S>,
+    {
         Ok(Producer {
-            c: Client::connect(ClientOptions::default(), url.as_ref())?,
+            c: Client::connect::<C>(ClientOptions::default(), url.as_ref())?,
         })
     }
 
@@ -41,9 +45,12 @@ impl<S: StreamConnector> Producer<S> {
     /// ```text
     /// tcp://localhost:7419
     /// ```
-    pub fn connect_env() -> io::Result<Producer<S>> {
+    pub fn connect_env<C>() -> io::Result<Producer<S>>
+    where
+        C: StreamConnector<Stream = S>,
+    {
         Ok(Producer {
-            c: Client::connect_env(ClientOptions::default())?,
+            c: Client::connect_env::<C>(ClientOptions::default())?,
         })
     }
 }
@@ -74,7 +81,7 @@ mod tests {
     fn it_works() {
         use std::net::TcpStream;
 
-        let mut p = Producer::<TcpStream>::connect_env().unwrap();
+        let mut p = Producer::connect_env::<TcpStream>().unwrap();
         p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
     }
 }
