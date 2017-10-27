@@ -150,10 +150,46 @@ impl<F, S: StreamConnector> Consumer<S, F> {
 
 impl<S, E, F> Consumer<S, F>
 where
-    S: Read + Write + Send + 'static,
+    S: StreamConnector + Send,
     E: Error,
     F: FnMut(Job) -> Result<(), E> + Send + 'static,
 {
+    /// Run this worker until the server tells us to exit or a connection cannot be re-established.
+    ///
+    /// This function never returns. When the worker decides to exit, the process is terminated.
+    pub fn run_to_completion<Q, U>(mut self, queues: &[Q], url: U) -> !
+    where
+        Q: AsRef<str>,
+        U: AsRef<str>,
+    {
+        use std::process;
+        let url = url.as_ref();
+        while self.run(queues).is_err() {
+            if self.reconnect(url).is_err() {
+                break;
+            }
+        }
+
+        process::exit(0);
+    }
+
+    /// Run this worker until the server tells us to exit or a connection cannot be re-established.
+    ///
+    /// This function never returns. When the worker decides to exit, the process is terminated.
+    pub fn run_to_completion_env<Q>(mut self, queues: &[Q]) -> !
+    where
+        Q: AsRef<str>,
+    {
+        use std::process;
+        while self.run(queues).is_err() {
+            if self.reconnect_env().is_err() {
+                break;
+            }
+        }
+
+        process::exit(0);
+    }
+
     fn for_worker(&mut self) -> Self {
         use std::mem;
         Consumer {
