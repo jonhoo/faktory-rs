@@ -162,48 +162,10 @@ impl<F, S: Read + Write + 'static> Consumer<S, F> {
 
 impl<S, E, F> Consumer<S, F>
 where
-    S: Read + Write + 'static + Send,
+    S: Read + Write + 'static,
     E: Error,
     F: FnMut(Job) -> Result<(), E> + Send + 'static,
 {
-    /// Run this worker until the server tells us to exit or a connection cannot be re-established.
-    ///
-    /// This function never returns. When the worker decides to exit, the process is terminated.
-    pub fn run_to_completion<Q, U, C>(mut self, queues: &[Q], connector: C, url: U) -> !
-    where
-        Q: AsRef<str>,
-        U: AsRef<str>,
-        C: StreamConnector<Stream = S> + Clone,
-    {
-        use std::process;
-        let url = url.as_ref();
-        while self.run(queues).is_err() {
-            if self.reconnect(connector.clone(), url).is_err() {
-                break;
-            }
-        }
-
-        process::exit(0);
-    }
-
-    /// Run this worker until the server tells us to exit or a connection cannot be re-established.
-    ///
-    /// This function never returns. When the worker decides to exit, the process is terminated.
-    pub fn run_to_completion_env<Q, C>(mut self, queues: &[Q], connector: C) -> !
-    where
-        Q: AsRef<str>,
-        C: StreamConnector<Stream = S> + Clone,
-    {
-        use std::process;
-        while self.run(queues).is_err() {
-            if self.reconnect_env(connector.clone()).is_err() {
-                break;
-            }
-        }
-
-        process::exit(0);
-    }
-
     fn for_worker(&mut self) -> Self {
         use std::mem;
         Consumer {
@@ -236,7 +198,8 @@ where
         }
     }
 
-    fn run_one<Q>(&mut self, queues: &[Q]) -> io::Result<()>
+    /// Run a single job and then return.
+    pub fn run_one<Q>(&mut self, queues: &[Q]) -> io::Result<()>
     where
         Q: AsRef<str>,
     {
@@ -304,6 +267,51 @@ where
             self.run_one(queues)?;
         }
         Ok(())
+    }
+}
+
+impl<S, E, F> Consumer<S, F>
+where
+    S: Read + Write + 'static + Send,
+    E: Error,
+    F: FnMut(Job) -> Result<(), E> + Send + 'static,
+{
+    /// Run this worker until the server tells us to exit or a connection cannot be re-established.
+    ///
+    /// This function never returns. When the worker decides to exit, the process is terminated.
+    pub fn run_to_completion<Q, U, C>(mut self, queues: &[Q], connector: C, url: U) -> !
+    where
+        Q: AsRef<str>,
+        U: AsRef<str>,
+        C: StreamConnector<Stream = S> + Clone,
+    {
+        use std::process;
+        let url = url.as_ref();
+        while self.run(queues).is_err() {
+            if self.reconnect(connector.clone(), url).is_err() {
+                break;
+            }
+        }
+
+        process::exit(0);
+    }
+
+    /// Run this worker until the server tells us to exit or a connection cannot be re-established.
+    ///
+    /// This function never returns. When the worker decides to exit, the process is terminated.
+    pub fn run_to_completion_env<Q, C>(mut self, queues: &[Q], connector: C) -> !
+    where
+        Q: AsRef<str>,
+        C: StreamConnector<Stream = S> + Clone,
+    {
+        use std::process;
+        while self.run(queues).is_err() {
+            if self.reconnect_env(connector.clone()).is_err() {
+                break;
+            }
+        }
+
+        process::exit(0);
     }
 
     /// Run this worker on the given `queues` until an I/O error occurs, or until the server tells

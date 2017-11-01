@@ -32,3 +32,8 @@ chrono = { version = "0.4", features = ["serde"] }
 url = "1.5"
 atomic-option = "0.1"
 native-tls = "0.1.4"
+
+[dev-dependencies]
+# mockstream = "0.0.2"
+# waiting on https://github.com/lazy-bitfield/rust-mockstream/pull/3
+mockstream = { git = "https://github.com/jonhoo/rust-mockstream", branch = "fix-repop" }

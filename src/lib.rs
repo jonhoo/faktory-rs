@@ -45,6 +45,8 @@ extern crate serde_json;
 extern crate sha2;
 extern crate url;
 
+pub use url::Url;
+
 mod producer;
 mod consumer;
 mod proto;
