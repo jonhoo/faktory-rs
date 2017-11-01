@@ -6,7 +6,7 @@ use std::io;
 use serde;
 use std::net::TcpStream;
 use url::Url;
-use native_tls::{TlsConnector, TlsStream};
+use native_tls::{TlsConnector, TlsConnectorBuilder, TlsStream};
 
 mod single;
 
@@ -134,28 +134,65 @@ pub trait StreamConnector {
     type Stream: Sized + Read + Write + 'static;
 
     /// Establish a new stream using the given `addr`.
-    fn connect(addr: Self::Addr) -> io::Result<Self::Stream>;
+    fn connect(self, addr: Self::Addr) -> io::Result<Self::Stream>;
 }
 
-impl StreamConnector for TcpStream {
+/// Options beyond a url required to establish a TCP stream.
+#[derive(Default)]
+pub struct TcpEstablisher;
+
+impl StreamConnector for TcpEstablisher {
     type Addr = String;
     type Stream = TcpStream;
-    fn connect(addr: Self::Addr) -> io::Result<Self::Stream> {
+    fn connect(self, addr: Self::Addr) -> io::Result<Self::Stream> {
         TcpStream::connect(&addr)
     }
 }
 
-impl StreamConnector for TlsConnector {
-    type Addr = Url;
-    type Stream = TlsStream<TcpStream>;
-    fn connect(url: Self::Addr) -> io::Result<Self::Stream> {
-        let addr = String::from_url(&url);
-        let stream = TcpStream::connect(&addr)?;
+/// Options beyond a url required to establish a TLS stream.
+pub struct TlsEstablisher<TCB, B>
+where
+    TCB: Into<TlsConnectorBuilder>,
+    B: StreamConnector,
+{
+    builder: TCB,
+    base: B,
+}
 
-        // TODO: how do we allow user to customize the builder?
-        // maybe they have to implement this trait themselves?
-        TlsConnector::builder()
-            .and_then(|b| b.build())
+impl<B: Default + StreamConnector> Default for TlsEstablisher<TlsConnectorBuilder, B> {
+    fn default() -> Self {
+        TlsEstablisher {
+            builder: TlsConnector::builder().unwrap(),
+            base: B::default(),
+        }
+    }
+}
+
+impl From<TlsConnectorBuilder> for TlsEstablisher<TlsConnectorBuilder, TcpEstablisher> {
+    fn from(o: TlsConnectorBuilder) -> Self {
+        TlsEstablisher {
+            builder: o,
+            base: TcpEstablisher,
+        }
+    }
+}
+
+use std::fmt::Debug;
+impl<TCB, B> StreamConnector for TlsEstablisher<TCB, B>
+where
+    TCB: Into<TlsConnectorBuilder>,
+    B: StreamConnector,
+    B::Stream: Debug + Send + Sync,
+{
+    type Addr = Url;
+    type Stream = TlsStream<B::Stream>;
+    fn connect(self, url: Self::Addr) -> io::Result<Self::Stream> {
+        let TlsEstablisher { builder, base } = self;
+        let stream = base.connect(B::Addr::from_url(&url))?;
+
+        builder
+            .into()
+            .build()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
             .and_then(|b| {
                 b.connect(url.host_str().unwrap(), stream)
@@ -189,9 +226,9 @@ fn url_parse(url: &str) -> io::Result<Url> {
     Ok(url)
 }
 
-fn stream_from_url<C: StreamConnector>(url: &Url) -> io::Result<C::Stream> {
+fn stream_from_url<C: StreamConnector>(connector: C, url: &Url) -> io::Result<C::Stream> {
     let addr = FromUrl::from_url(url);
-    C::connect(addr)
+    connector.connect(addr)
 }
 
 impl<S: Read + Write + Sized + 'static> Client<S> {
@@ -205,11 +242,12 @@ impl<S: Read + Write + Sized + 'static> Client<S> {
     ///
     /// Port defaults to 7419 if not given.
     pub fn connect<C: StreamConnector<Stream = S>>(
+        connector: C,
         opts: ClientOptions,
         url: &str,
     ) -> io::Result<Client<S>> {
         let url = url_parse(url)?;
-        let stream = stream_from_url::<C>(&url)?;
+        let stream = stream_from_url(connector, &url)?;
         let mut c = Client::new(stream, opts);
         c.init(url.password())?;
         Ok(c)
@@ -225,24 +263,25 @@ impl<S: Read + Write + Sized + 'static> Client<S> {
     /// tcp://localhost:7419
     /// ```
     pub fn connect_env<C: StreamConnector<Stream = S>>(
+        connector: C,
         opts: ClientOptions,
     ) -> io::Result<Client<S>> {
-        Self::connect::<C>(opts, &get_env_url())
+        Self::connect(connector, opts, &get_env_url())
     }
 
-    pub fn reconnect_env<C>(&mut self) -> io::Result<()>
+    pub fn reconnect_env<C>(&mut self, connector: C) -> io::Result<()>
     where
         C: StreamConnector<Stream = S>,
     {
-        self.reconnect::<C>(&get_env_url())
+        self.reconnect(connector, &get_env_url())
     }
 
-    pub fn reconnect<C>(&mut self, url: &str) -> io::Result<()>
+    pub fn reconnect<C>(&mut self, connector: C, url: &str) -> io::Result<()>
     where
         C: StreamConnector<Stream = S>,
     {
         let url = url_parse(url)?;
-        self.stream = BufStream::new(stream_from_url::<C>(&url)?);
+        self.stream = BufStream::new(stream_from_url(connector, &url)?);
         self.init(url.password())
     }
 }
@@ -312,6 +351,6 @@ mod tests {
     #[test]
     #[ignore]
     fn it_works() {
-        Client::connect_env::<TcpStream>(ClientOptions::default()).unwrap();
+        Client::connect_env(TcpEstablisher::default(), ClientOptions::default()).unwrap();
     }
 }

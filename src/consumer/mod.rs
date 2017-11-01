@@ -21,10 +21,9 @@ const STATUS_TERMINATING: usize = 2;
 /// that any non-default worker parameters can be set.
 ///
 /// ```no_run
-/// # use faktory::ConsumerBuilder;
+/// use faktory::{Consumer, TcpEstablisher};
 /// use std::io;
-/// use std::net::TcpStream;
-/// let mut c = ConsumerBuilder::default().connect_env::<TcpStream, _>().unwrap();
+/// let mut c = Consumer::default::<TcpEstablisher>().unwrap();
 /// c.register("foobar", |job| -> io::Result<()> {
 ///     println!("{:?}", job);
 ///     Ok(())
@@ -83,8 +82,11 @@ impl ConsumerBuilder {
     /// ```text
     /// tcp://localhost:7419
     /// ```
-    pub fn connect_env<C: StreamConnector, F>(self) -> io::Result<Consumer<C::Stream, F>> {
-        Ok(Consumer::from(Client::connect_env::<C>(self.0)?))
+    pub fn connect_env<C: StreamConnector, F>(
+        self,
+        connector: C,
+    ) -> io::Result<Consumer<C::Stream, F>> {
+        Ok(Consumer::from(Client::connect_env(connector, self.0)?))
     }
 
     /// Connect to a Faktory server at the given URL.
@@ -98,9 +100,12 @@ impl ConsumerBuilder {
     /// Port defaults to 7419 if not given.
     pub fn connect<C: StreamConnector, F, U: AsRef<str>>(
         self,
+        connector: C,
         url: U,
     ) -> io::Result<Consumer<C::Stream, F>> {
-        Ok(Consumer::from(Client::connect::<C>(self.0, url.as_ref())?))
+        Ok(Consumer::from(
+            Client::connect(connector, self.0, url.as_ref())?,
+        ))
     }
 }
 
@@ -132,22 +137,26 @@ impl<F, S: Read + Write + 'static> Consumer<S, F> {
     ///  - `pid` is the OS PID of this process.
     ///  - `labels` is `["rust"]`.
     ///
-    pub fn default<C: StreamConnector<Stream = S>>() -> io::Result<Consumer<S, F>> {
-        ConsumerBuilder::default().connect_env::<C, F>()
+    pub fn default<C: StreamConnector<Stream = S> + Default>() -> io::Result<Consumer<S, F>> {
+        ConsumerBuilder::default().connect_env(C::default())
     }
 
     /// Re-establish this worker's connection to the Faktory server using default environment
     /// variables.
-    pub fn reconnect_env<C: StreamConnector<Stream = S>>(&mut self) -> io::Result<()> {
-        self.c.lock().unwrap().reconnect_env::<C>()
+    pub fn reconnect_env<C: StreamConnector<Stream = S>>(
+        &mut self,
+        connector: C,
+    ) -> io::Result<()> {
+        self.c.lock().unwrap().reconnect_env(connector)
     }
 
     /// Re-establish this worker's connection to the Faktory server using the given `url`.
     pub fn reconnect<U: AsRef<str>, C: StreamConnector<Stream = S>>(
         &mut self,
+        connector: C,
         url: U,
     ) -> io::Result<()> {
-        self.c.lock().unwrap().reconnect::<C>(url.as_ref())
+        self.c.lock().unwrap().reconnect(connector, url.as_ref())
     }
 }
 
@@ -160,16 +169,16 @@ where
     /// Run this worker until the server tells us to exit or a connection cannot be re-established.
     ///
     /// This function never returns. When the worker decides to exit, the process is terminated.
-    pub fn run_to_completion<Q, U, C>(mut self, queues: &[Q], url: U) -> !
+    pub fn run_to_completion<Q, U, C>(mut self, queues: &[Q], connector: C, url: U) -> !
     where
         Q: AsRef<str>,
         U: AsRef<str>,
-        C: StreamConnector<Stream = S>,
+        C: StreamConnector<Stream = S> + Clone,
     {
         use std::process;
         let url = url.as_ref();
         while self.run(queues).is_err() {
-            if self.reconnect::<_, C>(url).is_err() {
+            if self.reconnect(connector.clone(), url).is_err() {
                 break;
             }
         }
@@ -180,14 +189,14 @@ where
     /// Run this worker until the server tells us to exit or a connection cannot be re-established.
     ///
     /// This function never returns. When the worker decides to exit, the process is terminated.
-    pub fn run_to_completion_env<Q, C>(mut self, queues: &[Q]) -> !
+    pub fn run_to_completion_env<Q, C>(mut self, queues: &[Q], connector: C) -> !
     where
         Q: AsRef<str>,
-        C: StreamConnector<Stream = S>,
+        C: StreamConnector<Stream = S> + Clone,
     {
         use std::process;
         while self.run(queues).is_err() {
-            if self.reconnect_env::<C>().is_err() {
+            if self.reconnect_env(connector.clone()).is_err() {
                 break;
             }
         }
@@ -434,21 +443,20 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proto::TcpEstablisher;
 
     #[test]
     #[ignore]
     fn it_works() {
-        use std::net::TcpStream;
-
         use std::io;
         use producer::Producer;
 
-        let mut p = Producer::connect_env::<TcpStream>().unwrap();
+        let mut p = Producer::default::<TcpEstablisher>().unwrap();
         let mut j = Job::new("foobar", vec!["z"]);
         j.queue = "worker_test_1".to_string();
         p.enqueue(j).unwrap();
 
-        let mut c = Consumer::default::<TcpStream>().unwrap();
+        let mut c = Consumer::default::<TcpEstablisher>().unwrap();
         c.register("foobar", |job| -> io::Result<()> {
             println!("{:?}", job);
             assert_eq!(job.args, vec!["z"]);

@@ -8,9 +8,8 @@
 //! If you want to **submit** jobs to Faktory, use `Producer`.
 //!
 //! ```no_run
-//! # use faktory::{Producer, Job};
-//! use std::net::TcpStream;
-//! let mut p = Producer::connect_env::<TcpStream>().unwrap();
+//! use faktory::{Producer, Job, TcpEstablisher};
+//! let mut p = Producer::default::<TcpEstablisher>().unwrap();
 //! p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
 //! ```
 //!
@@ -19,10 +18,9 @@
 //! If you want to **accept** jobs from Faktory, use `Consumer`.
 //!
 //! ```no_run
-//! # use faktory::ConsumerBuilder;
+//! use faktory::{Consumer, TcpEstablisher};
 //! use std::io;
-//! use std::net::TcpStream;
-//! let mut c = ConsumerBuilder::default().connect_env::<TcpStream, _>().unwrap();
+//! let mut c = Consumer::default::<TcpEstablisher>().unwrap();
 //! c.register("foobar", |job| -> io::Result<()> {
 //!     println!("{:?}", job);
 //!     Ok(())
@@ -54,4 +52,4 @@ mod proto;
 pub use consumer::{Consumer, ConsumerBuilder};
 pub use producer::Producer;
 pub use proto::Job;
-pub use proto::{FromUrl, StreamConnector};
+pub use proto::{FromUrl, StreamConnector, TcpEstablisher, TlsEstablisher};

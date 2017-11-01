@@ -6,9 +6,8 @@ use serde_json;
 /// A `Producer` provides an interface to a Faktory work server that allows enqueuing new jobs.
 ///
 /// ```no_run
-/// # use faktory::{Producer, Job};
-/// use std::net::TcpStream;
-/// let mut p = Producer::connect_env::<TcpStream>().unwrap();
+/// use faktory::{Producer, Job, TcpEstablisher};
+/// let mut p = Producer::default::<TcpEstablisher>().unwrap();
 /// p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
 /// ```
 // TODO: provide way of inspecting status of job.
@@ -17,6 +16,20 @@ pub struct Producer<S: Read + Write> {
 }
 
 impl<S: Read + Write + 'static> Producer<S> {
+    /// Construct a new consumer with default consumer options and the url fetched from environment
+    /// variables.
+    ///
+    /// This will construct a worker where:
+    ///
+    ///  - `hostname` is this machine's hostname.
+    ///  - `wid` is a randomly generated string.
+    ///  - `pid` is the OS PID of this process.
+    ///  - `labels` is `["rust"]`.
+    ///
+    pub fn default<C: StreamConnector<Stream = S> + Default>() -> io::Result<Producer<S>> {
+        Self::connect_env(C::default())
+    }
+
     /// Connect to an unsecured Faktory server.
     ///
     /// The url is in standard URL form:
@@ -26,13 +39,13 @@ impl<S: Read + Write + 'static> Producer<S> {
     /// ```
     ///
     /// Port defaults to 7419 if not given.
-    pub fn connect<U, C>(url: U) -> io::Result<Producer<S>>
+    pub fn connect<U, C>(connector: C, url: U) -> io::Result<Producer<S>>
     where
         U: AsRef<str>,
         C: StreamConnector<Stream = S>,
     {
         Ok(Producer {
-            c: Client::connect::<C>(ClientOptions::default(), url.as_ref())?,
+            c: Client::connect(connector, ClientOptions::default(), url.as_ref())?,
         })
     }
 
@@ -45,12 +58,12 @@ impl<S: Read + Write + 'static> Producer<S> {
     /// ```text
     /// tcp://localhost:7419
     /// ```
-    pub fn connect_env<C>() -> io::Result<Producer<S>>
+    pub fn connect_env<C>(connector: C) -> io::Result<Producer<S>>
     where
         C: StreamConnector<Stream = S>,
     {
         Ok(Producer {
-            c: Client::connect_env::<C>(ClientOptions::default())?,
+            c: Client::connect_env(connector, ClientOptions::default())?,
         })
     }
 }
@@ -75,13 +88,12 @@ impl<S: Read + Write> Producer<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proto::TcpEstablisher;
 
     #[test]
     #[ignore]
     fn it_works() {
-        use std::net::TcpStream;
-
-        let mut p = Producer::connect_env::<TcpStream>().unwrap();
+        let mut p = Producer::default::<TcpEstablisher>().unwrap();
         p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
     }
 }
