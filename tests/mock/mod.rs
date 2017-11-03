@@ -1,19 +1,19 @@
 use faktory::{StreamConnector, Url};
 use std::io;
-use mockstream::SharedMockStream;
+use mockstream::SyncMockStream;
 
 #[derive(Clone)]
-pub struct Stream(SharedMockStream);
+pub struct Stream(SyncMockStream);
 
 impl Default for Stream {
     fn default() -> Self {
-        SharedMockStream::new().into()
+        SyncMockStream::new().into()
     }
 }
 
 use std::ops::{Deref, DerefMut};
 impl Deref for Stream {
-    type Target = SharedMockStream;
+    type Target = SyncMockStream;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -24,15 +24,15 @@ impl DerefMut for Stream {
     }
 }
 
-impl From<SharedMockStream> for Stream {
-    fn from(s: SharedMockStream) -> Self {
+impl From<SyncMockStream> for Stream {
+    fn from(s: SyncMockStream) -> Self {
         Stream(s)
     }
 }
 
 impl StreamConnector for Stream {
     type Addr = Url;
-    type Stream = SharedMockStream;
+    type Stream = SyncMockStream;
 
     fn connect(self, _: Self::Addr) -> io::Result<Self::Stream> {
         Ok(self.0)

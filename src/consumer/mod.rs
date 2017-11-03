@@ -21,13 +21,14 @@ const STATUS_TERMINATING: usize = 2;
 /// that any non-default worker parameters can be set.
 ///
 /// ```no_run
-/// use faktory::{Consumer, TcpEstablisher};
+/// use faktory::{ConsumerBuilder, TcpEstablisher};
 /// use std::io;
-/// let mut c = Consumer::default::<TcpEstablisher>().unwrap();
+/// let mut c = ConsumerBuilder::default();
 /// c.register("foobar", |job| -> io::Result<()> {
 ///     println!("{:?}", job);
 ///     Ok(())
 /// });
+/// let mut c = c.connect_env(TcpEstablisher).unwrap();
 /// if let Err(e) = c.run(&["default"]) {
 ///     println!("worker failed: {}", e);
 /// }
@@ -37,23 +38,47 @@ where
     S: Read + Write,
 {
     c: Arc<Mutex<Client<S>>>,
-    last_job_result: Arc<AtomicOption<Result<String, Fail>>>,
-    running_job: Arc<AtomicOption<String>>,
-    callbacks: HashMap<String, F>,
+    last_job_results: Arc<Vec<AtomicOption<Result<String, Fail>>>>,
+    running_jobs: Arc<Vec<AtomicOption<String>>>,
+    callbacks: Arc<HashMap<String, F>>,
     terminated: bool,
 }
 
 /// Convenience wrapper for building a [`Consumer`](struct.Consumer.html) with non-standard
 /// options.
-#[derive(Default, Clone)]
-pub struct ConsumerBuilder(ClientOptions);
+#[derive(Clone)]
+pub struct ConsumerBuilder<F> {
+    opts: ClientOptions,
+    workers: usize,
+    callbacks: HashMap<String, F>,
+}
 
-impl ConsumerBuilder {
+impl<F> Default for ConsumerBuilder<F> {
+    /// Construct a new worker with default worker options and the url fetched from environment
+    /// variables.
+    ///
+    /// This will construct a worker where:
+    ///
+    ///  - `hostname` is this machine's hostname.
+    ///  - `wid` is a randomly generated string.
+    ///  - `pid` is the OS PID of this process.
+    ///  - `labels` is `["rust"]`.
+    ///
+    fn default() -> Self {
+        ConsumerBuilder {
+            opts: ClientOptions::default(),
+            workers: 1,
+            callbacks: Default::default(),
+        }
+    }
+}
+
+impl<F> ConsumerBuilder<F> {
     /// Set the hostname to use for this worker.
     ///
     /// Defaults to the machine's hostname as reported by the operating system.
     pub fn hostname(&mut self, hn: String) -> &mut Self {
-        self.0.hostname = Some(hn);
+        self.opts.hostname = Some(hn);
         self
     }
 
@@ -61,7 +86,7 @@ impl ConsumerBuilder {
     ///
     /// Defaults to a randomly generated ASCII string.
     pub fn wid(&mut self, wid: String) -> &mut Self {
-        self.0.wid = Some(wid);
+        self.opts.wid = Some(wid);
         self
     }
 
@@ -69,7 +94,32 @@ impl ConsumerBuilder {
     ///
     /// Defaults to `["rust"]`.
     pub fn labels(&mut self, labels: Vec<String>) -> &mut Self {
-        self.0.labels = labels;
+        self.opts.labels = labels;
+        self
+    }
+
+    /// Set the number of workers to use for `run` and `run_to_completion`.
+    ///
+    /// Defaults to 1.
+    pub fn workers(&mut self, w: usize) -> &mut Self {
+        self.workers = w;
+        self
+    }
+}
+
+impl<F, E> ConsumerBuilder<F>
+where
+    F: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
+{
+    /// Register a handler function for the given `kind` of job.
+    ///
+    /// Whenever a job whose type matches `kind` is fetched from the Faktory, the given handler
+    /// function is called with that job.
+    pub fn register<K>(&mut self, kind: K, handler: F) -> &mut Self
+    where
+        K: ToString,
+    {
+        self.callbacks.insert(kind.to_string(), handler);
         self
     }
 
@@ -82,11 +132,15 @@ impl ConsumerBuilder {
     /// ```text
     /// tcp://localhost:7419
     /// ```
-    pub fn connect_env<C: StreamConnector, F>(
+    pub fn connect_env<C: StreamConnector>(
         self,
         connector: C,
     ) -> io::Result<Consumer<C::Stream, F>> {
-        Ok(Consumer::from(Client::connect_env(connector, self.0)?))
+        Ok(Consumer::new(
+            Client::connect_env(connector, self.opts)?,
+            self.workers,
+            self.callbacks,
+        ))
     }
 
     /// Connect to a Faktory server at the given URL.
@@ -98,13 +152,15 @@ impl ConsumerBuilder {
     /// ```
     ///
     /// Port defaults to 7419 if not given.
-    pub fn connect<C: StreamConnector, F, U: AsRef<str>>(
+    pub fn connect<C: StreamConnector, U: AsRef<str>>(
         self,
         connector: C,
         url: U,
     ) -> io::Result<Consumer<C::Stream, F>> {
-        Ok(Consumer::from(
-            Client::connect(connector, self.0, url.as_ref())?,
+        Ok(Consumer::new(
+            Client::connect(connector, self.opts, url.as_ref())?,
+            self.workers,
+            self.callbacks,
         ))
     }
 }
@@ -114,33 +170,19 @@ enum Failed<E: Error> {
     BadJobType(String),
 }
 
-impl<F, S: Read + Write> From<Client<S>> for Consumer<S, F> {
-    fn from(c: Client<S>) -> Self {
+impl<F, S: Read + Write> Consumer<S, F> {
+    fn new(c: Client<S>, workers: usize, callbacks: HashMap<String, F>) -> Self {
         Consumer {
             c: Arc::new(Mutex::new(c)),
-            callbacks: Default::default(),
-            running_job: Arc::new(AtomicOption::empty()),
-            last_job_result: Arc::new(AtomicOption::empty()),
+            callbacks: Arc::new(callbacks),
+            running_jobs: Arc::new((0..workers).map(|_| AtomicOption::empty()).collect()),
+            last_job_results: Arc::new((0..workers).map(|_| AtomicOption::empty()).collect()),
             terminated: false,
         }
     }
 }
 
 impl<F, S: Read + Write + 'static> Consumer<S, F> {
-    /// Construct a new worker with default worker options and the url fetched from environment
-    /// variables.
-    ///
-    /// This will construct a worker where:
-    ///
-    ///  - `hostname` is this machine's hostname.
-    ///  - `wid` is a randomly generated string.
-    ///  - `pid` is the OS PID of this process.
-    ///  - `labels` is `["rust"]`.
-    ///
-    pub fn default<C: StreamConnector<Stream = S> + Default>() -> io::Result<Consumer<S, F>> {
-        ConsumerBuilder::default().connect_env(C::default())
-    }
-
     /// Re-establish this worker's connection to the Faktory server using default environment
     /// variables.
     pub fn reconnect_env<C: StreamConnector<Stream = S>>(
@@ -164,32 +206,20 @@ impl<S, E, F> Consumer<S, F>
 where
     S: Read + Write + 'static,
     E: Error,
-    F: FnMut(Job) -> Result<(), E> + Send + 'static,
+    F: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
 {
     fn for_worker(&mut self) -> Self {
-        use std::mem;
         Consumer {
             c: self.c.clone(),
-            callbacks: mem::replace(&mut self.callbacks, HashMap::default()),
-            running_job: self.running_job.clone(),
-            last_job_result: self.last_job_result.clone(),
+            callbacks: self.callbacks.clone(),
+            running_jobs: self.running_jobs.clone(),
+            last_job_results: self.last_job_results.clone(),
             terminated: self.terminated,
         }
     }
 
-    /// Register a handler function for the given `kind` of job.
-    ///
-    /// Whenever a job whose type matches `kind` is fetched from the Faktory, the given handler
-    /// function is called with that job.
-    pub fn register<K>(&mut self, kind: K, handler: F)
-    where
-        K: ToString,
-    {
-        self.callbacks.insert(kind.to_string(), handler);
-    }
-
     fn run_job(&mut self, job: Job) -> Result<(), Failed<E>> {
-        match self.callbacks.get_mut(&job.kind) {
+        match self.callbacks.get(&job.kind) {
             Some(callback) => (callback)(job).map_err(Failed::Application),
             None => {
                 // cannot execute job, since no handler exists
@@ -199,7 +229,7 @@ where
     }
 
     /// Run a single job and then return.
-    pub fn run_one<Q>(&mut self, queues: &[Q]) -> io::Result<()>
+    pub fn run_one<Q>(&mut self, worker: usize, queues: &[Q]) -> io::Result<()>
     where
         Q: AsRef<str>,
     {
@@ -210,8 +240,7 @@ where
         let jid = job.jid.clone();
 
         // keep track of running job in case we're terminated during it
-        self.running_job
-            .swap(Box::new(jid.clone()), atomic::Ordering::SeqCst);
+        self.running_jobs[worker].swap(Box::new(jid.clone()), atomic::Ordering::SeqCst);
 
         // process the job
         let r = self.run_job(job);
@@ -221,7 +250,7 @@ where
             Ok(_) => {
                 // job done -- acknowledge
                 // remember it in case we fail to notify the server (e.g., broken connection)
-                self.last_job_result
+                self.last_job_results[worker]
                     .swap(Box::new(Ok(jid.clone())), atomic::Ordering::SeqCst);
                 self.c.lock().unwrap().issue(Ack::new(jid))?.await_ok()?;
             }
@@ -246,15 +275,14 @@ where
                 };
 
                 let fail2 = fail.clone();
-                self.last_job_result
-                    .swap(Box::new(Err(fail)), atomic::Ordering::SeqCst);
+                self.last_job_results[worker].swap(Box::new(Err(fail)), atomic::Ordering::SeqCst);
                 self.c.lock().unwrap().issue(&fail2)?.await_ok()?;
             }
         }
 
         // we won't have to tell the server again
-        self.last_job_result.take(atomic::Ordering::SeqCst);
-        self.running_job.take(atomic::Ordering::SeqCst);
+        self.last_job_results[worker].take(atomic::Ordering::SeqCst);
+        self.running_jobs[worker].take(atomic::Ordering::SeqCst);
         Ok(())
     }
 
@@ -264,7 +292,7 @@ where
         Q: AsRef<str>,
     {
         for _ in 0..n {
-            self.run_one(queues)?;
+            self.run_one(0, queues)?;
         }
         Ok(())
     }
@@ -274,7 +302,7 @@ impl<S, E, F> Consumer<S, F>
 where
     S: Read + Write + 'static + Send,
     E: Error,
-    F: FnMut(Job) -> Result<(), E> + Send + 'static,
+    F: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
 {
     /// Run this worker until the server tells us to exit or a connection cannot be re-established.
     ///
@@ -328,90 +356,114 @@ where
     where
         Q: AsRef<str>,
     {
-        assert!(self.terminated, "do not re-run a terminated worker");
-        assert_eq!(Arc::strong_count(&self.last_job_result), 1);
+        assert!(!self.terminated, "do not re-run a terminated worker");
+        assert_eq!(Arc::strong_count(&self.last_job_results), 1);
 
         // retry delivering notification about our last job result.
         // we know there's no leftover thread at this point, so there's no race on the option.
-        if let Some(res) = self.last_job_result.take(atomic::Ordering::SeqCst) {
-            let mut c = self.c.lock().unwrap();
-            let r = match *res {
-                Ok(ref jid) => c.issue(Ack::new(jid)),
-                Err(ref fail) => c.issue(fail),
-            };
+        for last_job_result in self.last_job_results.iter() {
+            if let Some(res) = last_job_result.take(atomic::Ordering::SeqCst) {
+                let mut c = self.c.lock().unwrap();
+                let r = match *res {
+                    Ok(ref jid) => c.issue(Ack::new(jid)),
+                    Err(ref fail) => c.issue(fail),
+                };
 
-            let r = match r {
-                Ok(r) => r,
-                Err(e) => {
-                    self.last_job_result.swap(res, atomic::Ordering::SeqCst);
-                    return Err(e);
-                }
-            };
+                let r = match r {
+                    Ok(r) => r,
+                    Err(e) => {
+                        last_job_result.swap(res, atomic::Ordering::SeqCst);
+                        return Err(e);
+                    }
+                };
 
-            if let Err(e) = r.await_ok() {
-                // it could be that the server did previously get our ACK/FAIL, and that it was the
-                // resulting OK that failed. in that case, we would get an error response when
-                // re-sending the job response. this should not count as critical. other errors,
-                // however, should!
-                if e.kind() != io::ErrorKind::InvalidInput {
-                    self.last_job_result.swap(res, atomic::Ordering::SeqCst);
-                    return Err(e);
+                if let Err(e) = r.await_ok() {
+                    // it could be that the server did previously get our ACK/FAIL, and that it was the
+                    // resulting OK that failed. in that case, we would get an error response when
+                    // re-sending the job response. this should not count as critical. other errors,
+                    // however, should!
+                    if e.kind() != io::ErrorKind::InvalidInput {
+                        last_job_result.swap(res, atomic::Ordering::SeqCst);
+                        return Err(e);
+                    }
                 }
             }
         }
 
-        // keep track of the current status of this worker
-        let status: Arc<atomic::AtomicUsize> = Default::default();
+        // keep track of the current status of each worker
+        let status: Vec<_> = (0..self.running_jobs.len())
+            .map(|_| Arc::new(atomic::AtomicUsize::new(STATUS_RUNNING)))
+            .collect();
 
-        // start a worker thread
-        use std::thread;
-        let mut w = self.for_worker();
-        let w = {
-            let status = status.clone();
-            let queues: Vec<_> = queues.into_iter().map(|s| s.as_ref().to_string()).collect();
-            thread::spawn(move || {
-                while status.load(atomic::Ordering::SeqCst) == STATUS_RUNNING {
-                    if let Err(e) = w.run_one(&queues[..]) {
-                        status.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
-                        return Err(e);
+        // start worker threads
+        let workers: Vec<_> = status
+            .iter()
+            .enumerate()
+            .map(|(worker, status)| {
+                use std::thread;
+                let mut w = self.for_worker();
+                let status = status.clone();
+                let queues: Vec<_> = queues.into_iter().map(|s| s.as_ref().to_string()).collect();
+                thread::spawn(move || {
+                    while status.load(atomic::Ordering::SeqCst) == STATUS_RUNNING {
+                        if let Err(e) = w.run_one(worker, &queues[..]) {
+                            status.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
+                            return Err(e);
+                        }
                     }
-                }
-                status.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
-                Ok(())
+                    status.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
+                    Ok(())
+                })
             })
-        };
+            .collect();
 
         // listen for heartbeats
+        let mut target = STATUS_RUNNING;
         let exit = loop {
+            use std::thread;
+            use std::time;
+
+            thread::sleep(time::Duration::from_secs(5));
             match self.c.lock().unwrap().heartbeat() {
                 Ok(hb) => {
-                    use std::thread;
-                    use std::time;
-
                     match hb {
                         HeartbeatStatus::Ok => {}
                         HeartbeatStatus::Quiet => {
-                            // tell the worker to eventually terminate
-                            status.store(STATUS_QUIET, atomic::Ordering::SeqCst);
+                            // tell the workers to eventually terminate
+                            for s in status.iter() {
+                                s.store(STATUS_QUIET, atomic::Ordering::SeqCst);
+                            }
+                            target = STATUS_QUIET;
                         }
                         HeartbeatStatus::Terminate => {
-                            // tell the worker to terminate
+                            // tell the workers to terminate
                             // *and* fail the current job and immediately return
-                            status.store(STATUS_QUIET, atomic::Ordering::SeqCst);
+                            for s in status.iter() {
+                                s.store(STATUS_QUIET, atomic::Ordering::SeqCst);
+                            }
                             break Ok(true);
                         }
                     }
 
-                    thread::sleep(time::Duration::from_secs(5));
-
-                    // has worker terminated?
-                    if status.load(atomic::Ordering::SeqCst) == STATUS_TERMINATING {
+                    // has a worker failed?
+                    if target == STATUS_RUNNING
+                        && status
+                            .iter()
+                            .any(|s| s.load(atomic::Ordering::SeqCst) == STATUS_TERMINATING)
+                    {
+                        // tell all workers to exit
+                        // (though chances are they've all failed already)
+                        for s in status.iter() {
+                            s.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
+                        }
                         break Ok(false);
                     }
                 }
                 Err(e) => {
-                    // for this to fail, the worker must probably also have failed
-                    status.store(STATUS_QUIET, atomic::Ordering::SeqCst);
+                    // for this to fail, the workers have probably also failed
+                    for s in status.iter() {
+                        s.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
+                    }
                     break Err(e);
                 }
             }
@@ -419,15 +471,16 @@ where
 
         // there are a couple of cases here:
         //
-        //  - we got TERMINATE, so we should just return, even if worker is still running
-        //  - we got TERMINATE and worker has exited
+        //  - we got TERMINATE, so we should just return, even if a worker is still running
+        //  - we got TERMINATE and all workers has exited
         //  - we got an error from heartbeat()
         //
         self.terminated = exit.is_ok();
-        match exit {
-            Ok(forced) if forced => {
-                // FAIL currently running job even though it's still running
-                if let Some(jid) = self.running_job.take(atomic::Ordering::SeqCst) {
+        if let Ok(true) = exit {
+            // FAIL currently running jobs even though they're still running
+            let mut running = 0;
+            for running_job in self.running_jobs.iter() {
+                if let Some(jid) = running_job.take(atomic::Ordering::SeqCst) {
                     let f = Fail::new(jid, "unknown", "terminated");
 
                     // if this fails, we don't want to exit with Err(),
@@ -438,12 +491,34 @@ where
                         .issue(&f)
                         .and_then(|r| r.await_ok())
                         .is_ok();
+
+                    running += 1;
                 }
-                self.c.lock().unwrap().end_early().is_ok();
-                Ok(1)
             }
-            Ok(_) => w.join().unwrap().map(|_| 0),
-            Err(e) => w.join().unwrap().and_then(|_| Err(e)),
+
+            if running != 0 {
+                self.c.lock().unwrap().end_early().is_ok();
+                return Ok(running);
+            }
+        }
+
+        match exit {
+            Ok(_) => {
+                // we want to expose any worker errors
+                workers
+                    .into_iter()
+                    .map(|w| w.join().unwrap())
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(|_| 0)
+            }
+            Err(e) => {
+                // we want to expose worker errors, or otherwise the heartbeat error
+                workers
+                    .into_iter()
+                    .map(|w| w.join().unwrap())
+                    .collect::<Result<Vec<_>, _>>()
+                    .and_then(|_| Err(e))
+            }
         }
     }
 }
@@ -464,12 +539,12 @@ mod tests {
         j.queue = "worker_test_1".to_string();
         p.enqueue(j).unwrap();
 
-        let mut c = Consumer::default::<TcpEstablisher>().unwrap();
+        let mut c = ConsumerBuilder::default();
         c.register("foobar", |job| -> io::Result<()> {
-            println!("{:?}", job);
             assert_eq!(job.args, vec!["z"]);
             Ok(())
         });
+        let mut c = c.connect_env(TcpEstablisher).unwrap();
         let e = c.run_n(1, &["worker_test_1"]);
         if e.is_err() {
             println!("{:?}", e);

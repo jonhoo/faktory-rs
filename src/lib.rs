@@ -18,13 +18,14 @@
 //! If you want to **accept** jobs from Faktory, use `Consumer`.
 //!
 //! ```no_run
-//! use faktory::{Consumer, TcpEstablisher};
+//! use faktory::{ConsumerBuilder, TcpEstablisher};
 //! use std::io;
-//! let mut c = Consumer::default::<TcpEstablisher>().unwrap();
+//! let mut c = ConsumerBuilder::default();
 //! c.register("foobar", |job| -> io::Result<()> {
 //!     println!("{:?}", job);
 //!     Ok(())
 //! });
+//! let mut c = c.connect_env(TcpEstablisher).unwrap();
 //! if let Err(e) = c.run(&["default"]) {
 //!     println!("worker failed: {}", e);
 //! }

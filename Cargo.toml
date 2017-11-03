@@ -35,5 +35,5 @@ native-tls = "0.1.4"
 
 [dev-dependencies]
 # mockstream = "0.0.2"
-# waiting on https://github.com/lazy-bitfield/rust-mockstream/pull/3
-mockstream = { git = "https://github.com/jonhoo/rust-mockstream", branch = "fix-repop" }
+# waiting on new release
+mockstream = { git = "https://github.com/lazy-bitfield/rust-mockstream" }
