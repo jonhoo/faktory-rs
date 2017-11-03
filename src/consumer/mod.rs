@@ -419,53 +419,64 @@ where
 
         // listen for heartbeats
         let mut target = STATUS_RUNNING;
-        let exit = loop {
-            use std::thread;
+        let exit = {
             use std::time;
+            let mut last = time::Instant::now();
 
-            thread::sleep(time::Duration::from_secs(5));
-            match self.c.lock().unwrap().heartbeat() {
-                Ok(hb) => {
-                    match hb {
-                        HeartbeatStatus::Ok => {}
-                        HeartbeatStatus::Quiet => {
-                            // tell the workers to eventually terminate
-                            for s in status.iter() {
-                                s.store(STATUS_QUIET, atomic::Ordering::SeqCst);
-                            }
-                            target = STATUS_QUIET;
-                        }
-                        HeartbeatStatus::Terminate => {
-                            // tell the workers to terminate
-                            // *and* fail the current job and immediately return
-                            for s in status.iter() {
-                                s.store(STATUS_QUIET, atomic::Ordering::SeqCst);
-                            }
-                            break Ok(true);
-                        }
-                    }
+            loop {
+                use std::thread;
 
-                    // has a worker failed?
-                    if target == STATUS_RUNNING
-                        && status
-                            .iter()
-                            .any(|s| s.load(atomic::Ordering::SeqCst) == STATUS_TERMINATING)
-                    {
-                        // tell all workers to exit
-                        // (though chances are they've all failed already)
-                        for s in status.iter() {
-                            s.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
-                        }
-                        break Ok(false);
-                    }
-                }
-                Err(e) => {
-                    // for this to fail, the workers have probably also failed
+                thread::sleep(time::Duration::from_millis(100));
+
+                // has a worker failed?
+                if target == STATUS_RUNNING
+                    && status
+                        .iter()
+                        .any(|s| s.load(atomic::Ordering::SeqCst) == STATUS_TERMINATING)
+                {
+                    // tell all workers to exit
+                    // (though chances are they've all failed already)
                     for s in status.iter() {
                         s.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
                     }
-                    break Err(e);
+                    break Ok(false);
                 }
+
+                if last.elapsed().as_secs() < 5 {
+                    // don't sent a heartbeat yet
+                    continue;
+                }
+
+                match self.c.lock().unwrap().heartbeat() {
+                    Ok(hb) => {
+                        match hb {
+                            HeartbeatStatus::Ok => {}
+                            HeartbeatStatus::Quiet => {
+                                // tell the workers to eventually terminate
+                                for s in status.iter() {
+                                    s.store(STATUS_QUIET, atomic::Ordering::SeqCst);
+                                }
+                                target = STATUS_QUIET;
+                            }
+                            HeartbeatStatus::Terminate => {
+                                // tell the workers to terminate
+                                // *and* fail the current job and immediately return
+                                for s in status.iter() {
+                                    s.store(STATUS_QUIET, atomic::Ordering::SeqCst);
+                                }
+                                break Ok(true);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        // for this to fail, the workers have probably also failed
+                        for s in status.iter() {
+                            s.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
+                        }
+                        break Err(e);
+                    }
+                }
+                last = time::Instant::now();
             }
         };
 
