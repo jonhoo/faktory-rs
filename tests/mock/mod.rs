@@ -1,4 +1,5 @@
-use faktory::{StreamConnector, Url};
+use faktory::StreamConnector;
+use url::Url;
 use std::io;
 use mockstream::SyncMockStream;
 

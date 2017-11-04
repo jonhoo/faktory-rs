@@ -106,7 +106,7 @@ impl<S: Read + Write> Drop for Client<S> {
     }
 }
 
-/// A type that can be constructed from a Url connection string.
+/// A type that can be constructed from a `Url` connection string.
 pub trait FromUrl {
     /// Construct a new `Self` from the given url.
     fn from_url(url: &Url) -> Self;
@@ -125,7 +125,7 @@ impl FromUrl for String {
     }
 }
 
-/// A stream that can be established using a url.
+/// A stream that can be established using a `Url`.
 pub trait StreamConnector {
     /// The address used to connect this kind of stream.
     type Addr: FromUrl;
@@ -137,7 +137,9 @@ pub trait StreamConnector {
     fn connect(self, addr: Self::Addr) -> io::Result<Self::Stream>;
 }
 
-/// Options beyond a url required to establish a TCP stream.
+/// A regular TCP stream.
+///
+/// Will connect to the hostname:port pair given in the URL.
 #[derive(Default)]
 pub struct TcpEstablisher;
 
@@ -149,17 +151,32 @@ impl StreamConnector for TcpEstablisher {
     }
 }
 
-/// Options beyond a url required to establish a TLS stream.
-pub struct TlsEstablisher<TCB, B>
+/// A stream encrypted with TLS.
+///
+/// Will connect using the underlying stream connector `B`, and establish a TLS session on top of
+/// that. You generally want to use [`TcpEstablisher`](struct.TcpEstablisher.html) as `B`. The
+/// remote side must present a certificate that is valid for the hostname used in the URL. To set
+/// custom options, construct a `native_tls::TlsConnectorBuilder`, configure it appropriately, and
+/// then use
+///
+/// ```rust,no_run
+/// # extern crate native_tls;
+/// # extern crate faktory;
+/// # fn main() {
+/// # use faktory::{TlsEstablisher, TcpEstablisher};
+/// # let tls = native_tls::TlsConnector::builder().unwrap();
+/// TlsEstablisher::<TcpEstablisher>::from(tls);
+/// # }
+/// ```
+pub struct TlsEstablisher<B = TcpEstablisher>
 where
-    TCB: Into<TlsConnectorBuilder>,
     B: StreamConnector,
 {
-    builder: TCB,
+    builder: TlsConnectorBuilder,
     base: B,
 }
 
-impl<B: Default + StreamConnector> Default for TlsEstablisher<TlsConnectorBuilder, B> {
+impl<B: Default + StreamConnector> Default for TlsEstablisher<B> {
     fn default() -> Self {
         TlsEstablisher {
             builder: TlsConnector::builder().unwrap(),
@@ -168,19 +185,18 @@ impl<B: Default + StreamConnector> Default for TlsEstablisher<TlsConnectorBuilde
     }
 }
 
-impl From<TlsConnectorBuilder> for TlsEstablisher<TlsConnectorBuilder, TcpEstablisher> {
+impl<B: Default + StreamConnector> From<TlsConnectorBuilder> for TlsEstablisher<B> {
     fn from(o: TlsConnectorBuilder) -> Self {
         TlsEstablisher {
             builder: o,
-            base: TcpEstablisher,
+            base: B::default(),
         }
     }
 }
 
 use std::fmt::Debug;
-impl<TCB, B> StreamConnector for TlsEstablisher<TCB, B>
+impl<B> StreamConnector for TlsEstablisher<B>
 where
-    TCB: Into<TlsConnectorBuilder>,
     B: StreamConnector,
     B::Stream: Debug + Send + Sync,
 {
@@ -191,7 +207,6 @@ where
         let stream = base.connect(B::Addr::from_url(&url))?;
 
         builder
-            .into()
             .build()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
             .and_then(|b| {
@@ -232,16 +247,7 @@ fn stream_from_url<C: StreamConnector>(connector: C, url: &Url) -> io::Result<C:
 }
 
 impl<S: Read + Write + Sized + 'static> Client<S> {
-    /// Connect to a Faktory server with the given URL.
-    ///
-    /// The url is in standard URL form:
-    ///
-    /// ```text
-    /// tcp://[:password@]hostname[:port]
-    /// ```
-    ///
-    /// Port defaults to 7419 if not given.
-    pub fn connect<C: StreamConnector<Stream = S>>(
+    pub(crate) fn connect<C: StreamConnector<Stream = S>>(
         connector: C,
         opts: ClientOptions,
         url: &str,
@@ -253,16 +259,7 @@ impl<S: Read + Write + Sized + 'static> Client<S> {
         Ok(c)
     }
 
-    /// Connect to a Faktory server using the standard environment variables.
-    ///
-    /// Will first read `FAKTORY_PROVIDER` to get the name of the environment variable to get the
-    /// address from (defaults to `FAKTORY_URL`), and then read that environment variable to get
-    /// the server address. If the latter environment variable is not defined, the url defaults to:
-    ///
-    /// ```text
-    /// tcp://localhost:7419
-    /// ```
-    pub fn connect_env<C: StreamConnector<Stream = S>>(
+    pub(crate) fn connect_env<C: StreamConnector<Stream = S>>(
         connector: C,
         opts: ClientOptions,
     ) -> io::Result<Client<S>> {
@@ -295,17 +292,20 @@ pub(crate) enum HeartbeatStatus {
 }
 
 impl<S: Read + Write> Client<S> {
-    pub fn end_early(&mut self) -> io::Result<()> {
+    pub(crate) fn end_early(&mut self) -> io::Result<()> {
         // TODO: also shutdown socket
         single::write_command(&mut self.stream, single::End)
     }
 
-    pub fn issue<C: self::single::FaktoryCommand>(&mut self, c: C) -> io::Result<ReadToken<S>> {
+    pub(crate) fn issue<C: self::single::FaktoryCommand>(
+        &mut self,
+        c: C,
+    ) -> io::Result<ReadToken<S>> {
         single::write_command(&mut self.stream, c)?;
         Ok(ReadToken(self))
     }
 
-    pub fn heartbeat(&mut self) -> io::Result<HeartbeatStatus> {
+    pub(crate) fn heartbeat(&mut self) -> io::Result<HeartbeatStatus> {
         single::write_command(
             &mut self.stream,
             Heartbeat::new(self.opts.wid.as_ref().unwrap()),
@@ -323,7 +323,7 @@ impl<S: Read + Write> Client<S> {
         }
     }
 
-    pub fn fetch<Q>(&mut self, queues: &[Q]) -> io::Result<Job>
+    pub(crate) fn fetch<Q>(&mut self, queues: &[Q]) -> io::Result<Job>
     where
         Q: AsRef<str>,
     {
@@ -332,11 +332,11 @@ impl<S: Read + Write> Client<S> {
 }
 
 impl<'a, S: Read + Write> ReadToken<'a, S> {
-    pub fn await_ok(self) -> io::Result<()> {
+    pub(crate) fn await_ok(self) -> io::Result<()> {
         single::read_ok(&mut self.0.stream)
     }
 
-    pub fn read_json<T>(self) -> io::Result<T>
+    pub(crate) fn read_json<T>(self) -> io::Result<T>
     where
         T: serde::de::DeserializeOwned,
     {

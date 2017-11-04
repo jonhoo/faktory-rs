@@ -1,3 +1,4 @@
+extern crate url;
 extern crate faktory;
 extern crate mockstream;
 extern crate serde_json;
@@ -44,7 +45,7 @@ fn dequeue() {
     s.hello();
     let mut c = ConsumerBuilder::default();
     c.register("foobar", |job| -> io::Result<()> {
-        assert_eq!(job.args, vec!["z"]);
+        assert_eq!(job.args(), &["z"]);
         Ok(())
     });
     let mut c = c.connect_env(s.clone()).unwrap();

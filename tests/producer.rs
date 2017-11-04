@@ -1,3 +1,4 @@
+extern crate url;
 extern crate faktory;
 extern crate mockstream;
 extern crate serde_json;

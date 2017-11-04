@@ -12,13 +12,96 @@ const STATUS_RUNNING: usize = 0;
 const STATUS_QUIET: usize = 1;
 const STATUS_TERMINATING: usize = 2;
 
-/// This struct represents a single Faktory worker.
+/// `Consumer` is used to run a worker that processes jobs provided by Faktory.
 ///
-/// The worker consumes jobs fetched from the Faktory server, processes them, and reports the
-/// results back to the Faktory server upon completion.
+/// # Building the worker
 ///
-/// A worker should be constructed using a [`ConsumerBuilder`](struct.ConsumerBuilder.html), so
-/// that any non-default worker parameters can be set.
+/// Faktory needs a decent amount of information from its workers, such as a unique worker ID, a
+/// hostname for the worker, its process ID, and a set of *labels* used to indicate which jobs the
+/// worker can accept. In order to enable setting all these, constructing a worker is a two-step
+/// process. You first use a [`ConsumerBuilder`](struct.ConsumerBuilder.html) (which conveniently
+/// implements a sensible `Default`) to set the worker metadata, as well as to register any job
+/// handlers. You then use one of the `connect_*` methods to finalize the worker and connect to the
+/// Faktory server.
+///
+/// In most cases, `ConsumerBuilder::default()` will do what you want. You only need to augment it
+/// with calls to [`register`](struct.ConsumerBuilder.html#method.register) to register handlers
+/// for each of your job types, and then you can connect. If you have different *types* of workers,
+/// you may also want to use [`labels`](struct.ConsumerBuilder.html#method.labels) to further
+/// narrow down what kind of jobs this worker should accept.
+///
+/// ## Handlers
+///
+/// For each [`Job`](struct.Job.html) that the worker receives, the handler that is registered for
+/// that job's type will be called. If a job is received with a type for which no handler exists,
+/// the job will be failed and returned to the Faktory server. Similarly, if a handler returns an
+/// error response, the job will be failed, and the error reported back to the Faktory server.
+///
+/// If you are new to Rust, getting the handler types to work out can be a little tricky. If you
+/// want to understand why, I highly recommend that you have a look at the chapter on [closures and
+/// generic
+/// parameters](https://doc.rust-lang.org/book/second-edition/ch13-01-closures.html#using-closures-with-generic-parameters-and-the-fn-traits)
+/// in the Rust Book. If you just want it to work, my recommendation is to either use regular
+/// functions instead of closures, and giving `&func_name` as the handler, **or** wrapping all your
+/// closures in `Box::new()`.
+///
+/// ## Concurrency
+///
+/// By default, only a single thread is spun up to process the jobs given to this worker. If you
+/// want to dedicate more resources to processing jobs, you have a number of options listed below.
+/// As you go down the list below, efficiency increases, but fault isolation decreases. I will not
+/// give further detail here, but rather recommend that if these don't mean much to you, you should
+/// use the last approach and let the library handle the concurrency for you.
+///
+///  - You can spin up more worker processes by launching your worker program more than once.
+///  - You can create more than one `Consumer`.
+///  - You can call [`ConsumerBuilder::workers`](struct.ConsumerBuilder.html#method.workers) to set
+///    the number of worker threads you'd like the `Consumer` to use internally.
+///
+/// # Connecting to Faktory
+///
+/// To fetch jobs, the `Consumer` must first be connected to the Faktory server. Exactly how you do
+/// that depends on your setup. In particular, you must provide a connection *type*; that is,
+/// something that implements [`StreamConnector`](trait.StreamConnector.html), likely
+/// [`TcpEstablisher`](struct.TcpEstablisher.html) or
+/// [`TlsEstablisher`](struct.TlsEstablisher.html) (for unencrypted and encrypted connections
+/// respectively).
+///
+/// You must then tell the `Consumer` *where* to connect. This is done by supplying a connection
+/// URL of the form:
+///
+/// ```text
+/// protocol://[:password@]hostname[:port]
+/// ```
+///
+/// Faktory suggests using the `FAKTORY_PROVIDER` and `FAKTORY_URL` environment variables (see
+/// their docs for more information) with `localhost:7419` as the fallback default. If you want
+/// this behavior, use
+/// [`ConsumerBuilder::connect_env`](struct.ConsumerBuilder.html#method.connect_env). If not, you
+/// can supply the URL directly to
+/// [`ConsumerBuilder::connect`](struct.ConsumerBuilder.html#method.connect). Both methods take a
+/// connection type as described above.
+///
+/// See the [`Producer` examples](struct.Producer.html#examples) for examples of how to connect to
+/// different Factory setups.
+///
+/// # Worker lifecycle
+///
+/// Okay, so you've built your worker and connected to the Faktory server. Now what?
+///
+/// If all this process is doing is handling jobs, reconnecting on failure, and exiting when told
+/// to by the Faktory server, you should use the `run_to_completion_*` methods. Specifically,
+/// [`Consumer::run_to_completion_env`](struct.Consumer.html#method.run_to_completion_env) if
+/// you're using environment variables to connect, and
+/// [`Consumer::run_to_completion`](struct.Consumer.html#method.run_to_completion) if you want to
+/// manually specify the URL. If you want more fine-grained control over the lifetime of your
+/// process, you should use [`Consumer::run`](struct.Consumer.html#method.run). See the
+/// documentation for each of these methods for details.
+///
+/// # Examples
+///
+/// Create a worker with all default options, register a single handler (for the `foobar` job
+/// type), connect to the Faktory server, and start accepting jobs.
 ///
 /// ```no_run
 /// use faktory::{ConsumerBuilder, TcpEstablisher};
@@ -44,8 +127,9 @@ where
     terminated: bool,
 }
 
-/// Convenience wrapper for building a [`Consumer`](struct.Consumer.html) with non-standard
-/// options.
+/// Convenience wrapper for building a Faktory worker.
+///
+/// See the [`Consumer`](struct.Consumer.html) documentation for details.
 #[derive(Clone)]
 pub struct ConsumerBuilder<F> {
     opts: ClientOptions,
@@ -98,7 +182,7 @@ impl<F> ConsumerBuilder<F> {
         self
     }
 
-    /// Set the number of workers to use for `run` and `run_to_completion`.
+    /// Set the number of workers to use for `run` and `run_to_completion_*`.
     ///
     /// Defaults to 1.
     pub fn workers(&mut self, w: usize) -> &mut Self {
@@ -111,10 +195,10 @@ impl<F, E> ConsumerBuilder<F>
 where
     F: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
 {
-    /// Register a handler function for the given `kind` of job.
+    /// Register a handler function for the given job type (`kind`).
     ///
     /// Whenever a job whose type matches `kind` is fetched from the Faktory, the given handler
-    /// function is called with that job.
+    /// function is called with that job as its argument.
     pub fn register<K>(&mut self, kind: K, handler: F) -> &mut Self
     where
         K: ToString,
@@ -127,7 +211,8 @@ where
     ///
     /// Will first read `FAKTORY_PROVIDER` to get the name of the environment variable to get the
     /// address from (defaults to `FAKTORY_URL`), and then read that environment variable to get
-    /// the server address. If the latter environment variable is not defined, the url defaults to:
+    /// the server address. If the latter environment variable is not defined, the connection will
+    /// be made to
     ///
     /// ```text
     /// tcp://localhost:7419
@@ -144,12 +229,6 @@ where
     }
 
     /// Connect to a Faktory server at the given URL.
-    ///
-    /// The url is in standard URL form:
-    ///
-    /// ```text
-    /// tcp://[:password@]hostname[:port]
-    /// ```
     ///
     /// Port defaults to 7419 if not given.
     pub fn connect<C: StreamConnector, U: AsRef<str>>(
@@ -183,8 +262,10 @@ impl<F, S: Read + Write> Consumer<S, F> {
 }
 
 impl<F, S: Read + Write + 'static> Consumer<S, F> {
-    /// Re-establish this worker's connection to the Faktory server using default environment
-    /// variables.
+    /// Re-establish this worker's connection using default environment variables.
+    ///
+    /// See [`ConsumerBuilder::connect_env`](struct.ConsumerBuilder.html#method.connect_env) for
+    /// details.
     pub fn reconnect_env<C: StreamConnector<Stream = S>>(
         &mut self,
         connector: C,
@@ -192,7 +273,7 @@ impl<F, S: Read + Write + 'static> Consumer<S, F> {
         self.c.lock().unwrap().reconnect_env(connector)
     }
 
-    /// Re-establish this worker's connection to the Faktory server using the given `url`.
+    /// Re-establish this worker's connection using the given `url`.
     pub fn reconnect<U: AsRef<str>, C: StreamConnector<Stream = S>>(
         &mut self,
         connector: C,
@@ -228,7 +309,7 @@ where
         }
     }
 
-    /// Run a single job and then return.
+    /// Fetch and run a single job on the current thread, and then return.
     pub fn run_one<Q>(&mut self, worker: usize, queues: &[Q]) -> io::Result<()>
     where
         Q: AsRef<str>,
@@ -304,48 +385,10 @@ where
     E: Error,
     F: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
 {
-    /// Run this worker until the server tells us to exit or a connection cannot be re-established.
+    /// Run this worker on the given `queues` until an I/O error occurs (`Err` is returned), or
+    /// until the server tells the worker to disengage (`Ok` is returned).
     ///
-    /// This function never returns. When the worker decides to exit, the process is terminated.
-    pub fn run_to_completion<Q, U, C>(mut self, queues: &[Q], connector: C, url: U) -> !
-    where
-        Q: AsRef<str>,
-        U: AsRef<str>,
-        C: StreamConnector<Stream = S> + Clone,
-    {
-        use std::process;
-        let url = url.as_ref();
-        while self.run(queues).is_err() {
-            if self.reconnect(connector.clone(), url).is_err() {
-                break;
-            }
-        }
-
-        process::exit(0);
-    }
-
-    /// Run this worker until the server tells us to exit or a connection cannot be re-established.
-    ///
-    /// This function never returns. When the worker decides to exit, the process is terminated.
-    pub fn run_to_completion_env<Q, C>(mut self, queues: &[Q], connector: C) -> !
-    where
-        Q: AsRef<str>,
-        C: StreamConnector<Stream = S> + Clone,
-    {
-        use std::process;
-        while self.run(queues).is_err() {
-            if self.reconnect_env(connector.clone()).is_err() {
-                break;
-            }
-        }
-
-        process::exit(0);
-    }
-
-    /// Run this worker on the given `queues` until an I/O error occurs, or until the server tells
-    /// the worker to disengage.
-    ///
-    /// The value in `Ok()` indicates the number of workers that may still be processing jobs.
+    /// The value in an `Ok` indicates the number of workers that may still be processing jobs.
     ///
     /// Note that if the worker fails, `reconnect()` should likely be called before calling `run()`
     /// again. If an error occurred while reporting a job success or failure, the result will be
@@ -532,6 +575,51 @@ where
             }
         }
     }
+
+    /// Run this worker until the server tells us to exit or a connection cannot be re-established.
+    ///
+    /// The worker will connect to the Faktory server at `url`.
+    ///
+    /// This function never returns. When the worker decides to exit, the process is terminated.
+    pub fn run_to_completion<Q, U, C>(mut self, queues: &[Q], connector: C, url: U) -> !
+    where
+        Q: AsRef<str>,
+        U: AsRef<str>,
+        C: StreamConnector<Stream = S> + Clone,
+    {
+        use std::process;
+        let url = url.as_ref();
+        while self.run(queues).is_err() {
+            if self.reconnect(connector.clone(), url).is_err() {
+                break;
+            }
+        }
+
+        process::exit(0);
+    }
+
+    /// Run this worker until the server tells us to exit or a connection cannot be re-established.
+    ///
+    /// The worker will connect to the Faktory server dictated by the standard environment
+    /// variables. See
+    /// [`ConsumerBuilder::connect_env`](struct.ConsumerBuilder.html#method.connect_env) for
+    /// details.
+    ///
+    /// This function never returns. When the worker decides to exit, the process is terminated.
+    pub fn run_to_completion_env<Q, C>(mut self, queues: &[Q], connector: C) -> !
+    where
+        Q: AsRef<str>,
+        C: StreamConnector<Stream = S> + Clone,
+    {
+        use std::process;
+        while self.run(queues).is_err() {
+            if self.reconnect_env(connector.clone()).is_err() {
+                break;
+            }
+        }
+
+        process::exit(0);
+    }
 }
 
 #[cfg(test)]
@@ -545,7 +633,7 @@ mod tests {
         use std::io;
         use producer::Producer;
 
-        let mut p = Producer::default::<TcpEstablisher>().unwrap();
+        let mut p = Producer::connect_env(TcpEstablisher).unwrap();
         let mut j = Job::new("foobar", vec!["z"]);
         j.queue = "worker_test_1".to_string();
         p.enqueue(j).unwrap();
