@@ -32,6 +32,7 @@ chrono = { version = "0.4", features = ["serde"] }
 url = "1.5"
 atomic-option = "0.1"
 native-tls = "0.1.4"
+fnv = "1.0.3"
 
 [dev-dependencies]
 # mockstream = "0.0.2"

@@ -35,6 +35,7 @@
 extern crate atomic_option;
 extern crate bufstream;
 extern crate chrono;
+extern crate fnv;
 extern crate hostname;
 extern crate libc;
 extern crate native_tls;

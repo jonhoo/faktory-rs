@@ -2,9 +2,9 @@ use std::io::prelude::*;
 use std::io;
 use std::error::Error;
 use proto::{Client, ClientOptions, HeartbeatStatus, StreamConnector};
-use std::collections::HashMap;
 use std::sync::{atomic, Arc, Mutex};
 use atomic_option::AtomicOption;
+use fnv::FnvHashMap;
 
 use proto::{Ack, Fail, Job};
 
@@ -40,7 +40,7 @@ where
     c: Arc<Mutex<Client<S>>>,
     last_job_results: Arc<Vec<AtomicOption<Result<String, Fail>>>>,
     running_jobs: Arc<Vec<AtomicOption<String>>>,
-    callbacks: Arc<HashMap<String, F>>,
+    callbacks: Arc<FnvHashMap<String, F>>,
     terminated: bool,
 }
 
@@ -50,7 +50,7 @@ where
 pub struct ConsumerBuilder<F> {
     opts: ClientOptions,
     workers: usize,
-    callbacks: HashMap<String, F>,
+    callbacks: FnvHashMap<String, F>,
 }
 
 impl<F> Default for ConsumerBuilder<F> {
@@ -171,7 +171,7 @@ enum Failed<E: Error> {
 }
 
 impl<F, S: Read + Write> Consumer<S, F> {
-    fn new(c: Client<S>, workers: usize, callbacks: HashMap<String, F>) -> Self {
+    fn new(c: Client<S>, workers: usize, callbacks: FnvHashMap<String, F>) -> Self {
         Consumer {
             c: Arc::new(Mutex::new(c)),
             callbacks: Arc::new(callbacks),
