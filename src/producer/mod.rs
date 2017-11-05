@@ -141,6 +141,7 @@ impl<S: Read + Write + 'static> Producer<S> {
             .issue(Info)
             .map_err(serde_json::Error::io)?
             .read_json()
+            .map(|v| v.expect("info command cannot give empty response"))
     }
 }
 

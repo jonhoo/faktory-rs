@@ -323,7 +323,7 @@ impl<S: Read + Write> Client<S> {
         }
     }
 
-    pub(crate) fn fetch<Q>(&mut self, queues: &[Q]) -> io::Result<Job>
+    pub(crate) fn fetch<Q>(&mut self, queues: &[Q]) -> io::Result<Option<Job>>
     where
         Q: AsRef<str>,
     {
@@ -336,7 +336,7 @@ impl<'a, S: Read + Write> ReadToken<'a, S> {
         single::read_ok(&mut self.0.stream)
     }
 
-    pub(crate) fn read_json<T>(self) -> io::Result<T>
+    pub(crate) fn read_json<T>(self) -> io::Result<Option<T>>
     where
         T: serde::de::DeserializeOwned,
     {

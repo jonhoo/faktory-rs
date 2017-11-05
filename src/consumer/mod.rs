@@ -310,12 +310,15 @@ where
     }
 
     /// Fetch and run a single job on the current thread, and then return.
-    pub fn run_one<Q>(&mut self, worker: usize, queues: &[Q]) -> io::Result<()>
+    pub fn run_one<Q>(&mut self, worker: usize, queues: &[Q]) -> io::Result<bool>
     where
         Q: AsRef<str>,
     {
         // get a job
-        let job = self.c.lock().unwrap().fetch(queues)?;
+        let job = match self.c.lock().unwrap().fetch(queues)? {
+            Some(job) => job,
+            None => return Ok(false),
+        };
 
         // remember the job id
         let jid = job.jid.clone();
@@ -364,7 +367,7 @@ where
         // we won't have to tell the server again
         self.last_job_results[worker].take(atomic::Ordering::SeqCst);
         self.running_jobs[worker].take(atomic::Ordering::SeqCst);
-        Ok(())
+        Ok(true)
     }
 
     #[cfg(test)]

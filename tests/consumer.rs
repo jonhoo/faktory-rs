@@ -1,7 +1,7 @@
-extern crate url;
 extern crate faktory;
 extern crate mockstream;
 extern crate serde_json;
+extern crate url;
 
 mod mock;
 
@@ -80,7 +80,63 @@ fn dequeue() {
 }
 
 #[test]
-fn quiet() {
+fn dequeue_first_empty() {
+    let mut s = mock::Stream::default();
+    s.hello();
+    let mut c = ConsumerBuilder::default();
+    c.register("foobar", |job| -> io::Result<()> {
+        assert_eq!(job.args(), &["z"]);
+        Ok(())
+    });
+    let mut c = c.connect_env(s.clone()).unwrap();
+    s.ignore();
+
+
+    s.push_bytes_to_read(
+        b"$0\r\n\r\n$188\r\n\
+        {\
+        \"jid\":\"foojid\",\
+        \"queue\":\"default\",\
+        \"jobtype\":\"foobar\",\
+        \"args\":[\"z\"],\
+        \"created_at\":\"2017-11-01T21:02:35.772981326Z\",\
+        \"enqueued_at\":\"2017-11-01T21:02:35.773318394Z\",\
+        \"reserve_for\":600,\
+        \"retry\":25\
+        }\r\n",
+    );
+    s.ok(); // for the ACK
+
+    // run once, shouldn't do anything
+    match c.run_one(0, &["default"]) {
+        Ok(did_work) => assert!(!did_work),
+        Err(e) => {
+            println!("{:?}", e);
+            unreachable!();
+        }
+    }
+    // run again, this time doing the job
+    match c.run_one(0, &["default"]) {
+        Ok(did_work) => assert!(did_work),
+        Err(e) => {
+            println!("{:?}", e);
+            unreachable!();
+        }
+    }
+
+    let written = s.pop_bytes_written();
+    assert_eq!(
+        written,
+        &b"\
+        FETCH default\r\n\
+        FETCH default\r\n\
+        ACK {\"jid\":\"foojid\"}\r\n\
+        "[..]
+    );
+}
+
+#[test]
+fn well_behaved() {
     let mut s = mock::Stream::default();
     s.hello();
     let mut c = ConsumerBuilder::default();
@@ -142,7 +198,70 @@ fn quiet() {
 }
 
 #[test]
-fn quiet_many() {
+fn no_first_job() {
+    let mut s = mock::Stream::default();
+    s.hello();
+    let mut c = ConsumerBuilder::default();
+    c.wid("wid".to_string());
+    c.register("foobar", |_| -> io::Result<()> {
+        // NOTE: this time needs to be so that it lands between the first heartbeat and the second
+        thread::sleep(Duration::from_secs(7));
+        Ok(())
+    });
+    let mut c = c.connect_env(s.clone()).unwrap();
+    s.ignore();
+
+    // push a job that'll take a while to run
+    s.push_bytes_to_read(
+        b"$0\r\n\r\n$182\r\n\
+            {\
+            \"jid\":\"jid\",\
+            \"queue\":\"default\",\
+            \"jobtype\":\"foobar\",\
+            \"args\":[],\
+            \"created_at\":\"2017-11-01T21:02:35.772981326Z\",\
+            \"enqueued_at\":\"2017-11-01T21:02:35.773318394Z\",\
+            \"reserve_for\":600,\
+            \"retry\":25\
+            }\r\n",
+    );
+
+    let jh = thread::spawn(move || c.run(&["default"]));
+
+    // the running thread won't return for a while. the heartbeat thingy is going to eventually
+    // send a heartbeat, and we want to respond to that with a "quiet" to make it not accept any
+    // more jobs.
+    s.push_bytes_to_read(b"+quiet\r\n");
+
+    // eventually, the job is going to finish and send an ACK
+    s.ok();
+
+    // then, we want to send a terminate to tell the thread to exit
+    s.push_bytes_to_read(b"+terminate\r\n");
+
+    // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
+    assert_eq!(jh.join().unwrap().unwrap(), 0);
+
+    // we should now have seen:
+    //
+    //  - ACK {"jid": "jid"}
+    //  - BEAT {"wid": "wid"}
+    //
+    let written = s.pop_bytes_written();
+
+    let msgs = "\
+                FETCH default\r\n\
+                FETCH default\r\n\
+                BEAT {\"wid\":\"wid\"}\r\n\
+                ACK {\"jid\":\"jid\"}\r\n\
+                BEAT {\"wid\":\"wid\"}\r\n\
+                END\r\n";
+    use std;
+    assert_eq!(std::str::from_utf8(&written[..]).unwrap(), msgs);
+}
+
+#[test]
+fn well_behaved_many() {
     let mut s = mock::Stream::default();
     s.hello();
     let mut c = ConsumerBuilder::default();

@@ -30,15 +30,21 @@ fn bad(expected: &str, got: &RawResponse) -> io::Error {
 
 // ----------------------------------------------
 
-pub fn read_json<R: BufRead, T: serde::de::DeserializeOwned>(r: R) -> serde_json::Result<T> {
+pub fn read_json<R: BufRead, T: serde::de::DeserializeOwned>(
+    r: R,
+) -> serde_json::Result<Option<T>> {
     let rr = read(r).map_err(serde_json::Error::io)?;
     match rr {
         RawResponse::String(ref s) => {
-            return serde_json::from_str(s);
+            return serde_json::from_str(s).map(|v| Some(v));
         }
         RawResponse::Blob(ref b) => {
-            return serde_json::from_slice(b);
+            if b.is_empty() {
+                return Ok(None);
+            }
+            return serde_json::from_slice(b).map(|v| Some(v));
         }
+        RawResponse::Null => return Ok(None),
         _ => {}
     };
 
