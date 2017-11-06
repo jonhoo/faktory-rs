@@ -1,7 +1,7 @@
-extern crate url;
 extern crate faktory;
 extern crate mockstream;
 extern crate serde_json;
+extern crate url;
 
 mod mock;
 
@@ -10,10 +10,9 @@ use faktory::*;
 #[test]
 fn hello() {
     let mut s = mock::Stream::default();
-    s.hello();
 
     let p = Producer::connect_env(s.clone()).unwrap();
-    let written = s.pop_bytes_written();
+    let written = s.pop_bytes_written(0);
     assert!(written.starts_with(b"HELLO {"));
     let written: serde_json::Value = serde_json::from_slice(&written[b"HELLO ".len()..]).unwrap();
     let written = written.as_object().unwrap();
@@ -24,21 +23,20 @@ fn hello() {
     assert_eq!(labels, &["rust"]);
 
     drop(p);
-    let written = s.pop_bytes_written();
+    let written = s.pop_bytes_written(0);
     assert_eq!(written, b"END\r\n");
 }
 
 #[test]
 fn enqueue() {
     let mut s = mock::Stream::default();
-    s.hello();
     let mut p = Producer::connect_env(s.clone()).unwrap();
-    s.ignore();
+    s.ignore(0);
 
-    s.ok();
+    s.ok(0);
     p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
 
-    let written = s.pop_bytes_written();
+    let written = s.pop_bytes_written(0);
     assert!(written.starts_with(b"PUSH {"));
     let written: serde_json::Value = serde_json::from_slice(&written[b"PUSH ".len()..]).unwrap();
     let written = written.as_object().unwrap();

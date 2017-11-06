@@ -1,8 +1,7 @@
-use std::io::prelude::*;
 use std::io;
 use std::error::Error;
 use proto::{Client, ClientOptions, HeartbeatStatus, StreamConnector};
-use std::sync::{atomic, Arc, Mutex};
+use std::sync::{atomic, Arc};
 use atomic_option::AtomicOption;
 use fnv::FnvHashMap;
 
@@ -90,13 +89,11 @@ const STATUS_TERMINATING: usize = 2;
 /// Okay, so you've built your worker and connected to the Faktory server. Now what?
 ///
 /// If all this process is doing is handling jobs, reconnecting on failure, and exiting when told
-/// to by the Faktory server, you should use the `run_to_completion_*` methods. Specifically,
-/// [`Consumer::run_to_completion_env`](struct.Consumer.html#method.run_to_completion_env) if
-/// you're using environment variables to connect, and
-/// [`Consumer::run_to_completion`](struct.Consumer.html#method.run_to_completion) if you want to
-/// manually specify the URL. If you want more fine-grained control over the lifetime of your
-/// process, you should use [`Consumer::run`](struct.Consumer.html#method.run). See the
-/// documentation for each of these methods for details.
+/// to by the Faktory server, you should use
+/// [`run_to_completion`](struct.Consumer.html#method.run_to_completion). If you want more
+/// fine-grained control over the lifetime of your process, you should use
+/// [`Consumer::run`](struct.Consumer.html#method.run). See the documentation for each of these
+/// methods for details.
 ///
 /// # Examples
 ///
@@ -116,11 +113,11 @@ const STATUS_TERMINATING: usize = 2;
 ///     println!("worker failed: {}", e);
 /// }
 /// ```
-pub struct Consumer<S, F>
+pub struct Consumer<C, F>
 where
-    S: Read + Write,
+    C: StreamConnector + Clone,
 {
-    c: Arc<Mutex<Client<S>>>,
+    c: Client<C>,
     last_job_results: Arc<Vec<AtomicOption<Result<String, Fail>>>>,
     running_jobs: Arc<Vec<AtomicOption<String>>>,
     callbacks: Arc<FnvHashMap<String, F>>,
@@ -217,10 +214,10 @@ where
     /// ```text
     /// tcp://localhost:7419
     /// ```
-    pub fn connect_env<C: StreamConnector>(
+    pub fn connect_env<C: StreamConnector + Clone>(
         self,
         connector: C,
-    ) -> io::Result<Consumer<C::Stream, F>> {
+    ) -> io::Result<Consumer<C, F>> {
         Ok(Consumer::new(
             Client::connect_env(connector, self.opts)?,
             self.workers,
@@ -231,11 +228,11 @@ where
     /// Connect to a Faktory server at the given URL.
     ///
     /// Port defaults to 7419 if not given.
-    pub fn connect<C: StreamConnector, U: AsRef<str>>(
+    pub fn connect<C: StreamConnector + Clone, U: AsRef<str>>(
         self,
         connector: C,
         url: U,
-    ) -> io::Result<Consumer<C::Stream, F>> {
+    ) -> io::Result<Consumer<C, F>> {
         Ok(Consumer::new(
             Client::connect(connector, self.opts, url.as_ref())?,
             self.workers,
@@ -249,10 +246,10 @@ enum Failed<E: Error> {
     BadJobType(String),
 }
 
-impl<F, S: Read + Write> Consumer<S, F> {
-    fn new(c: Client<S>, workers: usize, callbacks: FnvHashMap<String, F>) -> Self {
+impl<F, C: StreamConnector + Clone> Consumer<C, F> {
+    fn new(c: Client<C>, workers: usize, callbacks: FnvHashMap<String, F>) -> Self {
         Consumer {
-            c: Arc::new(Mutex::new(c)),
+            c: c,
             callbacks: Arc::new(callbacks),
             running_jobs: Arc::new((0..workers).map(|_| AtomicOption::empty()).collect()),
             last_job_results: Arc::new((0..workers).map(|_| AtomicOption::empty()).collect()),
@@ -261,44 +258,18 @@ impl<F, S: Read + Write> Consumer<S, F> {
     }
 }
 
-impl<F, S: Read + Write + 'static> Consumer<S, F> {
-    /// Re-establish this worker's connection using default environment variables.
-    ///
-    /// See [`ConsumerBuilder::connect_env`](struct.ConsumerBuilder.html#method.connect_env) for
-    /// details.
-    pub fn reconnect_env<C: StreamConnector<Stream = S>>(
-        &mut self,
-        connector: C,
-    ) -> io::Result<()> {
-        self.c.lock().unwrap().reconnect_env(connector)
-    }
-
-    /// Re-establish this worker's connection using the given `url`.
-    pub fn reconnect<U: AsRef<str>, C: StreamConnector<Stream = S>>(
-        &mut self,
-        connector: C,
-        url: U,
-    ) -> io::Result<()> {
-        self.c.lock().unwrap().reconnect(connector, url.as_ref())
+impl<F, C: StreamConnector + Clone> Consumer<C, F> {
+    fn reconnect(&mut self) -> io::Result<()> {
+        self.c.reconnect()
     }
 }
 
-impl<S, E, F> Consumer<S, F>
+impl<C, E, F> Consumer<C, F>
 where
-    S: Read + Write + 'static,
+    C: StreamConnector + Clone,
     E: Error,
     F: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
 {
-    fn for_worker(&mut self) -> Self {
-        Consumer {
-            c: self.c.clone(),
-            callbacks: self.callbacks.clone(),
-            running_jobs: self.running_jobs.clone(),
-            last_job_results: self.last_job_results.clone(),
-            terminated: self.terminated,
-        }
-    }
-
     fn run_job(&mut self, job: Job) -> Result<(), Failed<E>> {
         match self.callbacks.get(&job.kind) {
             Some(callback) => (callback)(job).map_err(Failed::Application),
@@ -315,7 +286,7 @@ where
         Q: AsRef<str>,
     {
         // get a job
-        let job = match self.c.lock().unwrap().fetch(queues)? {
+        let job = match self.c.fetch(queues)? {
             Some(job) => job,
             None => return Ok(false),
         };
@@ -336,7 +307,7 @@ where
                 // remember it in case we fail to notify the server (e.g., broken connection)
                 self.last_job_results[worker]
                     .swap(Box::new(Ok(jid.clone())), atomic::Ordering::SeqCst);
-                self.c.lock().unwrap().issue(Ack::new(jid))?.await_ok()?;
+                self.c.issue(Ack::new(jid))?.await_ok()?;
             }
             Err(e) => {
                 // job failed -- let server know
@@ -360,7 +331,7 @@ where
 
                 let fail2 = fail.clone();
                 self.last_job_results[worker].swap(Box::new(Err(fail)), atomic::Ordering::SeqCst);
-                self.c.lock().unwrap().issue(&fail2)?.await_ok()?;
+                self.c.issue(&fail2)?.await_ok()?;
             }
         }
 
@@ -382,22 +353,33 @@ where
     }
 }
 
-impl<S, E, F> Consumer<S, F>
+impl<C, E, F> Consumer<C, F>
 where
-    S: Read + Write + 'static + Send,
+    C: StreamConnector + Clone + Send + 'static,
+    C::Stream: 'static + Send,
     E: Error,
     F: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
 {
+    fn for_worker(&mut self) -> io::Result<Self> {
+        Ok(Consumer {
+            c: self.c.connect_again()?,
+            callbacks: self.callbacks.clone(),
+            running_jobs: self.running_jobs.clone(),
+            last_job_results: self.last_job_results.clone(),
+            terminated: self.terminated,
+        })
+    }
+
     /// Run this worker on the given `queues` until an I/O error occurs (`Err` is returned), or
     /// until the server tells the worker to disengage (`Ok` is returned).
     ///
     /// The value in an `Ok` indicates the number of workers that may still be processing jobs.
     ///
-    /// Note that if the worker fails, `reconnect()` should likely be called before calling `run()`
-    /// again. If an error occurred while reporting a job success or failure, the result will be
-    /// re-reported to the server without re-executing the job. If the worker was terminated (i.e.,
-    /// `run` returns with an `Ok` response), the worker should **not** try to resume by calling
-    /// `run` again. This will cause a panic.
+    /// Note that if the worker fails, [`reconnect()`](struct.Consumer.html#method.reconnect)
+    /// should likely be called before calling `run()` again. If an error occurred while reporting
+    /// a job success or failure, the result will be re-reported to the server without re-executing
+    /// the job. If the worker was terminated (i.e., `run` returns with an `Ok` response), the
+    /// worker should **not** try to resume by calling `run` again. This will cause a panic.
     pub fn run<Q>(&mut self, queues: &[Q]) -> io::Result<usize>
     where
         Q: AsRef<str>,
@@ -409,10 +391,9 @@ where
         // we know there's no leftover thread at this point, so there's no race on the option.
         for last_job_result in self.last_job_results.iter() {
             if let Some(res) = last_job_result.take(atomic::Ordering::SeqCst) {
-                let mut c = self.c.lock().unwrap();
                 let r = match *res {
-                    Ok(ref jid) => c.issue(Ack::new(jid)),
-                    Err(ref fail) => c.issue(fail),
+                    Ok(ref jid) => self.c.issue(Ack::new(jid)),
+                    Err(ref fail) => self.c.issue(fail),
                 };
 
                 let r = match r {
@@ -442,15 +423,15 @@ where
             .collect();
 
         // start worker threads
-        let workers: Vec<_> = status
+        use std::thread;
+        let workers = status
             .iter()
             .enumerate()
             .map(|(worker, status)| {
-                use std::thread;
-                let mut w = self.for_worker();
+                let mut w = self.for_worker()?;
                 let status = status.clone();
                 let queues: Vec<_> = queues.into_iter().map(|s| s.as_ref().to_string()).collect();
-                thread::spawn(move || {
+                Ok(thread::spawn(move || {
                     while status.load(atomic::Ordering::SeqCst) == STATUS_RUNNING {
                         if let Err(e) = w.run_one(worker, &queues[..]) {
                             status.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
@@ -459,9 +440,9 @@ where
                     }
                     status.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
                     Ok(())
-                })
+                }))
             })
-            .collect();
+            .collect::<io::Result<Vec<_>>>()?;
 
         // listen for heartbeats
         let mut target = STATUS_RUNNING;
@@ -493,7 +474,7 @@ where
                     continue;
                 }
 
-                match self.c.lock().unwrap().heartbeat() {
+                match self.c.heartbeat() {
                     Ok(hb) => {
                         match hb {
                             HeartbeatStatus::Ok => {}
@@ -542,19 +523,13 @@ where
 
                     // if this fails, we don't want to exit with Err(),
                     // because we *were* still terminated!
-                    self.c
-                        .lock()
-                        .unwrap()
-                        .issue(&f)
-                        .and_then(|r| r.await_ok())
-                        .is_ok();
+                    self.c.issue(&f).and_then(|r| r.await_ok()).is_ok();
 
                     running += 1;
                 }
             }
 
             if running != 0 {
-                self.c.lock().unwrap().end_early().is_ok();
                 return Ok(running);
             }
         }
@@ -581,42 +556,14 @@ where
 
     /// Run this worker until the server tells us to exit or a connection cannot be re-established.
     ///
-    /// The worker will connect to the Faktory server at `url`.
-    ///
     /// This function never returns. When the worker decides to exit, the process is terminated.
-    pub fn run_to_completion<Q, U, C>(mut self, queues: &[Q], connector: C, url: U) -> !
+    pub fn run_to_completion<Q, U>(mut self, queues: &[Q]) -> !
     where
         Q: AsRef<str>,
-        U: AsRef<str>,
-        C: StreamConnector<Stream = S> + Clone,
-    {
-        use std::process;
-        let url = url.as_ref();
-        while self.run(queues).is_err() {
-            if self.reconnect(connector.clone(), url).is_err() {
-                break;
-            }
-        }
-
-        process::exit(0);
-    }
-
-    /// Run this worker until the server tells us to exit or a connection cannot be re-established.
-    ///
-    /// The worker will connect to the Faktory server dictated by the standard environment
-    /// variables. See
-    /// [`ConsumerBuilder::connect_env`](struct.ConsumerBuilder.html#method.connect_env) for
-    /// details.
-    ///
-    /// This function never returns. When the worker decides to exit, the process is terminated.
-    pub fn run_to_completion_env<Q, C>(mut self, queues: &[Q], connector: C) -> !
-    where
-        Q: AsRef<str>,
-        C: StreamConnector<Stream = S> + Clone,
     {
         use std::process;
         while self.run(queues).is_err() {
-            if self.reconnect_env(connector.clone()).is_err() {
+            if self.reconnect().is_err() {
                 break;
             }
         }

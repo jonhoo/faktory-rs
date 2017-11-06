@@ -1,6 +1,6 @@
 [package]
 name = "faktory"
-version = "0.5.0"
+version = "0.6.0"
 
 description = "API bindings for the language-agnostic Faktory work server"
 readme = "README.md"

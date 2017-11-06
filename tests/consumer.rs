@@ -13,7 +13,6 @@ use std::time::Duration;
 #[test]
 fn hello() {
     let mut s = mock::Stream::default();
-    s.hello();
 
     let mut c = ConsumerBuilder::default();
     c.hostname("host".to_string())
@@ -21,7 +20,7 @@ fn hello() {
         .labels(vec!["foo".to_string(), "bar".to_string()]);
     c.register("never_called", |_| -> io::Result<()> { unreachable!() });
     let c = c.connect_env(s.clone()).unwrap();
-    let written = s.pop_bytes_written();
+    let written = s.pop_bytes_written(0);
     assert!(written.starts_with(b"HELLO {"));
     let written: serde_json::Value = serde_json::from_slice(&written[b"HELLO ".len()..]).unwrap();
     let written = written.as_object().unwrap();
@@ -35,24 +34,24 @@ fn hello() {
     assert_eq!(labels, &["foo", "bar"]);
 
     drop(c);
-    let written = s.pop_bytes_written();
+    let written = s.pop_bytes_written(0);
     assert_eq!(written, b"END\r\n");
 }
 
 #[test]
 fn dequeue() {
     let mut s = mock::Stream::default();
-    s.hello();
     let mut c = ConsumerBuilder::default();
     c.register("foobar", |job| -> io::Result<()> {
         assert_eq!(job.args(), &["z"]);
         Ok(())
     });
     let mut c = c.connect_env(s.clone()).unwrap();
-    s.ignore();
+    s.ignore(0);
 
 
     s.push_bytes_to_read(
+        0,
         b"$188\r\n\
         {\
         \"jid\":\"foojid\",\
@@ -65,13 +64,13 @@ fn dequeue() {
         \"retry\":25\
         }\r\n",
     );
-    s.ok(); // for the ACK
+    s.ok(0); // for the ACK
     if let Err(e) = c.run_one(0, &["default"]) {
         println!("{:?}", e);
         unreachable!();
     }
 
-    let written = s.pop_bytes_written();
+    let written = s.pop_bytes_written(0);
     assert_eq!(
         written,
         &b"FETCH default\r\n\
@@ -82,17 +81,17 @@ fn dequeue() {
 #[test]
 fn dequeue_first_empty() {
     let mut s = mock::Stream::default();
-    s.hello();
     let mut c = ConsumerBuilder::default();
     c.register("foobar", |job| -> io::Result<()> {
         assert_eq!(job.args(), &["z"]);
         Ok(())
     });
     let mut c = c.connect_env(s.clone()).unwrap();
-    s.ignore();
+    s.ignore(0);
 
 
     s.push_bytes_to_read(
+        0,
         b"$0\r\n\r\n$188\r\n\
         {\
         \"jid\":\"foojid\",\
@@ -105,7 +104,7 @@ fn dequeue_first_empty() {
         \"retry\":25\
         }\r\n",
     );
-    s.ok(); // for the ACK
+    s.ok(0); // for the ACK
 
     // run once, shouldn't do anything
     match c.run_one(0, &["default"]) {
@@ -124,7 +123,7 @@ fn dequeue_first_empty() {
         }
     }
 
-    let written = s.pop_bytes_written();
+    let written = s.pop_bytes_written(0);
     assert_eq!(
         written,
         &b"\
@@ -137,8 +136,7 @@ fn dequeue_first_empty() {
 
 #[test]
 fn well_behaved() {
-    let mut s = mock::Stream::default();
-    s.hello();
+    let mut s = mock::Stream::new(2); // main plus worker
     let mut c = ConsumerBuilder::default();
     c.wid("wid".to_string());
     c.register("foobar", |_| -> io::Result<()> {
@@ -147,10 +145,11 @@ fn well_behaved() {
         Ok(())
     });
     let mut c = c.connect_env(s.clone()).unwrap();
-    s.ignore();
+    s.ignore(0);
 
     // push a job that'll take a while to run
     s.push_bytes_to_read(
+        1,
         b"$182\r\n\
             {\
             \"jid\":\"jid\",\
@@ -169,38 +168,40 @@ fn well_behaved() {
     // the running thread won't return for a while. the heartbeat thingy is going to eventually
     // send a heartbeat, and we want to respond to that with a "quiet" to make it not accept any
     // more jobs.
-    s.push_bytes_to_read(b"+quiet\r\n");
+    s.push_bytes_to_read(0, b"+quiet\r\n");
 
     // eventually, the job is going to finish and send an ACK
-    s.ok();
+    s.ok(1);
 
     // then, we want to send a terminate to tell the thread to exit
-    s.push_bytes_to_read(b"+terminate\r\n");
+    s.push_bytes_to_read(0, b"+terminate\r\n");
 
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
     assert_eq!(jh.join().unwrap().unwrap(), 0);
 
-    // we should now have seen:
-    //
-    //  - ACK {"jid": "jid"}
-    //  - BEAT {"wid": "wid"}
-    //
-    let written = s.pop_bytes_written();
-
+    // heartbeat should have seen two beats (quiet + terminate)
+    let written = s.pop_bytes_written(0);
     let msgs = "\
-                FETCH default\r\n\
                 BEAT {\"wid\":\"wid\"}\r\n\
-                ACK {\"jid\":\"jid\"}\r\n\
                 BEAT {\"wid\":\"wid\"}\r\n\
                 END\r\n";
-    use std;
     assert_eq!(std::str::from_utf8(&written[..]).unwrap(), msgs);
+
+    // worker should have fetched once, and acked once
+    let written = s.pop_bytes_written(1);
+    let msgs = "\r\n\
+                FETCH default\r\n\
+                ACK {\"jid\":\"jid\"}\r\n\
+                END\r\n";
+    assert_eq!(
+        std::str::from_utf8(&written[(written.len() - msgs.len())..]).unwrap(),
+        msgs
+    );
 }
 
 #[test]
 fn no_first_job() {
-    let mut s = mock::Stream::default();
-    s.hello();
+    let mut s = mock::Stream::new(2);
     let mut c = ConsumerBuilder::default();
     c.wid("wid".to_string());
     c.register("foobar", |_| -> io::Result<()> {
@@ -209,10 +210,11 @@ fn no_first_job() {
         Ok(())
     });
     let mut c = c.connect_env(s.clone()).unwrap();
-    s.ignore();
+    s.ignore(0);
 
     // push a job that'll take a while to run
     s.push_bytes_to_read(
+        1,
         b"$0\r\n\r\n$182\r\n\
             {\
             \"jid\":\"jid\",\
@@ -231,39 +233,41 @@ fn no_first_job() {
     // the running thread won't return for a while. the heartbeat thingy is going to eventually
     // send a heartbeat, and we want to respond to that with a "quiet" to make it not accept any
     // more jobs.
-    s.push_bytes_to_read(b"+quiet\r\n");
+    s.push_bytes_to_read(0, b"+quiet\r\n");
 
     // eventually, the job is going to finish and send an ACK
-    s.ok();
+    s.ok(1);
 
     // then, we want to send a terminate to tell the thread to exit
-    s.push_bytes_to_read(b"+terminate\r\n");
+    s.push_bytes_to_read(0, b"+terminate\r\n");
 
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
     assert_eq!(jh.join().unwrap().unwrap(), 0);
 
-    // we should now have seen:
-    //
-    //  - ACK {"jid": "jid"}
-    //  - BEAT {"wid": "wid"}
-    //
-    let written = s.pop_bytes_written();
-
+    // heartbeat should have seen two beats (quiet + terminate)
+    let written = s.pop_bytes_written(0);
     let msgs = "\
-                FETCH default\r\n\
-                FETCH default\r\n\
                 BEAT {\"wid\":\"wid\"}\r\n\
-                ACK {\"jid\":\"jid\"}\r\n\
                 BEAT {\"wid\":\"wid\"}\r\n\
                 END\r\n";
-    use std;
     assert_eq!(std::str::from_utf8(&written[..]).unwrap(), msgs);
+
+    // worker should have fetched twice, and acked once
+    let written = s.pop_bytes_written(1);
+    let msgs = "\r\n\
+                FETCH default\r\n\
+                FETCH default\r\n\
+                ACK {\"jid\":\"jid\"}\r\n\
+                END\r\n";
+    assert_eq!(
+        std::str::from_utf8(&written[(written.len() - msgs.len())..]).unwrap(),
+        msgs
+    );
 }
 
 #[test]
 fn well_behaved_many() {
-    let mut s = mock::Stream::default();
-    s.hello();
+    let mut s = mock::Stream::new(3);
     let mut c = ConsumerBuilder::default();
     c.workers(2);
     c.wid("wid".to_string());
@@ -273,16 +277,17 @@ fn well_behaved_many() {
         Ok(())
     });
     let mut c = c.connect_env(s.clone()).unwrap();
-    s.ignore();
+    s.ignore(0);
 
     // push two jobs that'll take a while to run
     // they should run in parallel (if they don't, we'd only see one ACK)
-    for _ in 0..2 {
+    for i in 0..2 {
         // we don't use different jids because we don't want to have to fiddle with them being
         // ACKed in non-deterministic order. this has the unfortunate side-effect that
         // *technically* the implementation could have a bug where it acks the same job twice, and
         // we wouldn't detect it...
         s.push_bytes_to_read(
+            i + 1,
             b"$182\r\n\
             {\
             \"jid\":\"jid\",\
@@ -302,35 +307,43 @@ fn well_behaved_many() {
     // the running thread won't return for a while. the heartbeat thingy is going to eventually
     // send a heartbeat, and we want to respond to that with a "quiet" to make it not accept any
     // more jobs.
-    s.push_bytes_to_read(b"+quiet\r\n");
+    s.push_bytes_to_read(0, b"+quiet\r\n");
 
     // eventually, the jobs are going to finish and send an ACK
-    s.ok();
-    s.ok();
+    s.ok(1);
+    s.ok(2);
 
     // then, we want to send a terminate to tell the thread to exit
-    s.push_bytes_to_read(b"+terminate\r\n");
+    s.push_bytes_to_read(0, b"+terminate\r\n");
 
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
     assert_eq!(jh.join().unwrap().unwrap(), 0);
 
-    let written = s.pop_bytes_written();
+    // heartbeat should have seen two beats (quiet + terminate)
+    let written = s.pop_bytes_written(0);
     let msgs = "\
-                FETCH default\r\n\
-                FETCH default\r\n\
                 BEAT {\"wid\":\"wid\"}\r\n\
-                ACK {\"jid\":\"jid\"}\r\n\
-                ACK {\"jid\":\"jid\"}\r\n\
                 BEAT {\"wid\":\"wid\"}\r\n\
                 END\r\n";
-    use std;
     assert_eq!(std::str::from_utf8(&written[..]).unwrap(), msgs);
+
+    // each worker should have fetched once, and acked once
+    for i in 0..2 {
+        let written = s.pop_bytes_written(i + 1);
+        let msgs = "\r\n\
+                    FETCH default\r\n\
+                    ACK {\"jid\":\"jid\"}\r\n\
+                    END\r\n";
+        assert_eq!(
+            std::str::from_utf8(&written[(written.len() - msgs.len())..]).unwrap(),
+            msgs
+        );
+    }
 }
 
 #[test]
 fn terminate() {
-    let mut s = mock::Stream::default();
-    s.hello();
+    let mut s = mock::Stream::new(2);
     let mut c = ConsumerBuilder::default();
     c.wid("wid".to_string());
     c.register("foobar", |_| -> io::Result<()> {
@@ -339,9 +352,10 @@ fn terminate() {
         }
     });
     let mut c = c.connect_env(s.clone()).unwrap();
-    s.ignore();
+    s.ignore(0);
 
     s.push_bytes_to_read(
+        1,
         b"$186\r\n\
         {\
         \"jid\":\"forever\",\
@@ -359,29 +373,38 @@ fn terminate() {
 
     // the running thread won't ever return, because the job never exits. the heartbeat thingy is
     // going to eventually send a heartbeat, and we want to respond to that with a "terminate"
-    s.push_bytes_to_read(b"+terminate\r\n");
+    s.push_bytes_to_read(0, b"+terminate\r\n");
 
     // at this point, c.run() should immediately return with Ok(1) indicating that one job is still
     // running.
     assert_eq!(jh.join().unwrap().unwrap(), 1);
 
-    // we should now have seen:
-    //
-    //  - BEAT {"wid": "wid"}
-    //  - FAIL {"jid": "jid", ...}
-    //
-    let written = s.pop_bytes_written();
-
-    let beat = b"FETCH default\r\nBEAT {\"wid\":\"wid\"}\r\nFAIL ";
+    // heartbeat should have seen one beat (terminate) and then send FAIL
+    let written = s.pop_bytes_written(0);
+    let beat = b"BEAT {\"wid\":\"wid\"}\r\nFAIL ";
     assert_eq!(&written[0..beat.len()], &beat[..]);
     assert!(written.ends_with(b"\r\nEND\r\n"));
-    let written: serde_json::Value =
-        serde_json::from_slice(&written[beat.len()..(written.len() - b"END\r\n".len())]).unwrap();
+    println!(
+        "{}",
+        std::str::from_utf8(&written[beat.len()..(written.len() - b"\r\nEND\r\n".len())]).unwrap()
+    );
+    let written: serde_json::Value = serde_json::from_slice(
+        &written[beat.len()..(written.len() - b"\r\nEND\r\n".len())],
+    ).unwrap();
     assert_eq!(
         written
             .as_object()
             .and_then(|o| o.get("jid"))
             .and_then(|v| v.as_str()),
         Some("forever")
+    );
+
+    // worker should have just fetched once
+    let written = s.pop_bytes_written(1);
+    let msgs = "\r\n\
+                FETCH default\r\n";
+    assert_eq!(
+        std::str::from_utf8(&written[(written.len() - msgs.len())..]).unwrap(),
+        msgs
     );
 }

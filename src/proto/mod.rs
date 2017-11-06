@@ -6,7 +6,7 @@ use std::io;
 use serde;
 use std::net::TcpStream;
 use url::Url;
-use native_tls::{TlsConnector, TlsConnectorBuilder, TlsStream};
+use native_tls::{TlsConnector, TlsStream};
 
 mod single;
 
@@ -46,12 +46,26 @@ impl Default for ClientOptions {
     }
 }
 
-pub(crate) struct Client<S: Read + Write> {
-    stream: BufStream<S>,
+pub(crate) struct Client<C: StreamConnector> {
+    stream: BufStream<C::Stream>,
+    connector: (C, String),
     opts: ClientOptions,
 }
 
-impl<S: Read + Write> Client<S> {
+impl<C> Client<C>
+where
+    C: StreamConnector + Clone,
+{
+    pub(crate) fn connect_again(&self) -> io::Result<Self> {
+        Client::connect(
+            self.connector.0.clone(),
+            self.opts.clone(),
+            &self.connector.1,
+        )
+    }
+}
+
+impl<C: StreamConnector> Client<C> {
     fn init(&mut self, pwd: Option<&str>) -> io::Result<()> {
         let hi = single::read_hi(&mut self.stream)?;
 
@@ -91,16 +105,9 @@ impl<S: Read + Write> Client<S> {
         }
         single::write_command_and_await_ok(&mut self.stream, hello)
     }
-
-    fn new(stream: S, opts: ClientOptions) -> Client<S> {
-        Client {
-            stream: BufStream::new(stream),
-            opts: opts,
-        }
-    }
 }
 
-impl<S: Read + Write> Drop for Client<S> {
+impl<C: StreamConnector> Drop for Client<C> {
     fn drop(&mut self) {
         single::write_command(&mut self.stream, single::End).unwrap();
     }
@@ -134,19 +141,19 @@ pub trait StreamConnector {
     type Stream: Sized + Read + Write + 'static;
 
     /// Establish a new stream using the given `addr`.
-    fn connect(self, addr: Self::Addr) -> io::Result<Self::Stream>;
+    fn connect(&self, addr: Self::Addr) -> io::Result<Self::Stream>;
 }
 
 /// A regular TCP stream.
 ///
 /// Will connect to the hostname:port pair given in the URL.
-#[derive(Default)]
+#[derive(Default, Clone, Debug)]
 pub struct TcpEstablisher;
 
 impl StreamConnector for TcpEstablisher {
     type Addr = String;
     type Stream = TcpStream;
-    fn connect(self, addr: Self::Addr) -> io::Result<Self::Stream> {
+    fn connect(&self, addr: Self::Addr) -> io::Result<Self::Stream> {
         TcpStream::connect(&addr)
     }
 }
@@ -164,29 +171,30 @@ impl StreamConnector for TcpEstablisher {
 /// # extern crate faktory;
 /// # fn main() {
 /// # use faktory::{TlsEstablisher, TcpEstablisher};
-/// # let tls = native_tls::TlsConnector::builder().unwrap();
+/// let tls = native_tls::TlsConnector::builder().unwrap().build().unwrap();
 /// TlsEstablisher::<TcpEstablisher>::from(tls);
 /// # }
 /// ```
+#[derive(Clone)]
 pub struct TlsEstablisher<B = TcpEstablisher>
 where
     B: StreamConnector,
 {
-    builder: TlsConnectorBuilder,
+    builder: TlsConnector,
     base: B,
 }
 
 impl<B: Default + StreamConnector> Default for TlsEstablisher<B> {
     fn default() -> Self {
         TlsEstablisher {
-            builder: TlsConnector::builder().unwrap(),
+            builder: TlsConnector::builder().unwrap().build().unwrap(),
             base: B::default(),
         }
     }
 }
 
-impl<B: Default + StreamConnector> From<TlsConnectorBuilder> for TlsEstablisher<B> {
-    fn from(o: TlsConnectorBuilder) -> Self {
+impl<B: Default + StreamConnector> From<TlsConnector> for TlsEstablisher<B> {
+    fn from(o: TlsConnector) -> Self {
         TlsEstablisher {
             builder: o,
             base: B::default(),
@@ -202,17 +210,16 @@ where
 {
     type Addr = Url;
     type Stream = TlsStream<B::Stream>;
-    fn connect(self, url: Self::Addr) -> io::Result<Self::Stream> {
-        let TlsEstablisher { builder, base } = self;
+    fn connect(&self, url: Self::Addr) -> io::Result<Self::Stream> {
+        let &TlsEstablisher {
+            ref builder,
+            ref base,
+        } = self;
         let stream = base.connect(B::Addr::from_url(&url))?;
 
         builder
-            .build()
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
-            .and_then(|b| {
-                b.connect(url.host_str().unwrap(), stream)
-                    .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e))
-            })
+            .connect(url.host_str().unwrap(), stream)
+            .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e))
     }
 }
 
@@ -241,49 +248,36 @@ fn url_parse(url: &str) -> io::Result<Url> {
     Ok(url)
 }
 
-fn stream_from_url<C: StreamConnector>(connector: C, url: &Url) -> io::Result<C::Stream> {
+fn stream_from_url<C: StreamConnector>(connector: &C, url: &Url) -> io::Result<C::Stream> {
     let addr = FromUrl::from_url(url);
     connector.connect(addr)
 }
 
-impl<S: Read + Write + Sized + 'static> Client<S> {
-    pub(crate) fn connect<C: StreamConnector<Stream = S>>(
-        connector: C,
-        opts: ClientOptions,
-        url: &str,
-    ) -> io::Result<Client<S>> {
+impl<C: StreamConnector> Client<C> {
+    pub(crate) fn connect(connector: C, opts: ClientOptions, url: &str) -> io::Result<Client<C>> {
         let url = url_parse(url)?;
-        let stream = stream_from_url(connector, &url)?;
-        let mut c = Client::new(stream, opts);
+        let stream = stream_from_url(&connector, &url)?;
+        let mut c = Client {
+            stream: BufStream::new(stream),
+            connector: (connector, url.to_string()),
+            opts,
+        };
         c.init(url.password())?;
         Ok(c)
     }
 
-    pub(crate) fn connect_env<C: StreamConnector<Stream = S>>(
-        connector: C,
-        opts: ClientOptions,
-    ) -> io::Result<Client<S>> {
+    pub(crate) fn connect_env(connector: C, opts: ClientOptions) -> io::Result<Client<C>> {
         Self::connect(connector, opts, &get_env_url())
     }
 
-    pub fn reconnect_env<C>(&mut self, connector: C) -> io::Result<()>
-    where
-        C: StreamConnector<Stream = S>,
-    {
-        self.reconnect(connector, &get_env_url())
-    }
-
-    pub fn reconnect<C>(&mut self, connector: C, url: &str) -> io::Result<()>
-    where
-        C: StreamConnector<Stream = S>,
-    {
-        let url = url_parse(url)?;
-        self.stream = BufStream::new(stream_from_url(connector, &url)?);
+    pub fn reconnect(&mut self) -> io::Result<()> {
+        let url = url_parse(&self.connector.1)?;
+        self.stream = BufStream::new(stream_from_url(&self.connector.0, &url)?);
         self.init(url.password())
     }
 }
 
-pub struct ReadToken<'a, S: Read + Write + 'a>(&'a mut Client<S>);
+pub struct ReadToken<'a, C: StreamConnector + 'a>(&'a mut Client<C>);
 
 pub(crate) enum HeartbeatStatus {
     Ok,
@@ -291,16 +285,11 @@ pub(crate) enum HeartbeatStatus {
     Quiet,
 }
 
-impl<S: Read + Write> Client<S> {
-    pub(crate) fn end_early(&mut self) -> io::Result<()> {
-        // TODO: also shutdown socket
-        single::write_command(&mut self.stream, single::End)
-    }
-
-    pub(crate) fn issue<C: self::single::FaktoryCommand>(
+impl<C: StreamConnector> Client<C> {
+    pub(crate) fn issue<FC: self::single::FaktoryCommand>(
         &mut self,
-        c: C,
-    ) -> io::Result<ReadToken<S>> {
+        c: FC,
+    ) -> io::Result<ReadToken<C>> {
         single::write_command(&mut self.stream, c)?;
         Ok(ReadToken(self))
     }
@@ -331,7 +320,7 @@ impl<S: Read + Write> Client<S> {
     }
 }
 
-impl<'a, S: Read + Write> ReadToken<'a, S> {
+impl<'a, C: StreamConnector> ReadToken<'a, C> {
     pub(crate) fn await_ok(self) -> io::Result<()> {
         single::read_ok(&mut self.0.stream)
     }

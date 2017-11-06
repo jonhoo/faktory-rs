@@ -1,4 +1,3 @@
-use std::io::prelude::*;
 use std::io;
 use proto::{Client, ClientOptions, Info, Job, Push, StreamConnector};
 use serde_json;
@@ -82,25 +81,24 @@ use serde_json;
 /// let mut tls = TlsConnector::builder().unwrap();
 /// tls.add_root_certificate(Certificate::from_der(CA_CERT).unwrap()).unwrap();
 /// let p = Producer::connect(
-///     TlsEstablisher::<TcpEstablisher>::from(tls),
+///     TlsEstablisher::<TcpEstablisher>::from(tls.build().unwrap()),
 ///     "tcp://:hunter2@example.com:42"
 /// ).unwrap();
 /// # }
 /// ```
 ///
 // TODO: provide way of inspecting status of job.
-pub struct Producer<S: Read + Write + 'static> {
-    c: Client<S>,
+pub struct Producer<C: StreamConnector> {
+    c: Client<C>,
 }
 
-impl<S: Read + Write + 'static> Producer<S> {
+impl<C: StreamConnector> Producer<C> {
     /// Connect to a Faktory server at the given URL.
     ///
     /// Port defaults to 7419 if not given.
-    pub fn connect<U, C>(connector: C, url: U) -> io::Result<Producer<S>>
+    pub fn connect<U>(connector: C, url: U) -> io::Result<Producer<C>>
     where
         U: AsRef<str>,
-        C: StreamConnector<Stream = S>,
     {
         Ok(Producer {
             c: Client::connect(connector, ClientOptions::default(), url.as_ref())?,
@@ -117,10 +115,7 @@ impl<S: Read + Write + 'static> Producer<S> {
     /// ```text
     /// tcp://localhost:7419
     /// ```
-    pub fn connect_env<C>(connector: C) -> io::Result<Producer<S>>
-    where
-        C: StreamConnector<Stream = S>,
-    {
+    pub fn connect_env(connector: C) -> io::Result<Producer<C>> {
         Ok(Producer {
             c: Client::connect_env(connector, ClientOptions::default())?,
         })
