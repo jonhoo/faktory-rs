@@ -181,12 +181,16 @@ impl Hello {
         }
     }
 
-    pub fn set_password(&mut self, salt: &str, password: &str) {
+    pub fn set_password(&mut self, hi: &super::resp::Hi, password: &str) {
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::default();
         hasher.input(password.as_bytes());
-        hasher.input(salt.as_bytes());
-        self.password_hash = Some(format!("{:x}", hasher.result()));
+        hasher.input(hi.salt.as_ref().unwrap().as_bytes());
+        let mut hash = hasher.result();
+        for _ in 1..hi.iterations.unwrap_or(1) {
+            hash = Sha256::digest(&hash[..]);
+        }
+        self.password_hash = Some(format!("{:x}", hash));
     }
 }
 

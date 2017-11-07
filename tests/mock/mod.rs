@@ -59,16 +59,17 @@ impl io::Write for Stream {
 }
 
 impl Stream {
-    fn make(salt: Option<&[u8]>, streams: usize) -> Self {
+    fn make(salt: Option<(usize, &str)>, streams: usize) -> Self {
         let streams = (0..streams)
             .map(|_| {
                 let mut s = SyncMockStream::new();
                 // need to say HELLO
-                if let Some(salt) = salt {
+                if let Some((iters, salt)) = salt {
                     // include salt for pwdhash
-                    s.push_bytes_to_read(b"+HI {\"v\":2,\"i\":1,\"s\":\"");
-                    s.push_bytes_to_read(salt);
-                    s.push_bytes_to_read(b"\"}\r\n");
+                    s.push_bytes_to_read(
+                        format!("+HI {{\"v\":2,\"i\":{},\"s\":\"{}\"}}\r\n", iters, salt)
+                            .as_bytes(),
+                    )
                 } else {
                     s.push_bytes_to_read(b"+HI {\"v\":2,\"i\":1}\r\n");
                 }
@@ -93,8 +94,8 @@ impl Stream {
         Self::make(None, streams)
     }
 
-    pub fn with_salt(salt: &[u8]) -> Self {
-        Self::make(Some(salt), 1)
+    pub fn with_salt(iters: usize, salt: &str) -> Self {
+        Self::make(Some((iters, salt)), 1)
     }
 
     pub fn ok(&mut self, stream: usize) {

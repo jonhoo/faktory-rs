@@ -164,9 +164,9 @@ impl<S: Read + Write> Client<S> {
             &self.opts.labels[..],
         );
 
-        if let Some(salt) = hi.salt {
+        if hi.salt.is_some() {
             if let Some(ref pwd) = self.opts.password {
-                hello.set_password(&salt, pwd);
+                hello.set_password(&hi, pwd);
             } else {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,

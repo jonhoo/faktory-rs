@@ -41,7 +41,7 @@ fn hello() {
 
 #[test]
 fn hello_pwd() {
-    let mut s = mock::Stream::with_salt(b"55104dc76695721d");
+    let mut s = mock::Stream::with_salt(1545, "365a858149c6e2d1");
 
     let mut c = ConsumerBuilder::default();
     c.register("never_called", |_| -> io::Result<()> { unreachable!() });
@@ -52,7 +52,7 @@ fn hello_pwd() {
     let written = written.as_object().unwrap();
     assert_eq!(
         written.get("pwdhash").and_then(|h| h.as_str()),
-        Some("bab39931c5bdb880e65f0fd9665787bf3acd57bb9c0b428766ae6f8062c89b4e")
+        Some("dfad6c5f3a0daa4faea5788d1a913240b74fe9200f32bc48663aad4707a87056")
     );
 
     drop(c);
