@@ -30,6 +30,7 @@ fn hello() {
     );
     assert_eq!(written.get("wid").and_then(|h| h.as_str()), Some("wid"));
     assert_eq!(written.get("pid").map(|h| h.is_number()), Some(true));
+    assert_eq!(written.get("v").and_then(|h| h.as_i64()), Some(2));
     let labels = written["labels"].as_array().unwrap();
     assert_eq!(labels, &["foo", "bar"]);
 

@@ -19,6 +19,7 @@ fn hello() {
     assert_eq!(written.get("hostname").map(|h| h.is_string()), Some(true));
     assert_eq!(written.get("wid").map(|h| h.is_string()), Some(true));
     assert_eq!(written.get("pid").map(|h| h.is_number()), Some(true));
+    assert_eq!(written.get("v").and_then(|h| h.as_i64()), Some(2));
     let labels = written["labels"].as_array().unwrap();
     assert_eq!(labels, &["rust"]);
 

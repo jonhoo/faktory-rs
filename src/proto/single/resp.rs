@@ -55,8 +55,8 @@ pub fn read_json<R: BufRead, T: serde::de::DeserializeOwned>(
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Hi {
-    #[serde(rename = "v")] pub version: String,
-
+    #[serde(rename = "v")] pub version: usize,
+    #[serde(rename = "i")] pub iterations: usize,
     #[serde(rename = "s")] pub salt: Option<String>,
 }
 
