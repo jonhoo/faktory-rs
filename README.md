@@ -34,22 +34,22 @@ more details on how to use them.
 If you want to **submit** jobs to Faktory, use `Producer`.
 
 ```rust
-use faktory::{Producer, Job, TcpEstablisher};
-let mut p = Producer::connect_env(TcpEstablisher).unwrap();
+use faktory::{Producer, Job};
+let mut p = Producer::connect(None).unwrap();
 p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
 ```
 
 If you want to **accept** jobs from Faktory, use `Consumer`.
 
 ```rust
-use faktory::{ConsumerBuilder, TcpEstablisher};
+use faktory::ConsumerBuilder;
 use std::io;
 let mut c = ConsumerBuilder::default();
 c.register("foobar", |job| -> io::Result<()> {
     println!("{:?}", job);
     Ok(())
 });
-let mut c = c.connect_env(TcpEstablisher).unwrap();
+let mut c = c.connect(None).unwrap();
 if let Err(e) = c.run(&["default"]) {
     println!("worker failed: {}", e);
 }
