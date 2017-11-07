@@ -29,6 +29,12 @@ and for executing jobs (workers that *consume* jobs). The former can be done by 
 `Producer`, whereas the latter is done with a `Consumer`. See the documentation for each for
 more details on how to use them.
 
+## Encrypted connections (TLS)
+
+To connect to a Faktory server hosted over TLS, add the `tls` feature, and see the
+documentation for `TlsStream`, which can be supplied to `Producer::connect_with` and
+`Consumer::connect_with`.
+
 ## Examples
 
 If you want to **submit** jobs to Faktory, use `Producer`.

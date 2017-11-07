@@ -23,6 +23,12 @@
 //! `Producer`, whereas the latter is done with a `Consumer`. See the documentation for each for
 //! more details on how to use them.
 //!
+//! # Encrypted connections (TLS)
+//!
+//! To connect to a Faktory server hosted over TLS, add the `tls` feature, and see the
+//! documentation for `TlsStream`, which can be supplied to `Producer::connect_with` and
+//! `Consumer::connect_with`.
+//!
 //! # Examples
 //!
 //! If you want to **submit** jobs to Faktory, use `Producer`.
@@ -67,6 +73,13 @@ extern crate url;
 mod producer;
 mod consumer;
 mod proto;
+
+#[cfg(feature = "tls")]
+extern crate native_tls;
+#[cfg(feature = "tls")]
+mod tls;
+#[cfg(feature = "tls")]
+pub use tls::TlsStream;
 
 pub use consumer::{Consumer, ConsumerBuilder};
 pub use producer::Producer;
