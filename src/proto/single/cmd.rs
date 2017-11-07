@@ -156,6 +156,8 @@ pub struct Hello {
     pid: usize,
     labels: Vec<String>,
 
+    #[serde(rename = "v")] version: usize,
+
     /// Hash is hex(sha256(password + salt))
     #[serde(rename = "pwdhash")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -175,6 +177,7 @@ impl Hello {
             pid,
             labels: labels.iter().map(|s| s.to_string()).collect(),
             password_hash: None,
+            version: ::proto::EXPECTED_PROTOCOL_VERSION,
         }
     }
 

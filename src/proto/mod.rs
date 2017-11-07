@@ -7,6 +7,8 @@ use serde;
 use std::net::TcpStream;
 use url::Url;
 
+pub(crate) const EXPECTED_PROTOCOL_VERSION: usize = 2;
+
 mod single;
 
 // commands that users can issue
@@ -126,6 +128,17 @@ impl<S: Read + Write> Client<S> {
 impl<S: Read + Write> Client<S> {
     fn init(&mut self) -> io::Result<()> {
         let hi = single::read_hi(&mut self.stream)?;
+
+        if hi.version != EXPECTED_PROTOCOL_VERSION {
+            return Err(io::Error::new(
+                io::ErrorKind::ConnectionAborted,
+                format!(
+                    "server runs protocol version {}, expected {}",
+                    hi.version,
+                    EXPECTED_PROTOCOL_VERSION
+                ),
+            ));
+        }
 
         // fill in any missing options, and remember them for re-connect
         let hostname = self.opts

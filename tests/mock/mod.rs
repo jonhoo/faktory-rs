@@ -66,11 +66,11 @@ impl Stream {
                 // need to say HELLO
                 if let Some(salt) = salt {
                     // include salt for pwdhash
-                    s.push_bytes_to_read(b"+HI {\"v\":\"1\",\"s\":\"");
+                    s.push_bytes_to_read(b"+HI {\"v\":2,\"i\":1,\"s\":\"");
                     s.push_bytes_to_read(salt);
                     s.push_bytes_to_read(b"\"}\r\n");
                 } else {
-                    s.push_bytes_to_read(b"+HI {\"v\":\"1\"}\r\n");
+                    s.push_bytes_to_read(b"+HI {\"v\":2,\"i\":1}\r\n");
                 }
                 s.push_bytes_to_read(b"+OK\r\n");
                 s
