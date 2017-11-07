@@ -6,7 +6,6 @@ use std::io;
 use serde;
 use std::net::TcpStream;
 use url::Url;
-use native_tls::{TlsConnector, TlsStream};
 
 mod single;
 
@@ -15,6 +14,47 @@ pub use self::single::{Ack, Fail, Heartbeat, Info, Job, Push};
 
 // responses that users can see
 pub use self::single::Hi;
+
+pub(crate) fn get_env_url() -> String {
+    use std::env;
+    let var = env::var("FAKTORY_PROVIDER").unwrap_or_else(|_| "FAKTORY_URL".to_string());
+    env::var(var).unwrap_or_else(|_| "tcp://localhost:7419".to_string())
+}
+
+pub(crate) fn host_from_url(url: &Url) -> String {
+    format!("{}:{}", url.host_str().unwrap(), url.port().unwrap_or(7419))
+}
+
+pub(crate) fn url_parse(url: &str) -> io::Result<Url> {
+    let url = Url::parse(url).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    if url.scheme() != "tcp" {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("unknown scheme '{}'", url.scheme()),
+        ));
+    }
+
+    if url.host_str().is_none() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "no hostname given",
+        ));
+    }
+
+    Ok(url)
+}
+
+/// A stream that can be re-established after failing.
+pub trait Reconnect: Sized {
+    /// Re-establish the stream.
+    fn reconnect(&self) -> io::Result<Self>;
+}
+
+impl Reconnect for TcpStream {
+    fn reconnect(&self) -> io::Result<Self> {
+        TcpStream::connect(self.peer_addr().unwrap())
+    }
+}
 
 #[derive(Clone)]
 pub(crate) struct ClientOptions {
@@ -33,6 +73,10 @@ pub(crate) struct ClientOptions {
     /// Labels to advertise to server.
     /// Defaults to ["rust"].
     pub(crate) labels: Vec<String>,
+
+    /// Password to authenticate with
+    /// Defaults to None,
+    pub(crate) password: Option<String>,
 }
 
 impl Default for ClientOptions {
@@ -42,31 +86,45 @@ impl Default for ClientOptions {
             pid: None,
             wid: None,
             labels: vec!["rust".to_string()],
+            password: None,
         }
     }
 }
 
-pub(crate) struct Client<C: StreamConnector> {
-    stream: BufStream<C::Stream>,
-    connector: (C, String),
+pub(crate) struct Client<S: Read + Write> {
+    stream: BufStream<S>,
     opts: ClientOptions,
 }
 
-impl<C> Client<C>
+impl<S> Client<S>
 where
-    C: StreamConnector + Clone,
+    S: Read + Write + Reconnect,
 {
     pub(crate) fn connect_again(&self) -> io::Result<Self> {
-        Client::connect(
-            self.connector.0.clone(),
-            self.opts.clone(),
-            &self.connector.1,
-        )
+        let s = self.stream.get_ref().reconnect()?;
+        Client::new(s, self.opts.clone())
+    }
+
+    pub fn reconnect(&mut self) -> io::Result<()> {
+        let s = self.stream.get_ref().reconnect()?;
+        self.stream = BufStream::new(s);
+        self.init()
     }
 }
 
-impl<C: StreamConnector> Client<C> {
-    fn init(&mut self, pwd: Option<&str>) -> io::Result<()> {
+impl<S: Read + Write> Client<S> {
+    pub(crate) fn new(stream: S, opts: ClientOptions) -> io::Result<Client<S>> {
+        let mut c = Client {
+            stream: BufStream::new(stream),
+            opts,
+        };
+        c.init()?;
+        Ok(c)
+    }
+}
+
+impl<S: Read + Write> Client<S> {
+    fn init(&mut self) -> io::Result<()> {
         let hi = single::read_hi(&mut self.stream)?;
 
         // fill in any missing options, and remember them for re-connect
@@ -94,8 +152,8 @@ impl<C: StreamConnector> Client<C> {
         );
 
         if let Some(salt) = hi.salt {
-            if let Some(pwd) = pwd {
-                hello.set_password(&salt, &pwd);
+            if let Some(ref pwd) = self.opts.password {
+                hello.set_password(&salt, pwd);
             } else {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
@@ -107,177 +165,13 @@ impl<C: StreamConnector> Client<C> {
     }
 }
 
-impl<C: StreamConnector> Drop for Client<C> {
+impl<S: Read + Write> Drop for Client<S> {
     fn drop(&mut self) {
         single::write_command(&mut self.stream, single::End).unwrap();
     }
 }
 
-/// A type that can be constructed from a `Url` connection string.
-pub trait FromUrl {
-    /// Construct a new `Self` from the given url.
-    fn from_url(url: &Url) -> Self;
-}
-
-impl FromUrl for Url {
-    fn from_url(url: &Url) -> Self {
-        // ugh
-        url.clone()
-    }
-}
-
-impl FromUrl for String {
-    fn from_url(url: &Url) -> Self {
-        format!("{}:{}", url.host_str().unwrap(), url.port().unwrap_or(7419))
-    }
-}
-
-/// A stream that can be established using a `Url`.
-pub trait StreamConnector {
-    /// The address used to connect this kind of stream.
-    type Addr: FromUrl;
-
-    /// The stream produced by this connector.
-    type Stream: Sized + Read + Write + 'static;
-
-    /// Establish a new stream using the given `addr`.
-    fn connect(&self, addr: Self::Addr) -> io::Result<Self::Stream>;
-}
-
-/// A regular TCP stream.
-///
-/// Will connect to the hostname:port pair given in the URL.
-#[derive(Default, Clone, Debug)]
-pub struct TcpEstablisher;
-
-impl StreamConnector for TcpEstablisher {
-    type Addr = String;
-    type Stream = TcpStream;
-    fn connect(&self, addr: Self::Addr) -> io::Result<Self::Stream> {
-        TcpStream::connect(&addr)
-    }
-}
-
-/// A stream encrypted with TLS.
-///
-/// Will connect using the underlying stream connector `B`, and establish a TLS session on top of
-/// that. You generally want to use [`TcpEstablisher`](struct.TcpEstablisher.html) as `B`. The
-/// remote side must present a certificate that is valid for the hostname used in the URL. To set
-/// custom options, construct a `native_tls::TlsConnectorBuilder`, configure it appropriately, and
-/// then use
-///
-/// ```rust,no_run
-/// # extern crate native_tls;
-/// # extern crate faktory;
-/// # fn main() {
-/// # use faktory::{TlsEstablisher, TcpEstablisher};
-/// let tls = native_tls::TlsConnector::builder().unwrap().build().unwrap();
-/// TlsEstablisher::<TcpEstablisher>::from(tls);
-/// # }
-/// ```
-#[derive(Clone)]
-pub struct TlsEstablisher<B = TcpEstablisher>
-where
-    B: StreamConnector,
-{
-    builder: TlsConnector,
-    base: B,
-}
-
-impl<B: Default + StreamConnector> Default for TlsEstablisher<B> {
-    fn default() -> Self {
-        TlsEstablisher {
-            builder: TlsConnector::builder().unwrap().build().unwrap(),
-            base: B::default(),
-        }
-    }
-}
-
-impl<B: Default + StreamConnector> From<TlsConnector> for TlsEstablisher<B> {
-    fn from(o: TlsConnector) -> Self {
-        TlsEstablisher {
-            builder: o,
-            base: B::default(),
-        }
-    }
-}
-
-use std::fmt::Debug;
-impl<B> StreamConnector for TlsEstablisher<B>
-where
-    B: StreamConnector,
-    B::Stream: Debug + Send + Sync,
-{
-    type Addr = Url;
-    type Stream = TlsStream<B::Stream>;
-    fn connect(&self, url: Self::Addr) -> io::Result<Self::Stream> {
-        let &TlsEstablisher {
-            ref builder,
-            ref base,
-        } = self;
-        let stream = base.connect(B::Addr::from_url(&url))?;
-
-        builder
-            .connect(url.host_str().unwrap(), stream)
-            .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e))
-    }
-}
-
-fn get_env_url() -> String {
-    use std::env;
-    let var = env::var("FAKTORY_PROVIDER").unwrap_or_else(|_| "FAKTORY_URL".to_string());
-    env::var(var).unwrap_or_else(|_| "tcp://localhost:7419".to_string())
-}
-
-fn url_parse(url: &str) -> io::Result<Url> {
-    let url = Url::parse(url).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-    if url.scheme() != "tcp" {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("unknown scheme '{}'", url.scheme()),
-        ));
-    }
-
-    if url.host_str().is_none() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "no hostname given",
-        ));
-    }
-
-    Ok(url)
-}
-
-fn stream_from_url<C: StreamConnector>(connector: &C, url: &Url) -> io::Result<C::Stream> {
-    let addr = FromUrl::from_url(url);
-    connector.connect(addr)
-}
-
-impl<C: StreamConnector> Client<C> {
-    pub(crate) fn connect(connector: C, opts: ClientOptions, url: &str) -> io::Result<Client<C>> {
-        let url = url_parse(url)?;
-        let stream = stream_from_url(&connector, &url)?;
-        let mut c = Client {
-            stream: BufStream::new(stream),
-            connector: (connector, url.to_string()),
-            opts,
-        };
-        c.init(url.password())?;
-        Ok(c)
-    }
-
-    pub(crate) fn connect_env(connector: C, opts: ClientOptions) -> io::Result<Client<C>> {
-        Self::connect(connector, opts, &get_env_url())
-    }
-
-    pub fn reconnect(&mut self) -> io::Result<()> {
-        let url = url_parse(&self.connector.1)?;
-        self.stream = BufStream::new(stream_from_url(&self.connector.0, &url)?);
-        self.init(url.password())
-    }
-}
-
-pub struct ReadToken<'a, C: StreamConnector + 'a>(&'a mut Client<C>);
+pub struct ReadToken<'a, S: Read + Write + 'a>(&'a mut Client<S>);
 
 pub(crate) enum HeartbeatStatus {
     Ok,
@@ -285,11 +179,11 @@ pub(crate) enum HeartbeatStatus {
     Quiet,
 }
 
-impl<C: StreamConnector> Client<C> {
+impl<S: Read + Write> Client<S> {
     pub(crate) fn issue<FC: self::single::FaktoryCommand>(
         &mut self,
         c: FC,
-    ) -> io::Result<ReadToken<C>> {
+    ) -> io::Result<ReadToken<S>> {
         single::write_command(&mut self.stream, c)?;
         Ok(ReadToken(self))
     }
@@ -320,7 +214,7 @@ impl<C: StreamConnector> Client<C> {
     }
 }
 
-impl<'a, C: StreamConnector> ReadToken<'a, C> {
+impl<'a, S: Read + Write> ReadToken<'a, S> {
     pub(crate) fn await_ok(self) -> io::Result<()> {
         single::read_ok(&mut self.0.stream)
     }
@@ -340,6 +234,9 @@ mod tests {
     #[test]
     #[ignore]
     fn it_works() {
-        Client::connect_env(TcpEstablisher::default(), ClientOptions::default()).unwrap();
+        Client::new(
+            TcpStream::connect("localhost:7419").unwrap(),
+            ClientOptions::default(),
+        ).unwrap();
     }
 }

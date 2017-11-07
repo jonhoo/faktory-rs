@@ -28,22 +28,22 @@
 //! If you want to **submit** jobs to Faktory, use `Producer`.
 //!
 //! ```no_run
-//! use faktory::{Producer, Job, TcpEstablisher};
-//! let mut p = Producer::connect_env(TcpEstablisher).unwrap();
+//! use faktory::{Producer, Job};
+//! let mut p = Producer::connect(None).unwrap();
 //! p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
 //! ```
 //!
 //! If you want to **accept** jobs from Faktory, use `Consumer`.
 //!
 //! ```no_run
-//! use faktory::{ConsumerBuilder, TcpEstablisher};
+//! use faktory::ConsumerBuilder;
 //! use std::io;
 //! let mut c = ConsumerBuilder::default();
 //! c.register("foobar", |job| -> io::Result<()> {
 //!     println!("{:?}", job);
 //!     Ok(())
 //! });
-//! let mut c = c.connect_env(TcpEstablisher).unwrap();
+//! let mut c = c.connect(None).unwrap();
 //! if let Err(e) = c.run(&["default"]) {
 //!     println!("worker failed: {}", e);
 //! }
@@ -56,7 +56,6 @@ extern crate chrono;
 extern crate fnv;
 extern crate hostname;
 extern crate libc;
-extern crate native_tls;
 extern crate rand;
 extern crate serde;
 #[macro_use]
@@ -72,4 +71,4 @@ mod proto;
 pub use consumer::{Consumer, ConsumerBuilder};
 pub use producer::Producer;
 pub use proto::Job;
-pub use proto::{FromUrl, StreamConnector, TcpEstablisher, TlsEstablisher};
+pub use proto::Reconnect;

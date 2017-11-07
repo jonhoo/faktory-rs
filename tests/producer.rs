@@ -11,7 +11,7 @@ use faktory::*;
 fn hello() {
     let mut s = mock::Stream::default();
 
-    let p = Producer::connect_env(s.clone()).unwrap();
+    let p = Producer::connect_with(s.clone(), None).unwrap();
     let written = s.pop_bytes_written(0);
     assert!(written.starts_with(b"HELLO {"));
     let written: serde_json::Value = serde_json::from_slice(&written[b"HELLO ".len()..]).unwrap();
@@ -30,7 +30,7 @@ fn hello() {
 #[test]
 fn enqueue() {
     let mut s = mock::Stream::default();
-    let mut p = Producer::connect_env(s.clone()).unwrap();
+    let mut p = Producer::connect_with(s.clone(), None).unwrap();
     s.ignore(0);
 
     s.ok(0);

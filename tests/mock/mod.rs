@@ -1,5 +1,4 @@
-use faktory::StreamConnector;
-use url::Url;
+use faktory::Reconnect;
 use std::io;
 use mockstream::SyncMockStream;
 use std::sync::{Arc, Mutex};
@@ -18,7 +17,10 @@ impl Inner {
 }
 
 #[derive(Clone)]
-pub struct Stream(Arc<Mutex<Inner>>);
+pub struct Stream {
+    mine: Option<SyncMockStream>,
+    all: Arc<Mutex<Inner>>,
+}
 
 impl Default for Stream {
     fn default() -> Self {
@@ -26,39 +28,57 @@ impl Default for Stream {
     }
 }
 
-impl StreamConnector for Stream {
-    type Addr = Url;
-    type Stream = SyncMockStream;
+impl Reconnect for Stream {
+    fn reconnect(&self) -> io::Result<Self> {
+        let mine = self.all
+            .lock()
+            .unwrap()
+            .take_stream()
+            .expect("tried to make a new stream, but no more connections expected");
+        Ok(Stream {
+            mine: Some(mine),
+            all: self.all.clone(),
+        })
+    }
+}
 
-    fn connect(&self, _: Self::Addr) -> io::Result<Self::Stream> {
-        Ok(
-            self.0
-                .lock()
-                .unwrap()
-                .take_stream()
-                .expect("tried to make a new stream, but no more connections expected"),
-        )
+impl io::Read for Stream {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.mine.as_mut().unwrap().read(buf)
+    }
+}
+
+impl io::Write for Stream {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.mine.as_mut().unwrap().write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.mine.as_mut().unwrap().flush()
     }
 }
 
 impl Stream {
     pub fn new(streams: usize) -> Self {
-        let mut s = Stream(Arc::new(Mutex::new(Inner {
-            take_next: 0,
-            streams: vec![],
-        })));
-        s.set_num_streams(streams);
-        s
-    }
+        let streams = (0..streams)
+            .map(|_| {
+                let mut s = SyncMockStream::new();
+                // need to say HELLO
+                s.push_bytes_to_read(b"+HI {\"v\":\"1\"}\r\n");
+                s.push_bytes_to_read(b"+OK\r\n");
+                s
+            })
+            .collect();
 
-    fn set_num_streams(&mut self, n: usize) {
-        let mut x = self.0.lock().unwrap();
-        for _ in x.streams.len()..n {
-            let mut s = SyncMockStream::new();
-            // need to say HELLO
-            s.push_bytes_to_read(b"+HI {\"v\":\"1\"}\r\n");
-            s.push_bytes_to_read(b"+OK\r\n");
-            x.streams.push(s);
+        let mut inner = Inner {
+            take_next: 0,
+            streams: streams,
+        };
+        let mine = inner.take_stream();
+
+        Stream {
+            mine: mine,
+            all: Arc::new(Mutex::new(inner)),
         }
     }
 
@@ -71,17 +91,17 @@ impl Stream {
     }
 
     pub fn push_bytes_to_read(&mut self, stream: usize, bytes: &[u8]) {
-        self.0.lock().unwrap().streams[stream].push_bytes_to_read(bytes);
+        self.all.lock().unwrap().streams[stream].push_bytes_to_read(bytes);
     }
 
     pub fn pop_bytes_written(&mut self, stream: usize) -> Vec<u8> {
-        self.0.lock().unwrap().streams[stream].pop_bytes_written()
+        self.all.lock().unwrap().streams[stream].pop_bytes_written()
     }
 }
 
 impl Drop for Stream {
     fn drop(&mut self) {
-        let x = self.0.lock().unwrap();
+        let x = self.all.lock().unwrap();
         assert_eq!(x.take_next, x.streams.len());
     }
 }

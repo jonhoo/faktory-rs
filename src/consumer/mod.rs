@@ -1,6 +1,8 @@
+use std::io::prelude::*;
 use std::io;
+use std::net::TcpStream;
 use std::error::Error;
-use proto::{Client, ClientOptions, HeartbeatStatus, StreamConnector};
+use proto::{self, Client, ClientOptions, HeartbeatStatus, Reconnect};
 use std::sync::{atomic, Arc};
 use atomic_option::AtomicOption;
 use fnv::FnvHashMap;
@@ -60,14 +62,9 @@ const STATUS_TERMINATING: usize = 2;
 /// # Connecting to Faktory
 ///
 /// To fetch jobs, the `Consumer` must first be connected to the Faktory server. Exactly how you do
-/// that depends on your setup. In particular, you must provide a connection *type*; that is,
-/// something that implements [`StreamConnector`](trait.StreamConnector.html), likely
-/// [`TcpEstablisher`](struct.TcpEstablisher.html) or
-/// [`TlsEstablisher`](struct.TlsEstablisher.html) (for unencrypted and encrypted connections
-/// respectively).
-///
-/// You must then tell the `Consumer` *where* to connect. This is done by supplying a connection
-/// URL of the form:
+/// that depends on your setup. In most cases, you'll want to use `Consumer::connect`, and provide
+/// a connection URL (`None` will use the Faktory environment variables). If you supply a URL, it
+/// must be of the form:
 ///
 /// ```text
 /// protocol://[:password@]hostname[:port]
@@ -101,23 +98,23 @@ const STATUS_TERMINATING: usize = 2;
 /// type), connect to the Faktory server, and start accepting jobs.
 ///
 /// ```no_run
-/// use faktory::{ConsumerBuilder, TcpEstablisher};
+/// use faktory::ConsumerBuilder;
 /// use std::io;
 /// let mut c = ConsumerBuilder::default();
 /// c.register("foobar", |job| -> io::Result<()> {
 ///     println!("{:?}", job);
 ///     Ok(())
 /// });
-/// let mut c = c.connect_env(TcpEstablisher).unwrap();
+/// let mut c = c.connect(None).unwrap();
 /// if let Err(e) = c.run(&["default"]) {
 ///     println!("worker failed: {}", e);
 /// }
 /// ```
-pub struct Consumer<C, F>
+pub struct Consumer<S, F>
 where
-    C: StreamConnector + Clone,
+    S: Read + Write,
 {
-    c: Client<C>,
+    c: Client<S>,
     last_job_results: Arc<Vec<AtomicOption<Result<String, Fail>>>>,
     running_jobs: Arc<Vec<AtomicOption<String>>>,
     callbacks: Arc<FnvHashMap<String, F>>,
@@ -204,37 +201,37 @@ where
         self
     }
 
-    /// Connect to a Faktory server using the standard environment variables.
+    /// Connect to a Faktory server.
     ///
-    /// Will first read `FAKTORY_PROVIDER` to get the name of the environment variable to get the
-    /// address from (defaults to `FAKTORY_URL`), and then read that environment variable to get
-    /// the server address. If the latter environment variable is not defined, the connection will
-    /// be made to
+    /// If `url` is not given, will use the standard Faktory environment variables. Specifically,
+    /// `FAKTORY_PROVIDER` is read to get the name of the environment variable to get the address
+    /// from (defaults to `FAKTORY_URL`), and then that environment variable is read to get the
+    /// server address. If the latter environment variable is not defined, the connection will be
+    /// made to
     ///
     /// ```text
     /// tcp://localhost:7419
     /// ```
-    pub fn connect_env<C: StreamConnector + Clone>(
-        self,
-        connector: C,
-    ) -> io::Result<Consumer<C, F>> {
-        Ok(Consumer::new(
-            Client::connect_env(connector, self.opts)?,
-            self.workers,
-            self.callbacks,
-        ))
+    ///
+    /// If `url` is given, but does not specify a port, it defaults to 7419.
+    pub fn connect(self, url: Option<&str>) -> io::Result<Consumer<TcpStream, F>> {
+        let url = match url {
+            Some(url) => proto::url_parse(url),
+            None => proto::url_parse(&proto::get_env_url()),
+        }?;
+        let stream = TcpStream::connect(proto::host_from_url(&url))?;
+        Self::connect_with(self, stream, url.password().map(|p| p.to_string()))
     }
 
-    /// Connect to a Faktory server at the given URL.
-    ///
-    /// Port defaults to 7419 if not given.
-    pub fn connect<C: StreamConnector + Clone, U: AsRef<str>>(
-        self,
-        connector: C,
-        url: U,
-    ) -> io::Result<Consumer<C, F>> {
+    /// Connect to a Faktory server with a non-standard stream.
+    pub fn connect_with<S: Read + Write>(
+        mut self,
+        stream: S,
+        pwd: Option<String>,
+    ) -> io::Result<Consumer<S, F>> {
+        self.opts.password = pwd;
         Ok(Consumer::new(
-            Client::connect(connector, self.opts, url.as_ref())?,
+            Client::new(stream, self.opts)?,
             self.workers,
             self.callbacks,
         ))
@@ -246,8 +243,8 @@ enum Failed<E: Error> {
     BadJobType(String),
 }
 
-impl<F, C: StreamConnector + Clone> Consumer<C, F> {
-    fn new(c: Client<C>, workers: usize, callbacks: FnvHashMap<String, F>) -> Self {
+impl<F, S: Read + Write> Consumer<S, F> {
+    fn new(c: Client<S>, workers: usize, callbacks: FnvHashMap<String, F>) -> Self {
         Consumer {
             c: c,
             callbacks: Arc::new(callbacks),
@@ -258,15 +255,15 @@ impl<F, C: StreamConnector + Clone> Consumer<C, F> {
     }
 }
 
-impl<F, C: StreamConnector + Clone> Consumer<C, F> {
+impl<F, S: Read + Write + Reconnect> Consumer<S, F> {
     fn reconnect(&mut self) -> io::Result<()> {
         self.c.reconnect()
     }
 }
 
-impl<C, E, F> Consumer<C, F>
+impl<S, E, F> Consumer<S, F>
 where
-    C: StreamConnector + Clone,
+    S: Read + Write,
     E: Error,
     F: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
 {
@@ -353,10 +350,9 @@ where
     }
 }
 
-impl<C, E, F> Consumer<C, F>
+impl<S, E, F> Consumer<S, F>
 where
-    C: StreamConnector + Clone + Send + 'static,
-    C::Stream: 'static + Send,
+    S: Read + Write + Reconnect + Send + 'static,
     E: Error,
     F: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
 {
@@ -575,7 +571,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proto::TcpEstablisher;
 
     #[test]
     #[ignore]
@@ -583,7 +578,7 @@ mod tests {
         use std::io;
         use producer::Producer;
 
-        let mut p = Producer::connect_env(TcpEstablisher).unwrap();
+        let mut p = Producer::connect(None).unwrap();
         let mut j = Job::new("foobar", vec!["z"]);
         j.queue = "worker_test_1".to_string();
         p.enqueue(j).unwrap();
@@ -593,7 +588,7 @@ mod tests {
             assert_eq!(job.args, vec!["z"]);
             Ok(())
         });
-        let mut c = c.connect_env(TcpEstablisher).unwrap();
+        let mut c = c.connect(None).unwrap();
         let e = c.run_n(1, &["worker_test_1"]);
         if e.is_err() {
             println!("{:?}", e);

@@ -19,7 +19,7 @@ fn hello() {
         .wid("wid".to_string())
         .labels(vec!["foo".to_string(), "bar".to_string()]);
     c.register("never_called", |_| -> io::Result<()> { unreachable!() });
-    let c = c.connect_env(s.clone()).unwrap();
+    let c = c.connect_with(s.clone(), None).unwrap();
     let written = s.pop_bytes_written(0);
     assert!(written.starts_with(b"HELLO {"));
     let written: serde_json::Value = serde_json::from_slice(&written[b"HELLO ".len()..]).unwrap();
@@ -46,7 +46,7 @@ fn dequeue() {
         assert_eq!(job.args(), &["z"]);
         Ok(())
     });
-    let mut c = c.connect_env(s.clone()).unwrap();
+    let mut c = c.connect_with(s.clone(), None).unwrap();
     s.ignore(0);
 
 
@@ -86,7 +86,7 @@ fn dequeue_first_empty() {
         assert_eq!(job.args(), &["z"]);
         Ok(())
     });
-    let mut c = c.connect_env(s.clone()).unwrap();
+    let mut c = c.connect_with(s.clone(), None).unwrap();
     s.ignore(0);
 
 
@@ -144,7 +144,7 @@ fn well_behaved() {
         thread::sleep(Duration::from_secs(7));
         Ok(())
     });
-    let mut c = c.connect_env(s.clone()).unwrap();
+    let mut c = c.connect_with(s.clone(), None).unwrap();
     s.ignore(0);
 
     // push a job that'll take a while to run
@@ -209,7 +209,7 @@ fn no_first_job() {
         thread::sleep(Duration::from_secs(7));
         Ok(())
     });
-    let mut c = c.connect_env(s.clone()).unwrap();
+    let mut c = c.connect_with(s.clone(), None).unwrap();
     s.ignore(0);
 
     // push a job that'll take a while to run
@@ -276,7 +276,7 @@ fn well_behaved_many() {
         thread::sleep(Duration::from_secs(7));
         Ok(())
     });
-    let mut c = c.connect_env(s.clone()).unwrap();
+    let mut c = c.connect_with(s.clone(), None).unwrap();
     s.ignore(0);
 
     // push two jobs that'll take a while to run
@@ -351,7 +351,7 @@ fn terminate() {
             thread::sleep(Duration::from_secs(5));
         }
     });
-    let mut c = c.connect_env(s.clone()).unwrap();
+    let mut c = c.connect_with(s.clone(), None).unwrap();
     s.ignore(0);
 
     s.push_bytes_to_read(

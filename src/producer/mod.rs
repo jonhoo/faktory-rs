@@ -1,5 +1,7 @@
+use std::io::prelude::*;
 use std::io;
-use proto::{Client, ClientOptions, Info, Job, Push, StreamConnector};
+use std::net::TcpStream;
+use proto::{self, Client, ClientOptions, Info, Job, Push};
 use serde_json;
 
 /// `Producer` is used to enqueue new jobs that will in turn be processed by Faktory workers.
@@ -7,14 +9,9 @@ use serde_json;
 /// # Connecting to Faktory
 ///
 /// To issue jobs, the `Producer` must first be connected to the Faktory server. Exactly how you do
-/// that depends on your setup. In particular, you must provide a connection *type*; that is,
-/// something that implements [`StreamConnector`](trait.StreamConnector.html), likely
-/// [`TcpEstablisher`](struct.TcpEstablisher.html) or
-/// [`TlsEstablisher`](struct.TlsEstablisher.html) (for unencrypted and encrypted connections
-/// respectively).
-///
-/// You must then tell the `Producer` *where* to connect. This is done by supplying a connection
-/// URL of the form:
+/// that depends on your setup. In most cases, you'll want to use `Producer::connect`, and provide
+/// a connection URL (`None` will use the Faktory environment variables). If you supply a URL, it
+/// must be of the form:
 ///
 /// ```text
 /// protocol://[:password@]hostname[:port]
@@ -49,75 +46,62 @@ use serde_json;
 /// Connecting to an unsecured Faktory server using environment variables
 ///
 /// ```no_run
-/// use faktory::{Producer, TcpEstablisher};
-/// let p = Producer::connect_env(TcpEstablisher).unwrap();
+/// use faktory::Producer;
+/// let p = Producer::connect(None).unwrap();
 /// ```
 ///
-/// Connecting to a secured Faktory server using environment variables and default TLS options
+/// Connecting to a secured Faktory server using an explicit URL
 ///
 /// ```no_run
-/// use faktory::{Producer, TlsEstablisher, TcpEstablisher};
-/// let p = Producer::connect_env(TlsEstablisher::<TcpEstablisher>::default()).unwrap();
+/// use faktory::Producer;
+/// let p = Producer::connect(Some("tcp://:hunter2@localhost:7439")).unwrap();
 /// ```
 ///
 /// Issuing a job using a `Producer`
 ///
 /// ```no_run
-/// # use faktory::{Producer, TcpEstablisher};
-/// # let mut p = Producer::connect_env(TcpEstablisher).unwrap();
+/// # use faktory::Producer;
+/// # let mut p = Producer::connect(None).unwrap();
 /// use faktory::Job;
 /// p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
 /// ```
 ///
-/// Connecting to a secured Faktory server using a URL and custom TLS options
-///
-/// ```no_run
-/// # extern crate native_tls;
-/// # extern crate faktory;
-/// # const CA_CERT: &'static [u8] = &[];
-/// # fn main() {
-/// use native_tls::{TlsConnector, Certificate};
-/// use faktory::{Producer, TlsEstablisher, TcpEstablisher};
-/// let mut tls = TlsConnector::builder().unwrap();
-/// tls.add_root_certificate(Certificate::from_der(CA_CERT).unwrap()).unwrap();
-/// let p = Producer::connect(
-///     TlsEstablisher::<TcpEstablisher>::from(tls.build().unwrap()),
-///     "tcp://:hunter2@example.com:42"
-/// ).unwrap();
-/// # }
-/// ```
-///
 // TODO: provide way of inspecting status of job.
-pub struct Producer<C: StreamConnector> {
-    c: Client<C>,
+pub struct Producer<S: Read + Write> {
+    c: Client<S>,
 }
 
-impl<C: StreamConnector> Producer<C> {
-    /// Connect to a Faktory server at the given URL.
+impl Producer<TcpStream> {
+    /// Connect to a Faktory server.
     ///
-    /// Port defaults to 7419 if not given.
-    pub fn connect<U>(connector: C, url: U) -> io::Result<Producer<C>>
-    where
-        U: AsRef<str>,
-    {
-        Ok(Producer {
-            c: Client::connect(connector, ClientOptions::default(), url.as_ref())?,
-        })
-    }
-
-    /// Connect to a Faktory server using the standard environment variables.
-    ///
-    /// Will first read `FAKTORY_PROVIDER` to get the name of the environment variable to get the
-    /// address from (defaults to `FAKTORY_URL`), and then read that environment variable to get
-    /// the server address. If the latter environment variable is not defined, the connection will
-    /// be made to
+    /// If `url` is not given, will use the standard Faktory environment variables. Specifically,
+    /// `FAKTORY_PROVIDER` is read to get the name of the environment variable to get the address
+    /// from (defaults to `FAKTORY_URL`), and then that environment variable is read to get the
+    /// server address. If the latter environment variable is not defined, the connection will be
+    /// made to
     ///
     /// ```text
     /// tcp://localhost:7419
     /// ```
-    pub fn connect_env(connector: C) -> io::Result<Producer<C>> {
+    ///
+    /// If `url` is given, but does not specify a port, it defaults to 7419.
+    pub fn connect(url: Option<&str>) -> io::Result<Self> {
+        let url = match url {
+            Some(url) => proto::url_parse(url),
+            None => proto::url_parse(&proto::get_env_url()),
+        }?;
+        let stream = TcpStream::connect(proto::host_from_url(&url))?;
+        Self::connect_with(stream, url.password().map(|p| p.to_string()))
+    }
+}
+
+impl<S: Read + Write> Producer<S> {
+    /// Connect to a Faktory server with a non-standard stream.
+    pub fn connect_with(stream: S, pwd: Option<String>) -> io::Result<Producer<S>> {
+        let mut opts = ClientOptions::default();
+        opts.password = pwd;
         Ok(Producer {
-            c: Client::connect_env(connector, ClientOptions::default())?,
+            c: Client::new(stream, opts)?,
         })
     }
 
@@ -143,12 +127,11 @@ impl<C: StreamConnector> Producer<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proto::TcpEstablisher;
 
     #[test]
     #[ignore]
     fn it_works() {
-        let mut p = Producer::connect_env(TcpEstablisher).unwrap();
+        let mut p = Producer::connect(None).unwrap();
         p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
     }
 }
