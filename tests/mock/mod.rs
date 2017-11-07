@@ -59,12 +59,19 @@ impl io::Write for Stream {
 }
 
 impl Stream {
-    pub fn new(streams: usize) -> Self {
+    fn make(salt: Option<&[u8]>, streams: usize) -> Self {
         let streams = (0..streams)
             .map(|_| {
                 let mut s = SyncMockStream::new();
                 // need to say HELLO
-                s.push_bytes_to_read(b"+HI {\"v\":\"1\"}\r\n");
+                if let Some(salt) = salt {
+                    // include salt for pwdhash
+                    s.push_bytes_to_read(b"+HI {\"v\":\"1\",\"s\":\"");
+                    s.push_bytes_to_read(salt);
+                    s.push_bytes_to_read(b"\"}\r\n");
+                } else {
+                    s.push_bytes_to_read(b"+HI {\"v\":\"1\"}\r\n");
+                }
                 s.push_bytes_to_read(b"+OK\r\n");
                 s
             })
@@ -80,6 +87,14 @@ impl Stream {
             mine: mine,
             all: Arc::new(Mutex::new(inner)),
         }
+    }
+
+    pub fn new(streams: usize) -> Self {
+        Self::make(None, streams)
+    }
+
+    pub fn with_salt(salt: &[u8]) -> Self {
+        Self::make(Some(salt), 1)
     }
 
     pub fn ok(&mut self, stream: usize) {

@@ -28,6 +28,23 @@ fn hello() {
 }
 
 #[test]
+fn hello_pwd() {
+    let mut s = mock::Stream::with_salt(b"55104dc76695721d");
+
+    let c = Producer::connect_with(s.clone(), Some("test".to_string())).unwrap();
+    let written = s.pop_bytes_written(0);
+    assert!(written.starts_with(b"HELLO {"));
+    let written: serde_json::Value = serde_json::from_slice(&written[b"HELLO ".len()..]).unwrap();
+    let written = written.as_object().unwrap();
+    assert_eq!(
+        written.get("pwdhash").and_then(|h| h.as_str()),
+        Some("bab39931c5bdb880e65f0fd9665787bf3acd57bb9c0b428766ae6f8062c89b4e")
+    );
+
+    drop(c);
+}
+
+#[test]
 fn enqueue() {
     let mut s = mock::Stream::default();
     let mut p = Producer::connect_with(s.clone(), None).unwrap();
