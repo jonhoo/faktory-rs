@@ -81,5 +81,6 @@ fn enqueue() {
         Some(600)
     );
     assert_eq!(written.get("retry").and_then(|h| h.as_u64()), Some(25));
+    assert_eq!(written.get("priority").and_then(|h| h.as_u64()), Some(5));
     assert_eq!(written.get("backtrace").and_then(|h| h.as_u64()), Some(0));
 }

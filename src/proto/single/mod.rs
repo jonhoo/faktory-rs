@@ -56,6 +56,12 @@ pub struct Job {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub retry: Option<usize>,
 
+    /// The priority of this job from 1-9 (9 is highest).
+    ///
+    /// Pushing a job with priority 9 will effectively put it at the front of the queue.
+    /// Defaults to 5.
+    pub priority: Option<u8>,
+
     /// Number of lines of backtrace to keep if this job fails.
     ///
     /// Defaults to 0.
@@ -113,6 +119,7 @@ impl Job {
             at: None,
             reserve_for: Some(600),
             retry: Some(25),
+            priority: Some(5),
             backtrace: Some(0),
             failure: None,
             custom: Default::default(),
