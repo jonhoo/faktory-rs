@@ -1,4 +1,4 @@
-# faktory
+# faktory-rs
 
 [![Crates.io](https://img.shields.io/crates/v/faktory.svg)](https://crates.io/crates/faktory)
 [![Documentation](https://docs.rs/faktory/badge.svg)](https://docs.rs/faktory/)
