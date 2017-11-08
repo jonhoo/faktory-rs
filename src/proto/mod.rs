@@ -79,6 +79,8 @@ pub(crate) struct ClientOptions {
     /// Password to authenticate with
     /// Defaults to None,
     pub(crate) password: Option<String>,
+
+    is_producer: bool,
 }
 
 impl Default for ClientOptions {
@@ -89,6 +91,7 @@ impl Default for ClientOptions {
             wid: None,
             labels: vec!["rust".to_string()],
             password: None,
+            is_producer: false,
         }
     }
 }
@@ -123,6 +126,13 @@ impl<S: Read + Write> Client<S> {
         c.init()?;
         Ok(c)
     }
+
+    pub(crate) fn new_producer(stream: S, pwd: Option<String>) -> io::Result<Client<S>> {
+        let mut opts = ClientOptions::default();
+        opts.password = pwd;
+        opts.is_producer = true;
+        Self::new(stream, opts)
+    }
 }
 
 impl<S: Read + Write> Client<S> {
@@ -141,28 +151,29 @@ impl<S: Read + Write> Client<S> {
         }
 
         // fill in any missing options, and remember them for re-connect
-        let hostname = self.opts
-            .hostname
-            .clone()
-            .or_else(|| get_hostname())
-            .unwrap_or_else(|| "local".to_string());
-        self.opts.hostname = Some(hostname);
-        let pid = self.opts
-            .pid
-            .unwrap_or_else(|| unsafe { getpid() } as usize);
-        self.opts.pid = Some(pid);
-        let wid = self.opts.wid.clone().unwrap_or_else(|| {
-            use rand::{thread_rng, Rng};
-            thread_rng().gen_ascii_chars().take(32).collect()
-        });
-        self.opts.wid = Some(wid);
+        let mut hello = single::Hello::default();
+        if !self.opts.is_producer {
+            let hostname = self.opts
+                .hostname
+                .clone()
+                .or_else(|| get_hostname())
+                .unwrap_or_else(|| "local".to_string());
+            self.opts.hostname = Some(hostname);
+            let pid = self.opts
+                .pid
+                .unwrap_or_else(|| unsafe { getpid() } as usize);
+            self.opts.pid = Some(pid);
+            let wid = self.opts.wid.clone().unwrap_or_else(|| {
+                use rand::{thread_rng, Rng};
+                thread_rng().gen_ascii_chars().take(32).collect()
+            });
+            self.opts.wid = Some(wid);
 
-        let mut hello = single::Hello::new(
-            self.opts.hostname.as_ref().unwrap(),
-            self.opts.wid.as_ref().unwrap(),
-            self.opts.pid.unwrap(),
-            &self.opts.labels[..],
-        );
+            hello.hostname = Some(self.opts.hostname.clone().unwrap());
+            hello.wid = Some(self.opts.wid.clone().unwrap());
+            hello.pid = Some(self.opts.pid.unwrap());
+            hello.labels = self.opts.labels.clone();
+        }
 
         if hi.salt.is_some() {
             if let Some(ref pwd) = self.opts.password {

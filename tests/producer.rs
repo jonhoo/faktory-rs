@@ -16,12 +16,11 @@ fn hello() {
     assert!(written.starts_with(b"HELLO {"));
     let written: serde_json::Value = serde_json::from_slice(&written[b"HELLO ".len()..]).unwrap();
     let written = written.as_object().unwrap();
-    assert_eq!(written.get("hostname").map(|h| h.is_string()), Some(true));
-    assert_eq!(written.get("wid").map(|h| h.is_string()), Some(true));
-    assert_eq!(written.get("pid").map(|h| h.is_number()), Some(true));
+    assert_eq!(written.get("hostname"), None);
+    assert_eq!(written.get("wid"), None);
+    assert_eq!(written.get("pid"), None);
+    assert_eq!(written.get("labels"), None);
     assert_eq!(written.get("v").and_then(|h| h.as_i64()), Some(2));
-    let labels = written["labels"].as_array().unwrap();
-    assert_eq!(labels, &["rust"]);
 
     drop(p);
     let written = s.pop_bytes_written(0);

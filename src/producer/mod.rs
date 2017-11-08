@@ -1,7 +1,7 @@
 use std::io::prelude::*;
 use std::io;
 use std::net::TcpStream;
-use proto::{self, Client, ClientOptions, Info, Job, Push};
+use proto::{self, Client, Info, Job, Push};
 use serde_json;
 
 /// `Producer` is used to enqueue new jobs that will in turn be processed by Faktory workers.
@@ -98,10 +98,8 @@ impl Producer<TcpStream> {
 impl<S: Read + Write> Producer<S> {
     /// Connect to a Faktory server with a non-standard stream.
     pub fn connect_with(stream: S, pwd: Option<String>) -> io::Result<Producer<S>> {
-        let mut opts = ClientOptions::default();
-        opts.password = pwd;
         Ok(Producer {
-            c: Client::new(stream, opts)?,
+            c: Client::new_producer(stream, pwd)?,
         })
     }
 

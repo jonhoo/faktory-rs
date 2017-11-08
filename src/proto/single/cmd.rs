@@ -151,10 +151,10 @@ where
 
 #[derive(Serialize)]
 pub struct Hello {
-    hostname: String,
-    wid: String,
-    pid: usize,
-    labels: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub hostname: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub wid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub pid: Option<usize>,
+    #[serde(skip_serializing_if = "Vec::is_empty")] pub labels: Vec<String>,
 
     #[serde(rename = "v")] version: usize,
 
@@ -164,23 +164,20 @@ pub struct Hello {
     password_hash: Option<String>,
 }
 
-impl Hello {
-    pub fn new<S1, S2, S3>(hostname: S1, wid: S2, pid: usize, labels: &[S3]) -> Self
-    where
-        S1: ToString,
-        S2: ToString,
-        S3: ToString,
-    {
+impl Default for Hello {
+    fn default() -> Self {
         Hello {
-            hostname: hostname.to_string(),
-            wid: wid.to_string(),
-            pid,
-            labels: labels.iter().map(|s| s.to_string()).collect(),
+            hostname: None,
+            wid: None,
+            pid: None,
+            labels: Vec::new(),
             password_hash: None,
             version: ::proto::EXPECTED_PROTOCOL_VERSION,
         }
     }
+}
 
+impl Hello {
     pub fn set_password(&mut self, hi: &super::resp::Hi, password: &str) {
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::default();
