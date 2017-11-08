@@ -201,20 +201,6 @@ impl FaktoryCommand for Hello {
 
 // ----------------------------------------------
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Failure {
-    retry_count: usize,
-    failed_at: String,
-    #[serde(skip_serializing_if = "Option::is_none")] next_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] message: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(rename = "errtype")]
-    kind: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] backtrace: Option<Vec<String>>,
-}
-
-// ----------------------------------------------
-
 pub struct Push(Job);
 
 use std::ops::Deref;

@@ -66,7 +66,7 @@ pub struct Job {
     ///
     /// This field is read-only.
     #[serde(skip_serializing)]
-    pub(crate) failure: Option<String>,
+    pub(crate) failure: Option<Failure>,
 
     /// Extra context to include with the job.
     ///
@@ -78,6 +78,18 @@ pub struct Job {
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     #[serde(default = "HashMap::default")]
     pub custom: HashMap<String, serde_json::Value>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Failure {
+    retry_count: usize,
+    failed_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")] next_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "errtype")]
+    kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] backtrace: Option<Vec<String>>,
 }
 
 impl Job {
