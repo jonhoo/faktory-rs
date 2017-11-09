@@ -4,6 +4,7 @@ use libc::getpid;
 use std::io::prelude::*;
 use std::io;
 use serde;
+use serde_json;
 use std::net::TcpStream;
 use url::Url;
 
@@ -218,15 +219,19 @@ impl<S: Read + Write> Client<S> {
             Heartbeat::new(self.opts.wid.as_ref().unwrap()),
         )?;
 
-        let v = single::read_str(&mut self.stream)?;
-        match &*v {
-            "OK" => Ok(HeartbeatStatus::Ok),
-            "terminate" => Ok(HeartbeatStatus::Terminate),
-            "quiet" => Ok(HeartbeatStatus::Quiet),
-            s => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("got unexpected heartbeat response '{}'", s),
-            )),
+        match single::read_json::<_, serde_json::Value>(&mut self.stream)? {
+            None => Ok(HeartbeatStatus::Ok),
+            Some(s) => match s.as_object()
+                .and_then(|m| m.get("state"))
+                .and_then(|s| s.as_str())
+            {
+                Some("terminate") => Ok(HeartbeatStatus::Terminate),
+                Some("quiet") => Ok(HeartbeatStatus::Quiet),
+                _ => Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("got unexpected heartbeat response '{}'", s),
+                )),
+            },
         }
     }
 

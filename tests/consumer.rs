@@ -188,13 +188,13 @@ fn well_behaved() {
     // the running thread won't return for a while. the heartbeat thingy is going to eventually
     // send a heartbeat, and we want to respond to that with a "quiet" to make it not accept any
     // more jobs.
-    s.push_bytes_to_read(0, b"+quiet\r\n");
+    s.push_bytes_to_read(0, b"+{\"state\":\"quiet\"}\r\n");
 
     // eventually, the job is going to finish and send an ACK
     s.ok(1);
 
     // then, we want to send a terminate to tell the thread to exit
-    s.push_bytes_to_read(0, b"+terminate\r\n");
+    s.push_bytes_to_read(0, b"+{\"state\":\"terminate\"}\r\n");
 
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
     assert_eq!(jh.join().unwrap().unwrap(), 0);
@@ -253,13 +253,13 @@ fn no_first_job() {
     // the running thread won't return for a while. the heartbeat thingy is going to eventually
     // send a heartbeat, and we want to respond to that with a "quiet" to make it not accept any
     // more jobs.
-    s.push_bytes_to_read(0, b"+quiet\r\n");
+    s.push_bytes_to_read(0, b"+{\"state\":\"quiet\"}\r\n");
 
     // eventually, the job is going to finish and send an ACK
     s.ok(1);
 
     // then, we want to send a terminate to tell the thread to exit
-    s.push_bytes_to_read(0, b"+terminate\r\n");
+    s.push_bytes_to_read(0, b"+{\"state\":\"terminate\"}\r\n");
 
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
     assert_eq!(jh.join().unwrap().unwrap(), 0);
@@ -327,14 +327,14 @@ fn well_behaved_many() {
     // the running thread won't return for a while. the heartbeat thingy is going to eventually
     // send a heartbeat, and we want to respond to that with a "quiet" to make it not accept any
     // more jobs.
-    s.push_bytes_to_read(0, b"+quiet\r\n");
+    s.push_bytes_to_read(0, b"+{\"state\":\"quiet\"}\r\n");
 
     // eventually, the jobs are going to finish and send an ACK
     s.ok(1);
     s.ok(2);
 
     // then, we want to send a terminate to tell the thread to exit
-    s.push_bytes_to_read(0, b"+terminate\r\n");
+    s.push_bytes_to_read(0, b"+{\"state\":\"terminate\"}\r\n");
 
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
     assert_eq!(jh.join().unwrap().unwrap(), 0);
@@ -393,7 +393,7 @@ fn terminate() {
 
     // the running thread won't ever return, because the job never exits. the heartbeat thingy is
     // going to eventually send a heartbeat, and we want to respond to that with a "terminate"
-    s.push_bytes_to_read(0, b"+terminate\r\n");
+    s.push_bytes_to_read(0, b"+{\"state\":\"terminate\"}\r\n");
 
     // at this point, c.run() should immediately return with Ok(1) indicating that one job is still
     // running.

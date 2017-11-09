@@ -35,8 +35,14 @@ pub fn read_json<R: BufRead, T: serde::de::DeserializeOwned>(
 ) -> serde_json::Result<Option<T>> {
     let rr = read(r).map_err(serde_json::Error::io)?;
     match rr {
+        RawResponse::String(ref s) if s == "OK" => {
+            return Ok(None);
+        }
         RawResponse::String(ref s) => {
             return serde_json::from_str(s).map(|v| Some(v));
+        }
+        RawResponse::Blob(ref b) if b == b"OK" => {
+            return Ok(None);
         }
         RawResponse::Blob(ref b) => {
             if b.is_empty() {
@@ -86,6 +92,7 @@ pub fn read_ok<R: BufRead>(r: R) -> io::Result<()> {
 
 // ----------------------------------------------
 
+#[allow(dead_code)]
 pub fn read_str<R: BufRead>(r: R) -> io::Result<String> {
     let rr = read(r)?;
     if let RawResponse::String(s) = rr {
