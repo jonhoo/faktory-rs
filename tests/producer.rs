@@ -29,16 +29,16 @@ fn hello() {
 
 #[test]
 fn hello_pwd() {
-    let mut s = mock::Stream::with_salt(1545, "365a858149c6e2d1");
+    let mut s = mock::Stream::with_salt(1545, "55104dc76695721d");
 
-    let c = Producer::connect_with(s.clone(), Some("test".to_string())).unwrap();
+    let c = Producer::connect_with(s.clone(), Some("foobar".to_string())).unwrap();
     let written = s.pop_bytes_written(0);
     assert!(written.starts_with(b"HELLO {"));
     let written: serde_json::Value = serde_json::from_slice(&written[b"HELLO ".len()..]).unwrap();
     let written = written.as_object().unwrap();
     assert_eq!(
         written.get("pwdhash").and_then(|h| h.as_str()),
-        Some("dfad6c5f3a0daa4faea5788d1a913240b74fe9200f32bc48663aad4707a87056")
+        Some("d3590a2722bb8998a6392ed027bcef642b79a58a97219ca4920e9e7f2fe000d7")
     );
 
     drop(c);

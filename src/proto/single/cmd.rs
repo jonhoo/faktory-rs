@@ -183,11 +183,11 @@ impl Hello {
         let mut hasher = Sha256::default();
         hasher.input(password.as_bytes());
         hasher.input(hi.salt.as_ref().unwrap().as_bytes());
-        let mut hash = hasher.result();
         for _ in 1..hi.iterations.unwrap_or(1) {
-            hash = Sha256::digest(&hash[..]);
+            let hash = hasher.result();
+            hasher.input(&hash[..]);
         }
-        self.password_hash = Some(format!("{:x}", hash));
+        self.password_hash = Some(format!("{:x}", hasher.result()));
     }
 }
 
