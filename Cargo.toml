@@ -18,6 +18,7 @@ license = "MIT/Apache-2.0"
 
 [badges]
 travis-ci = { repository = "jonhoo/faktory-rs" }
+appveyor = { repository = "jonhoo/faktory-rs", branch = "master", service = "github" }
 
 [features]
 default = []
