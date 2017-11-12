@@ -1,9 +1,14 @@
 language: rust
+dist: trusty
+addons:
+    apt:
+        packages:
+            - libssl-dev
+cache: cargo
 rust:
   - stable
   - beta
   - nightly
-cache: cargo
 matrix:
   allow_failures:
     - rust: nightly
@@ -11,3 +16,9 @@ script:
   - cargo build --verbose
   - cargo test --verbose
   - cargo test --verbose --features tls
+after_success: |
+  if [[ "$TRAVIS_RUST_VERSION" == stable ]]; then
+    bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
+    cargo tarpaulin --out Xml
+    bash <(curl -s https://codecov.io/bash)
+  fi
