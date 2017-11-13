@@ -1,10 +1,10 @@
 language: rust
 sudo: false
 dist: trusty
-addons:
-    apt:
-        packages:
-            - libssl-dev
+#addons:
+#    apt:
+#        packages:
+#            - libssl-dev
 cache: cargo
 rust:
   - stable
@@ -17,12 +17,12 @@ script:
   - cargo build --verbose
   - cargo test --verbose
   - cargo test --verbose --features tls
-env:
-  global:
-  - RUSTFLAGS="-C link-dead-code"
-after_success: |
-  if [[ "$TRAVIS_RUST_VERSION" == stable ]]; then
-    bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
-    cargo tarpaulin --out Xml --features binaries --forward
-    bash <(curl -s https://codecov.io/bash)
-  fi
+#env:
+#  global:
+#  - RUSTFLAGS="-C link-dead-code"
+#after_success: |
+#  if [[ "$TRAVIS_RUST_VERSION" == stable ]]; then
+#    bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
+#    cargo tarpaulin --out Xml --features binaries --forward
+#    bash <(curl -s https://codecov.io/bash)
+#  fi
