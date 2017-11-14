@@ -353,4 +353,10 @@ mod test {
         assert_eq!(r.kind(), io::ErrorKind::InvalidData);
     }
 
+    #[test]
+    fn it_errors_on_unknown_resp_type() {
+        let c = Cursor::new(b"^\r\n");
+        let r: io::Error = read_json(c).unwrap_err().into();
+        assert_eq!(r.kind(), io::ErrorKind::InvalidData);
+    }
 }

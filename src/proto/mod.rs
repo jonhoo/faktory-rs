@@ -37,7 +37,7 @@ pub(crate) fn url_parse(url: &str) -> io::Result<Url> {
         ));
     }
 
-    if url.host_str().is_none() {
+    if url.host_str().is_none() || url.host_str().unwrap().is_empty() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "no hostname given",
@@ -267,5 +267,52 @@ mod tests {
             TcpStream::connect("localhost:7419").unwrap(),
             ClientOptions::default(),
         ).unwrap();
+    }
+
+    #[test]
+    fn sensible_default() {
+        assert_eq!(get_env_url(), "tcp://localhost:7419");
+    }
+
+    #[test]
+    fn uses_env_url() {
+        use std::env;
+        env::set_var("FAKTORY_URL", "tcp://example.com:7500");
+        assert_eq!(get_env_url(), "tcp://example.com:7500");
+    }
+
+    #[test]
+    fn uses_env_var() {
+        use std::env;
+        env::set_var("FAKTORY_PROVIDER", "URL");
+        env::set_var("URL", "tcp://example.com:7500");
+        assert_eq!(get_env_url(), "tcp://example.com:7500");
+    }
+
+    #[test]
+    fn url_port_default() {
+        use url::Url;
+        let url = Url::parse("tcp://example.com").unwrap();
+        assert_eq!(host_from_url(&url), "example.com:7419");
+    }
+
+    #[test]
+    fn url_requires_tcp() {
+        url_parse("foobar").unwrap_err();
+    }
+
+    #[test]
+    fn url_requires_host() {
+        url_parse("tcp://:7419").unwrap_err();
+    }
+
+    #[test]
+    fn url_doesnt_require_port() {
+        url_parse("tcp://example.com").unwrap();
+    }
+
+    #[test]
+    fn url_can_take_password_and_port() {
+        url_parse("tcp://:foobar@example.com:7419").unwrap();
     }
 }
