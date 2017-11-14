@@ -91,18 +91,6 @@ pub fn read_ok<R: BufRead>(r: R) -> io::Result<()> {
 }
 
 // ----------------------------------------------
-
-#[allow(dead_code)]
-pub fn read_str<R: BufRead>(r: R) -> io::Result<String> {
-    let rr = read(r)?;
-    if let RawResponse::String(s) = rr {
-        return Ok(s);
-    }
-
-    Err(bad("server ok", &rr))
-}
-
-// ----------------------------------------------
 //
 // below is the implementation of the Redis RESP protocol
 //
@@ -234,8 +222,13 @@ impl From<Vec<u8>> for RawResponse {
 
 #[cfg(test)]
 mod test {
-    use std::io::Cursor;
+    use std::io::{self, Cursor};
     use super::{read, RawResponse};
+    use serde_json::{self, Map, Value};
+
+    fn read_json<C: io::BufRead>(c: C) -> serde_json::Result<Option<Value>> {
+        super::read_json(c)
+    }
 
     #[test]
     fn it_parses_simple_strings() {
@@ -250,9 +243,38 @@ mod test {
     }
 
     #[test]
+    fn it_errors_on_bad_numbers() {
+        let c = Cursor::new(b":x\r\n");
+        let r = read(c).unwrap_err();
+        assert_eq!(r.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn it_parses_errors() {
+        let c = Cursor::new(b"-ERR\r\n");
+        let r = read(c).unwrap_err();
+        assert_eq!(r.kind(), io::ErrorKind::InvalidInput);
+        assert_eq!(format!("{}", r.into_inner().unwrap()), "ERR");
+    }
+
+    #[test]
+    #[should_panic]
+    fn it_cant_do_arrays() {
+        let c = Cursor::new(b"*\r\n");
+        read(c).is_err();
+    }
+
+    #[test]
     fn it_parses_nills() {
         let c = Cursor::new(b"$-1\r\n");
         assert_eq!(read(c).unwrap(), RawResponse::Null);
+    }
+
+    #[test]
+    fn it_errors_on_bad_sizes() {
+        let c = Cursor::new(b"$x\r\n\r\n");
+        let r = read(c).unwrap_err();
+        assert_eq!(r.kind(), io::ErrorKind::InvalidData);
     }
 
     #[test]
@@ -269,4 +291,66 @@ mod test {
             RawResponse::from(Vec::from(&b"HELLO WORLD"[..]))
         );
     }
+
+    #[test]
+    fn it_decodes_json_ok_string() {
+        let c = Cursor::new(b"+OK\r\n");
+        assert_eq!(read_json(c).unwrap(), None);
+    }
+
+    #[test]
+    fn it_decodes_json_ok_blob() {
+        let c = Cursor::new(b"$2\r\nOK\r\n");
+        assert_eq!(read_json(c).unwrap(), None);
+    }
+
+    #[test]
+    fn it_decodes_json_nill() {
+        let c = Cursor::new(b"$-1\r\n");
+        assert_eq!(read_json(c).unwrap(), None);
+    }
+
+    #[test]
+    fn it_decodes_json_empty() {
+        let c = Cursor::new(b"$0\r\n\r\n");
+        assert_eq!(read_json(c).unwrap(), None);
+    }
+
+    #[test]
+    fn it_decodes_string_json() {
+        let c = Cursor::new(b"+{\"hello\":1}\r\n");
+        let mut m = Map::new();
+        m.insert("hello".to_string(), Value::from(1));
+        assert_eq!(read_json(c).unwrap(), Some(Value::Object(m)));
+    }
+
+    #[test]
+    fn it_decodes_blob_json() {
+        let c = Cursor::new(b"$11\r\n{\"hello\":1}\r\n");
+        let mut m = Map::new();
+        m.insert("hello".to_string(), Value::from(1));
+        assert_eq!(read_json(c).unwrap(), Some(Value::Object(m)));
+    }
+
+    #[test]
+    fn it_errors_on_bad_json_blob() {
+        let c = Cursor::new(b"$9\r\n{\"hello\"}\r\n");
+        let r: io::Error = read_json(c).unwrap_err().into();
+        assert_eq!(r.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn it_errors_on_bad_json_string() {
+        let c = Cursor::new(b"+{\"hello\"}\r\n");
+        let r: io::Error = read_json(c).unwrap_err().into();
+        assert_eq!(r.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn json_error_on_number() {
+        let c = Cursor::new(b":9\r\n");
+        let r: io::Error = read_json(c).unwrap_err().into();
+        assert_eq!(r.kind(), io::ErrorKind::InvalidData);
+    }
+
 }
