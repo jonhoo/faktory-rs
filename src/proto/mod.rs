@@ -270,23 +270,17 @@ mod tests {
     }
 
     #[test]
-    fn sensible_default() {
-        assert_eq!(get_env_url(), "tcp://localhost:7419");
-    }
-
-    #[test]
-    fn uses_env_url() {
+    fn correct_env_parsing() {
         use std::env;
+
+        assert_eq!(get_env_url(), "tcp://localhost:7419");
+
         env::set_var("FAKTORY_URL", "tcp://example.com:7500");
         assert_eq!(get_env_url(), "tcp://example.com:7500");
-    }
 
-    #[test]
-    fn uses_env_var() {
-        use std::env;
         env::set_var("FAKTORY_PROVIDER", "URL");
-        env::set_var("URL", "tcp://example.com:7500");
-        assert_eq!(get_env_url(), "tcp://example.com:7500");
+        env::set_var("URL", "tcp://example.com:7501");
+        assert_eq!(get_env_url(), "tcp://example.com:7501");
     }
 
     #[test]
