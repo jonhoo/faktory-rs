@@ -401,10 +401,10 @@ where
                 };
 
                 if let Err(e) = r.await_ok() {
-                    // it could be that the server did previously get our ACK/FAIL, and that it was the
-                    // resulting OK that failed. in that case, we would get an error response when
-                    // re-sending the job response. this should not count as critical. other errors,
-                    // however, should!
+                    // it could be that the server did previously get our ACK/FAIL, and that it was
+                    // the resulting OK that failed. in that case, we would get an error response
+                    // when re-sending the job response. this should not count as critical. other
+                    // errors, however, should!
                     if e.kind() != io::ErrorKind::InvalidInput {
                         last_job_result.swap(res, atomic::Ordering::SeqCst);
                         return Err(e);
