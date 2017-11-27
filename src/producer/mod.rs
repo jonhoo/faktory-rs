@@ -107,7 +107,7 @@ impl<S: Read + Write> Producer<S> {
     ///
     /// Returns `Ok` if the job was successfully queued by the Faktory server.
     pub fn enqueue(&mut self, job: Job) -> io::Result<()> {
-        self.c.issue(Push::from(job))?.await_ok()
+        self.c.issue(&Push::from(job))?.await_ok()
     }
 
     /// Retrieve information about the running server.
@@ -115,7 +115,7 @@ impl<S: Read + Write> Producer<S> {
     /// The returned value is the result of running the `INFO` command on the server.
     pub fn info(&mut self) -> io::Result<serde_json::Value> {
         self.c
-            .issue(Info)
+            .issue(&Info)
             .map_err(serde_json::Error::io)?
             .read_json()
             .map(|v| v.expect("info command cannot give empty response"))

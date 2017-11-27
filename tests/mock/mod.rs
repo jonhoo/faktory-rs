@@ -37,7 +37,7 @@ impl Reconnect for Stream {
             .expect("tried to make a new stream, but no more connections expected");
         Ok(Stream {
             mine: Some(mine),
-            all: self.all.clone(),
+            all: Arc::clone(&self.all),
         })
     }
 }

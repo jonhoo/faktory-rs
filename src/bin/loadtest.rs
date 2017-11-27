@@ -13,7 +13,7 @@ use std::io;
 use std::sync::{self, atomic};
 use faktory::*;
 
-const QUEUES: &[&'static str] = &["queue0", "queue1", "queue2", "queue3", "queue4"];
+const QUEUES: &[&str] = &["queue0", "queue1", "queue2", "queue3", "queue4"];
 
 fn main() {
     let matches = App::new("My Super Program")
@@ -56,8 +56,8 @@ fn main() {
     let start = time::Instant::now();
     let threads: Vec<thread::JoinHandle<Result<_, io::Error>>> = (0..threads)
         .map(|_| {
-            let pushed = pushed.clone();
-            let popped = popped.clone();
+            let pushed = sync::Arc::clone(&pushed);
+            let popped = sync::Arc::clone(&popped);
             thread::spawn(move || {
                 // make producer and consumer
                 let mut p = Producer::connect(None).unwrap();
@@ -103,7 +103,7 @@ fn main() {
 
     let _ops_count: Result<Vec<_>, _> = threads.into_iter().map(|jt| jt.join().unwrap()).collect();
     let stop = start.elapsed();
-    let stop_secs = stop.as_secs() * 1_000_000_000 + stop.subsec_nanos() as u64;
+    let stop_secs = stop.as_secs() * 1_000_000_000 + u64::from(stop.subsec_nanos());
     let stop_secs = stop_secs as f64 / 1_000_000_000.0;
     println!(
         "Processed {} pushes and {} pops in {:.2} seconds, rate: {} jobs/s",

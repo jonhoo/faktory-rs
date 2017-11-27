@@ -102,7 +102,7 @@ impl Job {
     /// Create a new job of type `kind`, with the given arguments.
     pub fn new<S, A>(kind: S, args: Vec<A>) -> Self
     where
-        S: ToString,
+        S: Into<String>,
         A: Into<serde_json::Value>,
     {
         use rand::{thread_rng, Rng};
@@ -111,7 +111,7 @@ impl Job {
         Job {
             jid: random_jid,
             queue: "default".into(),
-            kind: kind.to_string(),
+            kind: kind.into(),
             args: args.into_iter().map(|s| s.into()).collect(),
 
             created_at: Some(Utc::now()),
@@ -137,14 +137,14 @@ impl Job {
     }
 }
 
-pub fn write_command<W: Write, C: FaktoryCommand>(w: &mut W, command: C) -> io::Result<()> {
+pub fn write_command<W: Write, C: FaktoryCommand>(w: &mut W, command: &C) -> io::Result<()> {
     command.issue::<W>(w)?;
     w.flush()
 }
 
 pub fn write_command_and_await_ok<X: BufRead + Write, C: FaktoryCommand>(
     x: &mut X,
-    command: C,
+    command: &C,
 ) -> io::Result<()> {
     write_command(x, command)?;
     read_ok(x)

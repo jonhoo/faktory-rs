@@ -6,9 +6,9 @@ use std;
 
 fn bad(expected: &str, got: &RawResponse) -> io::Error {
     use std;
-    let stringy = match got {
-        &RawResponse::String(ref s) => Some(&**s),
-        &RawResponse::Blob(ref b) => if let Ok(s) = std::str::from_utf8(b) {
+    let stringy = match *got {
+        RawResponse::String(ref s) => Some(&**s),
+        RawResponse::Blob(ref b) => if let Ok(s) = std::str::from_utf8(b) {
             Some(s)
         } else {
             None
@@ -39,7 +39,7 @@ pub fn read_json<R: BufRead, T: serde::de::DeserializeOwned>(
             return Ok(None);
         }
         RawResponse::String(ref s) => {
-            return serde_json::from_str(s).map(|v| Some(v));
+            return serde_json::from_str(s).map(Some);
         }
         RawResponse::Blob(ref b) if b == b"OK" => {
             return Ok(None);
@@ -48,7 +48,7 @@ pub fn read_json<R: BufRead, T: serde::de::DeserializeOwned>(
             if b.is_empty() {
                 return Ok(None);
             }
-            return serde_json::from_slice(b).map(|v| Some(v));
+            return serde_json::from_slice(b).map(Some);
         }
         RawResponse::Null => return Ok(None),
         _ => {}

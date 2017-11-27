@@ -157,7 +157,7 @@ impl<S: Read + Write> Client<S> {
             let hostname = self.opts
                 .hostname
                 .clone()
-                .or_else(|| get_hostname())
+                .or_else(get_hostname)
                 .unwrap_or_else(|| "local".to_string());
             self.opts.hostname = Some(hostname);
             let pid = self.opts
@@ -186,13 +186,13 @@ impl<S: Read + Write> Client<S> {
                 ));
             }
         }
-        single::write_command_and_await_ok(&mut self.stream, hello)
+        single::write_command_and_await_ok(&mut self.stream, &hello)
     }
 }
 
 impl<S: Read + Write> Drop for Client<S> {
     fn drop(&mut self) {
-        single::write_command(&mut self.stream, single::End).unwrap();
+        single::write_command(&mut self.stream, &single::End).unwrap();
     }
 }
 
@@ -207,7 +207,7 @@ pub(crate) enum HeartbeatStatus {
 impl<S: Read + Write> Client<S> {
     pub(crate) fn issue<FC: self::single::FaktoryCommand>(
         &mut self,
-        c: FC,
+        c: &FC,
     ) -> io::Result<ReadToken<S>> {
         single::write_command(&mut self.stream, c)?;
         Ok(ReadToken(self))
@@ -216,7 +216,7 @@ impl<S: Read + Write> Client<S> {
     pub(crate) fn heartbeat(&mut self) -> io::Result<HeartbeatStatus> {
         single::write_command(
             &mut self.stream,
-            Heartbeat::new(self.opts.wid.as_ref().unwrap()),
+            &Heartbeat::new(&**self.opts.wid.as_ref().unwrap()),
         )?;
 
         match single::read_json::<_, serde_json::Value>(&mut self.stream)? {
@@ -239,7 +239,7 @@ impl<S: Read + Write> Client<S> {
     where
         Q: AsRef<str>,
     {
-        self.issue(single::Fetch::from(queues))?.read_json()
+        self.issue(&single::Fetch::from(queues))?.read_json()
     }
 }
 

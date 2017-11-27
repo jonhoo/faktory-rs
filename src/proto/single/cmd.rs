@@ -32,9 +32,9 @@ impl FaktoryCommand for Ack {
 }
 
 impl Ack {
-    pub fn new<S: ToString>(job_id: S) -> Ack {
+    pub fn new<S: Into<String>>(job_id: S) -> Ack {
         Ack {
-            job_id: job_id.to_string(),
+            job_id: job_id.into(),
         }
     }
 }
@@ -55,10 +55,8 @@ impl FaktoryCommand for Heartbeat {
 }
 
 impl Heartbeat {
-    pub fn new<S: ToString>(wid: S) -> Heartbeat {
-        Heartbeat {
-            wid: wid.to_string(),
-        }
+    pub fn new<S: Into<String>>(wid: S) -> Heartbeat {
+        Heartbeat { wid: wid.into() }
     }
 }
 
@@ -72,7 +70,7 @@ pub struct Fail {
     #[serde(skip_serializing_if = "Vec::is_empty")] backtrace: Vec<String>,
 }
 
-impl<'a> FaktoryCommand for &'a Fail {
+impl FaktoryCommand for Fail {
     fn issue<W: Write>(&self, w: &mut Write) -> serde_json::Result<()> {
         w.write_all(b"FAIL ").map_err(serde_json::Error::io)?;
         serde_json::to_writer(&mut *w, self)?;
@@ -81,15 +79,15 @@ impl<'a> FaktoryCommand for &'a Fail {
 }
 
 impl Fail {
-    pub fn new<S1: ToString, S2: ToString, S3: ToString>(
+    pub fn new<S1: Into<String>, S2: Into<String>, S3: Into<String>>(
         job_id: S1,
         kind: S2,
         message: S3,
     ) -> Self {
         Fail {
-            job_id: job_id.to_string(),
-            kind: kind.to_string(),
-            message: message.to_string(),
+            job_id: job_id.into(),
+            kind: kind.into(),
+            message: message.into(),
             backtrace: Vec::new(),
         }
     }
@@ -127,7 +125,7 @@ where
             w.write_all(b"FETCH\r\n").map_err(serde_json::Error::io)?;
         } else {
             w.write_all(b"FETCH").map_err(serde_json::Error::io)?;
-            for q in self.queues.into_iter() {
+            for q in self.queues {
                 w.write_all(b" ").map_err(serde_json::Error::io)?;
                 w.write_all(q.as_ref().as_bytes())
                     .map_err(serde_json::Error::io)?;

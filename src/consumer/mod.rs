@@ -195,9 +195,9 @@ where
     /// function is called with that job as its argument.
     pub fn register<K>(&mut self, kind: K, handler: F) -> &mut Self
     where
-        K: ToString,
+        K: Into<String>,
     {
-        self.callbacks.insert(kind.to_string(), handler);
+        self.callbacks.insert(kind.into(), handler);
         self
     }
 
@@ -304,7 +304,7 @@ where
                 // remember it in case we fail to notify the server (e.g., broken connection)
                 self.last_job_results[worker]
                     .swap(Box::new(Ok(jid.clone())), atomic::Ordering::SeqCst);
-                self.c.issue(Ack::new(jid))?.await_ok()?;
+                self.c.issue(&Ack::new(jid))?.await_ok()?;
             }
             Err(e) => {
                 // job failed -- let server know
@@ -359,9 +359,9 @@ where
     fn for_worker(&mut self) -> io::Result<Self> {
         Ok(Consumer {
             c: self.c.connect_again()?,
-            callbacks: self.callbacks.clone(),
-            running_jobs: self.running_jobs.clone(),
-            last_job_results: self.last_job_results.clone(),
+            callbacks: Arc::clone(&self.callbacks),
+            running_jobs: Arc::clone(&self.running_jobs),
+            last_job_results: Arc::clone(&self.last_job_results),
             terminated: self.terminated,
         })
     }
@@ -388,7 +388,7 @@ where
         for last_job_result in self.last_job_results.iter() {
             if let Some(res) = last_job_result.take(atomic::Ordering::SeqCst) {
                 let r = match *res {
-                    Ok(ref jid) => self.c.issue(Ack::new(jid)),
+                    Ok(ref jid) => self.c.issue(&Ack::new(&**jid)),
                     Err(ref fail) => self.c.issue(fail),
                 };
 
@@ -425,7 +425,7 @@ where
             .enumerate()
             .map(|(worker, status)| {
                 let mut w = self.for_worker()?;
-                let status = status.clone();
+                let status = Arc::clone(status);
                 let queues: Vec<_> = queues.into_iter().map(|s| s.as_ref().to_string()).collect();
                 Ok(thread::spawn(move || {
                     while status.load(atomic::Ordering::SeqCst) == STATUS_RUNNING {
@@ -459,7 +459,7 @@ where
                 {
                     // tell all workers to exit
                     // (though chances are they've all failed already)
-                    for s in status.iter() {
+                    for s in &status {
                         s.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
                     }
                     break Ok(false);
@@ -476,7 +476,7 @@ where
                             HeartbeatStatus::Ok => {}
                             HeartbeatStatus::Quiet => {
                                 // tell the workers to eventually terminate
-                                for s in status.iter() {
+                                for s in &status {
                                     s.store(STATUS_QUIET, atomic::Ordering::SeqCst);
                                 }
                                 target = STATUS_QUIET;
@@ -484,7 +484,7 @@ where
                             HeartbeatStatus::Terminate => {
                                 // tell the workers to terminate
                                 // *and* fail the current job and immediately return
-                                for s in status.iter() {
+                                for s in &status {
                                     s.store(STATUS_QUIET, atomic::Ordering::SeqCst);
                                 }
                                 break Ok(true);
@@ -493,7 +493,7 @@ where
                     }
                     Err(e) => {
                         // for this to fail, the workers have probably also failed
-                        for s in status.iter() {
+                        for s in &status {
                             s.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
                         }
                         break Err(e);
@@ -515,7 +515,7 @@ where
             let mut running = 0;
             for running_job in self.running_jobs.iter() {
                 if let Some(jid) = running_job.take(atomic::Ordering::SeqCst) {
-                    let f = Fail::new(jid, "unknown", "terminated");
+                    let f = Fail::new(&**jid, "unknown", "terminated");
 
                     // if this fails, we don't want to exit with Err(),
                     // because we *were* still terminated!
