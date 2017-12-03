@@ -62,3 +62,9 @@ if let Err(e) = c.run(&["default"]) {
     println!("worker failed: {}", e);
 }
 ```
+
+To start a Faktory server on Docker, use the [Docker Hub
+image](https://hub.docker.com/r/contribsys/faktory/) with:
+```console
+$ docker run --rm -it -v faktory-data:/var/lib/faktory -p 127.0.0.1:7419:7419 -p 127.0.0.1:7420:7420 contribsys/faktory:latest -b 0.0.0.0:7419 -e production
+```
