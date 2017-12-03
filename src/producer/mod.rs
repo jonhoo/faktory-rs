@@ -127,7 +127,8 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore]
+    // https://github.com/rust-lang/rust/pull/42219
+    //#[allow_fail]
     fn it_works() {
         let mut p = Producer::connect(None).unwrap();
         p.enqueue(Job::new("foobar", vec!["z"])).unwrap();

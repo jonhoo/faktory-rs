@@ -261,7 +261,8 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore]
+    // https://github.com/rust-lang/rust/pull/42219
+    //#[allow_fail]
     fn it_works() {
         Client::new(
             TcpStream::connect("localhost:7419").unwrap(),
