@@ -575,6 +575,7 @@ mod tests {
     #[test]
     // https://github.com/rust-lang/rust/pull/42219
     //#[allow_fail]
+    #[ignore]
     fn it_works() {
         use std::io;
         use producer::Producer;

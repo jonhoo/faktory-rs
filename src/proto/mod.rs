@@ -263,6 +263,7 @@ mod tests {
     #[test]
     // https://github.com/rust-lang/rust/pull/42219
     //#[allow_fail]
+    #[ignore]
     fn it_works() {
         Client::new(
             TcpStream::connect("localhost:7419").unwrap(),
