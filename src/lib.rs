@@ -59,6 +59,8 @@
 extern crate atomic_option;
 extern crate bufstream;
 extern crate chrono;
+#[macro_use]
+extern crate failure;
 extern crate fnv;
 extern crate hostname;
 extern crate libc;
@@ -73,6 +75,7 @@ extern crate url;
 mod producer;
 mod consumer;
 mod proto;
+mod error;
 
 #[cfg(feature = "tls")]
 extern crate native_tls;
@@ -85,3 +88,4 @@ pub use consumer::{Consumer, ConsumerBuilder};
 pub use producer::Producer;
 pub use proto::Job;
 pub use proto::Reconnect;
+pub use error::FaktoryError;

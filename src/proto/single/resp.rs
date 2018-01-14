@@ -1,10 +1,11 @@
 use std::io::prelude::*;
 use serde_json;
 use serde;
-use std::io;
 use std;
+use failure::Error;
+use FaktoryError;
 
-fn bad(expected: &str, got: &RawResponse) -> io::Error {
+fn bad(expected: &'static str, got: &RawResponse) -> FaktoryError {
     use std;
     let stringy = match *got {
         RawResponse::String(ref s) => Some(&**s),
@@ -17,29 +18,27 @@ fn bad(expected: &str, got: &RawResponse) -> io::Error {
     };
 
     match stringy {
-        Some(s) => io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("expected {}, got '{}'", expected, s),
-        ),
-        None => io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("expected {}, got {:?}", expected, got),
-        ),
+        Some(s) => FaktoryError::BadType {
+            expected,
+            received: s.to_string(),
+        },
+        None => FaktoryError::BadType {
+            expected,
+            received: format!("{:?}", got),
+        },
     }
 }
 
 // ----------------------------------------------
 
-pub fn read_json<R: BufRead, T: serde::de::DeserializeOwned>(
-    r: R,
-) -> serde_json::Result<Option<T>> {
-    let rr = read(r).map_err(serde_json::Error::io)?;
+pub fn read_json<R: BufRead, T: serde::de::DeserializeOwned>(r: R) -> Result<Option<T>, Error> {
+    let rr = read(r)?;
     match rr {
         RawResponse::String(ref s) if s == "OK" => {
             return Ok(None);
         }
         RawResponse::String(ref s) => {
-            return serde_json::from_str(s).map(Some);
+            return Ok(serde_json::from_str(s).map(Some)?);
         }
         RawResponse::Blob(ref b) if b == b"OK" => {
             return Ok(None);
@@ -48,13 +47,13 @@ pub fn read_json<R: BufRead, T: serde::de::DeserializeOwned>(
             if b.is_empty() {
                 return Ok(None);
             }
-            return serde_json::from_slice(b).map(Some);
+            return Ok(serde_json::from_slice(b).map(Some)?);
         }
         RawResponse::Null => return Ok(None),
         _ => {}
     };
 
-    Err(serde_json::Error::io(bad("json", &rr)))
+    Err(bad("json", &rr).into())
 }
 
 // ----------------------------------------------
@@ -66,7 +65,7 @@ pub struct Hi {
     #[serde(rename = "s")] pub salt: Option<String>,
 }
 
-pub fn read_hi<R: BufRead>(r: R) -> io::Result<Hi> {
+pub fn read_hi<R: BufRead>(r: R) -> Result<Hi, Error> {
     let rr = read(r)?;
     if let RawResponse::String(ref s) = rr {
         if s.starts_with("HI ") {
@@ -74,12 +73,12 @@ pub fn read_hi<R: BufRead>(r: R) -> io::Result<Hi> {
         }
     }
 
-    Err(bad("server hi", &rr))
+    Err(bad("server hi", &rr).into())
 }
 
 // ----------------------------------------------
 
-pub fn read_ok<R: BufRead>(r: R) -> io::Result<()> {
+pub fn read_ok<R: BufRead>(r: R) -> Result<(), Error> {
     let rr = read(r)?;
     if let RawResponse::String(ref s) = rr {
         if s == "OK" {
@@ -87,7 +86,7 @@ pub fn read_ok<R: BufRead>(r: R) -> io::Result<()> {
         }
     }
 
-    Err(bad("server ok", &rr))
+    Err(bad("server ok", &rr).into())
 }
 
 // ----------------------------------------------
@@ -104,7 +103,7 @@ enum RawResponse {
     Null,
 }
 
-fn read<R: BufRead>(mut r: R) -> io::Result<RawResponse> {
+fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
     let mut cmdbuf = [0u8; 1];
     r.read_exact(&mut cmdbuf)?;
     match cmdbuf[0] {
@@ -130,7 +129,7 @@ fn read<R: BufRead>(mut r: R) -> io::Result<RawResponse> {
             let l = s.len() - 2;
             s.truncate(l);
 
-            Err(io::Error::new(io::ErrorKind::InvalidInput, s))
+            Err(FaktoryError::new(s).into())
         }
         b':' => {
             // Integer
@@ -144,10 +143,11 @@ fn read<R: BufRead>(mut r: R) -> io::Result<RawResponse> {
 
             match isize::from_str_radix(&*s, 10) {
                 Ok(i) => Ok(RawResponse::Number(i)),
-                Err(_) => Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Invalid integer response: {}", s),
-                )),
+                Err(_) => Err(FaktoryError::BadResponse {
+                    typed_as: "integer",
+                    error: "invalid integer value",
+                    bytes: s.into_bytes(),
+                }.into()),
             }
         }
         b'$' => {
@@ -156,20 +156,17 @@ fn read<R: BufRead>(mut r: R) -> io::Result<RawResponse> {
             let mut bytes = Vec::with_capacity(32);
             r.read_until(b'\n', &mut bytes)?;
             let s = std::str::from_utf8(&bytes[0..bytes.len() - 2]).map_err(|_| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "server bulk response contains non-utf8 size prefix",
-                )
+                FaktoryError::BadResponse {
+                    typed_as: "bulk string",
+                    error: "server bulk response contains non-utf8 size prefix",
+                    bytes: bytes[0..bytes.len() - 2].to_vec(),
+                }
             })?;
 
-            let size = isize::from_str_radix(s, 10).map_err(|_| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!(
-                        "server buld response size prefix is not an integer: '{}'",
-                        s
-                    ),
-                )
+            let size = isize::from_str_radix(s, 10).map_err(|_| FaktoryError::BadResponse {
+                typed_as: "bulk string",
+                error: "server bulk response size prefix is not an integer",
+                bytes: s.as_bytes().to_vec(),
             })?;
 
             if size == -1 {
@@ -193,10 +190,11 @@ fn read<R: BufRead>(mut r: R) -> io::Result<RawResponse> {
             // so we'll just give up
             unimplemented!();
         }
-        c => Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Unexpected leading response byte: '{}'", c),
-        )),
+        c => Err(FaktoryError::BadResponse {
+            typed_as: "unknown",
+            error: "invalid response type prefix",
+            bytes: vec![c],
+        }.into()),
     }
 }
 
@@ -225,8 +223,10 @@ mod test {
     use std::io::{self, Cursor};
     use super::{read, RawResponse};
     use serde_json::{self, Map, Value};
+    use failure::Error;
+    use FaktoryError;
 
-    fn read_json<C: io::BufRead>(c: C) -> serde_json::Result<Option<Value>> {
+    fn read_json<C: io::BufRead>(c: C) -> Result<Option<Value>, Error> {
         super::read_json(c)
     }
 
@@ -246,15 +246,26 @@ mod test {
     fn it_errors_on_bad_numbers() {
         let c = Cursor::new(b":x\r\n");
         let r = read(c).unwrap_err();
-        assert_eq!(r.kind(), io::ErrorKind::InvalidData);
+        if let &FaktoryError::BadResponse {
+            typed_as, error, ..
+        } = r.downcast_ref().unwrap()
+        {
+            assert_eq!(typed_as, "integer");
+            assert_eq!(error, "invalid integer value");
+        } else {
+            unreachable!();
+        }
     }
 
     #[test]
     fn it_parses_errors() {
-        let c = Cursor::new(b"-ERR\r\n");
+        let c = Cursor::new(b"-ERR foo\r\n");
         let r = read(c).unwrap_err();
-        assert_eq!(r.kind(), io::ErrorKind::InvalidInput);
-        assert_eq!(format!("{}", r.into_inner().unwrap()), "ERR");
+        if let &FaktoryError::Internal { ref msg } = r.downcast_ref().unwrap() {
+            assert_eq!(msg, "foo");
+        } else {
+            unreachable!();
+        }
     }
 
     #[test]
@@ -274,7 +285,15 @@ mod test {
     fn it_errors_on_bad_sizes() {
         let c = Cursor::new(b"$x\r\n\r\n");
         let r = read(c).unwrap_err();
-        assert_eq!(r.kind(), io::ErrorKind::InvalidData);
+        if let &FaktoryError::BadResponse {
+            typed_as, error, ..
+        } = r.downcast_ref().unwrap()
+        {
+            assert_eq!(typed_as, "bulk string");
+            assert_eq!(error, "server bulk response size prefix is not an integer");
+        } else {
+            unreachable!();
+        }
     }
 
     #[test]
@@ -335,28 +354,45 @@ mod test {
     #[test]
     fn it_errors_on_bad_json_blob() {
         let c = Cursor::new(b"$9\r\n{\"hello\"}\r\n");
-        let r: io::Error = read_json(c).unwrap_err().into();
-        assert_eq!(r.kind(), io::ErrorKind::InvalidData);
+        let r = read_json(c).unwrap_err();
+        let _: &serde_json::Error = r.downcast_ref().unwrap();
     }
 
     #[test]
     fn it_errors_on_bad_json_string() {
         let c = Cursor::new(b"+{\"hello\"}\r\n");
-        let r: io::Error = read_json(c).unwrap_err().into();
-        assert_eq!(r.kind(), io::ErrorKind::InvalidData);
+        let r = read_json(c).unwrap_err();
+        let _: &serde_json::Error = r.downcast_ref().unwrap();
     }
 
     #[test]
     fn json_error_on_number() {
         let c = Cursor::new(b":9\r\n");
-        let r: io::Error = read_json(c).unwrap_err().into();
-        assert_eq!(r.kind(), io::ErrorKind::InvalidData);
+        let r = read_json(c).unwrap_err();
+        if let &FaktoryError::BadType {
+            expected,
+            ref received,
+        } = r.downcast_ref().unwrap()
+        {
+            assert_eq!(expected, "json");
+            assert_eq!(received, "Number(9)");
+        } else {
+            unreachable!();
+        }
     }
 
     #[test]
     fn it_errors_on_unknown_resp_type() {
         let c = Cursor::new(b"^\r\n");
-        let r: io::Error = read_json(c).unwrap_err().into();
-        assert_eq!(r.kind(), io::ErrorKind::InvalidData);
+        let r = read_json(c).unwrap_err();
+        if let &FaktoryError::BadResponse {
+            typed_as, error, ..
+        } = r.downcast_ref().unwrap()
+        {
+            assert_eq!(typed_as, "unknown");
+            assert_eq!(error, "invalid response type prefix");
+        } else {
+            unreachable!();
+        }
     }
 }

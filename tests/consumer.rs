@@ -1,3 +1,4 @@
+extern crate failure;
 extern crate faktory;
 extern crate mockstream;
 extern crate serde_json;
@@ -70,7 +71,6 @@ fn dequeue() {
     let mut c = c.connect_with(s.clone(), None).unwrap();
     s.ignore(0);
 
-
     s.push_bytes_to_read(
         0,
         b"$188\r\n\
@@ -109,7 +109,6 @@ fn dequeue_first_empty() {
     });
     let mut c = c.connect_with(s.clone(), None).unwrap();
     s.ignore(0);
-
 
     s.push_bytes_to_read(
         0,

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use std::io::prelude::*;
 use serde_json;
-use std::io;
+use failure::Error;
 
 mod cmd;
 mod resp;
@@ -137,15 +137,15 @@ impl Job {
     }
 }
 
-pub fn write_command<W: Write, C: FaktoryCommand>(w: &mut W, command: &C) -> io::Result<()> {
+pub fn write_command<W: Write, C: FaktoryCommand>(w: &mut W, command: &C) -> Result<(), Error> {
     command.issue::<W>(w)?;
-    w.flush()
+    Ok(w.flush()?)
 }
 
 pub fn write_command_and_await_ok<X: BufRead + Write, C: FaktoryCommand>(
     x: &mut X,
     command: &C,
-) -> io::Result<()> {
+) -> Result<(), Error> {
     write_command(x, command)?;
     read_ok(x)
 }

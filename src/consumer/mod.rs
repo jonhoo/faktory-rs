@@ -1,11 +1,11 @@
 use std::io::prelude::*;
-use std::io;
 use std::net::TcpStream;
-use std::error::Error;
 use proto::{self, Client, ClientOptions, HeartbeatStatus, Reconnect};
 use std::sync::{atomic, Arc};
 use atomic_option::AtomicOption;
 use fnv::FnvHashMap;
+use failure::Error;
+use std::error::Error as StdError;
 
 use proto::{Ack, Fail, Job};
 
@@ -214,7 +214,7 @@ where
     /// ```
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
-    pub fn connect(self, url: Option<&str>) -> io::Result<Consumer<TcpStream, F>> {
+    pub fn connect(self, url: Option<&str>) -> Result<Consumer<TcpStream, F>, Error> {
         let url = match url {
             Some(url) => proto::url_parse(url),
             None => proto::url_parse(&proto::get_env_url()),
@@ -228,7 +228,7 @@ where
         mut self,
         stream: S,
         pwd: Option<String>,
-    ) -> io::Result<Consumer<S, F>> {
+    ) -> Result<Consumer<S, F>, Error> {
         self.opts.password = pwd;
         Ok(Consumer::new(
             Client::new(stream, self.opts)?,
@@ -238,7 +238,7 @@ where
     }
 }
 
-enum Failed<E: Error> {
+enum Failed<E: StdError> {
     Application(E),
     BadJobType(String),
 }
@@ -256,7 +256,7 @@ impl<F, S: Read + Write> Consumer<S, F> {
 }
 
 impl<F, S: Read + Write + Reconnect> Consumer<S, F> {
-    fn reconnect(&mut self) -> io::Result<()> {
+    fn reconnect(&mut self) -> Result<(), Error> {
         self.c.reconnect()
     }
 }
@@ -264,7 +264,7 @@ impl<F, S: Read + Write + Reconnect> Consumer<S, F> {
 impl<S, E, F> Consumer<S, F>
 where
     S: Read + Write,
-    E: Error,
+    E: StdError,
     F: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
 {
     fn run_job(&mut self, job: Job) -> Result<(), Failed<E>> {
@@ -278,7 +278,7 @@ where
     }
 
     /// Fetch and run a single job on the current thread, and then return.
-    pub fn run_one<Q>(&mut self, worker: usize, queues: &[Q]) -> io::Result<bool>
+    pub fn run_one<Q>(&mut self, worker: usize, queues: &[Q]) -> Result<bool, Error>
     where
         Q: AsRef<str>,
     {
@@ -339,7 +339,7 @@ where
     }
 
     #[cfg(test)]
-    pub(crate) fn run_n<Q>(&mut self, n: usize, queues: &[Q]) -> io::Result<()>
+    pub(crate) fn run_n<Q>(&mut self, n: usize, queues: &[Q]) -> Result<(), Error>
     where
         Q: AsRef<str>,
     {
@@ -353,10 +353,10 @@ where
 impl<S, E, F> Consumer<S, F>
 where
     S: Read + Write + Reconnect + Send + 'static,
-    E: Error,
+    E: StdError,
     F: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
 {
-    fn for_worker(&mut self) -> io::Result<Self> {
+    fn for_worker(&mut self) -> Result<Self, Error> {
         Ok(Consumer {
             c: self.c.connect_again()?,
             callbacks: Arc::clone(&self.callbacks),
@@ -376,7 +376,7 @@ where
     /// a job success or failure, the result will be re-reported to the server without re-executing
     /// the job. If the worker was terminated (i.e., `run` returns with an `Ok` response), the
     /// worker should **not** try to resume by calling `run` again. This will cause a panic.
-    pub fn run<Q>(&mut self, queues: &[Q]) -> io::Result<usize>
+    pub fn run<Q>(&mut self, queues: &[Q]) -> Result<usize, Error>
     where
         Q: AsRef<str>,
     {
@@ -405,7 +405,7 @@ where
                     // the resulting OK that failed. in that case, we would get an error response
                     // when re-sending the job response. this should not count as critical. other
                     // errors, however, should!
-                    if e.kind() != io::ErrorKind::InvalidInput {
+                    if e.downcast_ref::<::std::io::Error>().is_some() {
                         last_job_result.swap(res, atomic::Ordering::SeqCst);
                         return Err(e);
                     }
@@ -438,7 +438,7 @@ where
                     Ok(())
                 }))
             })
-            .collect::<io::Result<Vec<_>>>()?;
+            .collect::<Result<Vec<_>, Error>>()?;
 
         // listen for heartbeats
         let mut target = STATUS_RUNNING;
@@ -586,7 +586,7 @@ mod tests {
         p.enqueue(j).unwrap();
 
         let mut c = ConsumerBuilder::default();
-        c.register("foobar", |job| -> io::Result<()> {
+        c.register("foobar", |job| -> Result<(), io::Error> {
             assert_eq!(job.args, vec!["z"]);
             Ok(())
         });

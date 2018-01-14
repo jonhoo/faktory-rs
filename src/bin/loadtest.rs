@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate clap;
+extern crate failure;
 extern crate faktory;
 extern crate rand;
 extern crate serde_json;
@@ -40,8 +41,7 @@ fn main() {
 
     println!(
         "Running loadtest with {} jobs and {} threads",
-        jobs,
-        threads
+        jobs, threads
     );
 
     // ensure that we can actually connect to the server
@@ -54,7 +54,7 @@ fn main() {
     let popped = sync::Arc::new(atomic::AtomicUsize::new(0));
 
     let start = time::Instant::now();
-    let threads: Vec<thread::JoinHandle<Result<_, io::Error>>> = (0..threads)
+    let threads: Vec<thread::JoinHandle<Result<_, failure::Error>>> = (0..threads)
         .map(|_| {
             let pushed = sync::Arc::clone(&pushed);
             let popped = sync::Arc::clone(&popped);
