@@ -4,6 +4,7 @@ use std::net::TcpStream;
 use proto::{self, Reconnect};
 use native_tls::TlsConnector;
 use native_tls::TlsStream as NativeTlsStream;
+use failure::Error;
 
 /// A reconnectable stream encrypted with TLS.
 ///
@@ -39,20 +40,20 @@ impl TlsStream<TcpStream> {
     /// ```
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
-    pub fn connect(url: Option<&str>) -> io::Result<Self> {
-        TlsStream::with_connector(TlsConnector::builder().unwrap().build().unwrap(), url)
+    pub fn connect(url: Option<&str>) -> Result<Self, Error> {
+        TlsStream::with_connector(TlsConnector::builder()?.build()?, url)
     }
 
     /// Create a new TLS connection over TCP using a non-default TLS configuration.
     ///
     /// See `connect` for details about the `url` parameter.
-    pub fn with_connector(tls: TlsConnector, url: Option<&str>) -> io::Result<Self> {
+    pub fn with_connector(tls: TlsConnector, url: Option<&str>) -> Result<Self, Error> {
         let url = match url {
             Some(url) => proto::url_parse(url),
             None => proto::url_parse(&proto::get_env_url()),
         }?;
         let stream = TcpStream::connect(proto::host_from_url(&url))?;
-        TlsStream::new(stream, tls, url.host_str().unwrap())
+        Ok(TlsStream::new(stream, tls, url.host_str().unwrap())?)
     }
 }
 
