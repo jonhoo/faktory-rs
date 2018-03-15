@@ -18,18 +18,18 @@ const STATUS_TERMINATING: usize = 2;
 /// # Building the worker
 ///
 /// Faktory needs a decent amount of information from its workers, such as a unique worker ID, a
-/// hostname for the worker, its process ID, and a set of *labels* used to indicate which jobs the
-/// worker can accept. In order to enable setting all these, constructing a worker is a two-step
-/// process. You first use a [`ConsumerBuilder`](struct.ConsumerBuilder.html) (which conveniently
-/// implements a sensible `Default`) to set the worker metadata, as well as to register any job
-/// handlers. You then use one of the `connect_*` methods to finalize the worker and connect to the
-/// Faktory server.
+/// hostname for the worker, its process ID, and a set of labels used to identify the worker. In
+/// order to enable setting all these, constructing a worker is a two-step process. You first use a
+/// [`ConsumerBuilder`](struct.ConsumerBuilder.html) (which conveniently implements a sensible
+/// `Default`) to set the worker metadata, as well as to register any job handlers. You then use
+/// one of the `connect_*` methods to finalize the worker and connect to the Faktory server.
 ///
 /// In most cases, `ConsumerBuilder::default()` will do what you want. You only need to augment it
 /// with calls to [`register`](struct.ConsumerBuilder.html#method.register) to register handlers
 /// for each of your job types, and then you can connect. If you have different *types* of workers,
-/// you may also want to use [`labels`](struct.ConsumerBuilder.html#method.labels) to further
-/// narrow down what kind of jobs this worker should accept.
+/// you may also want to use [`labels`](struct.ConsumerBuilder.html#method.labels) to distinguish
+/// them in the Faktory Web UI. To specify that some jobs should only go to some workers, use
+/// different queues.
 ///
 /// ## Handlers
 ///
