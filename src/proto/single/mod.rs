@@ -130,7 +130,7 @@ impl Job {
     }
 
     /// This job's id.
-    pub fn jid(&self) -> &str {
+    pub fn id(&self) -> &str {
         &self.jid
     }
 
