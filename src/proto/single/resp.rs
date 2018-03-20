@@ -60,9 +60,12 @@ pub fn read_json<R: BufRead, T: serde::de::DeserializeOwned>(r: R) -> Result<Opt
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Hi {
-    #[serde(rename = "v")] pub version: usize,
-    #[serde(rename = "i")] pub iterations: Option<usize>,
-    #[serde(rename = "s")] pub salt: Option<String>,
+    #[serde(rename = "v")]
+    pub version: usize,
+    #[serde(rename = "i")]
+    pub iterations: Option<usize>,
+    #[serde(rename = "s")]
+    pub salt: Option<String>,
 }
 
 pub fn read_hi<R: BufRead>(r: R) -> Result<Hi, Error> {

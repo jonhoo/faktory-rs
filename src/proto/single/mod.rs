@@ -90,12 +90,15 @@ pub struct Job {
 pub struct Failure {
     retry_count: usize,
     failed_at: String,
-    #[serde(skip_serializing_if = "Option::is_none")] next_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    next_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "errtype")]
     kind: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] backtrace: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    backtrace: Option<Vec<String>>,
 }
 
 impl Job {

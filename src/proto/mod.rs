@@ -22,16 +22,14 @@ pub use self::single::Hi;
 
 #[derive(Debug, Fail)]
 pub enum ConnectError {
-    #[fail(display = "unknown scheme: {}", scheme)] BadScheme {
-        scheme: String,
-    },
-    #[fail(display = "no hostname given")] MissingHostname,
-    #[fail(display = "server requires authentication")] AuthenticationNeeded,
+    #[fail(display = "unknown scheme: {}", scheme)]
+    BadScheme { scheme: String },
+    #[fail(display = "no hostname given")]
+    MissingHostname,
+    #[fail(display = "server requires authentication")]
+    AuthenticationNeeded,
     #[fail(display = "server version mismatch (theirs: {}, ours: {})", theirs, ours)]
-    VersionMismatch {
-        ours: usize,
-        theirs: usize,
-    },
+    VersionMismatch { ours: usize, theirs: usize },
 }
 
 pub(crate) fn get_env_url() -> String {

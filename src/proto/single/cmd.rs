@@ -21,7 +21,8 @@ impl FaktoryCommand for Info {
 
 #[derive(Serialize)]
 pub struct Ack {
-    #[serde(rename = "jid")] job_id: String,
+    #[serde(rename = "jid")]
+    job_id: String,
 }
 
 impl FaktoryCommand for Ack {
@@ -65,10 +66,13 @@ impl Heartbeat {
 
 #[derive(Serialize, Clone)]
 pub struct Fail {
-    #[serde(rename = "jid")] job_id: String,
-    #[serde(rename = "errtype")] kind: String,
+    #[serde(rename = "jid")]
+    job_id: String,
+    #[serde(rename = "errtype")]
+    kind: String,
     message: String,
-    #[serde(skip_serializing_if = "Vec::is_empty")] backtrace: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    backtrace: Vec<String>,
 }
 
 impl FaktoryCommand for Fail {
@@ -150,12 +154,17 @@ where
 
 #[derive(Serialize)]
 pub struct Hello {
-    #[serde(skip_serializing_if = "Option::is_none")] pub hostname: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub wid: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub pid: Option<usize>,
-    #[serde(skip_serializing_if = "Vec::is_empty")] pub labels: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hostname: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pid: Option<usize>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<String>,
 
-    #[serde(rename = "v")] version: usize,
+    #[serde(rename = "v")]
+    version: usize,
 
     /// Hash is hex(sha256(password + salt))
     #[serde(rename = "pwdhash")]
