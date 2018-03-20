@@ -63,8 +63,7 @@ const STATUS_TERMINATING: usize = 2;
 ///
 /// To fetch jobs, the `Consumer` must first be connected to the Faktory server. Exactly how you do
 /// that depends on your setup. In most cases, you'll want to use `Consumer::connect`, and provide
-/// a connection URL (`None` will use the Faktory environment variables). If you supply a URL, it
-/// must be of the form:
+/// a connection URL. If you supply a URL, it must be of the form:
 ///
 /// ```text
 /// protocol://[:password@]hostname[:port]
@@ -72,11 +71,7 @@ const STATUS_TERMINATING: usize = 2;
 ///
 /// Faktory suggests using the `FAKTORY_PROVIDER` and `FAKTORY_URL` environment variables (see
 /// their docs for more information) with `localhost:7419` as the fallback default. If you want
-/// this behavior, use
-/// [`ConsumerBuilder::connect_env`](struct.ConsumerBuilder.html#method.connect_env). If not, you
-/// can supply the URL directly to
-/// [`ConsumerBuilder::connect`](struct.ConsumerBuilder.html#method.connect). Both methods take a
-/// connection type as described above.
+/// this behavior, pass `None` as the URL.
 ///
 /// See the [`Producer` examples](struct.Producer.html#examples) for examples of how to connect to
 /// different Factory setups.
