@@ -126,6 +126,11 @@ impl Job {
         }
     }
 
+    /// This job's id.
+    pub fn jid(&self) -> &str {
+        &self.jid
+    }
+
     /// This job's type.
     pub fn kind(&self) -> &str {
         &self.kind
