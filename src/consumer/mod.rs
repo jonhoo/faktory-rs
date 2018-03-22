@@ -13,27 +13,8 @@ const STATUS_RUNNING: usize = 0;
 const STATUS_QUIET: usize = 1;
 const STATUS_TERMINATING: usize = 2;
 
-/// A trait for anything that can handle a Faktory job.
-///
-/// Unfortunately a functor-type object like this is far more convenient
-/// and flexible than a closure.
-///
-/// TODO: It would be nice to loosen the Send+Sync and immutable constraints some...
-/// Probably can't as long as we assume this has to be runnable in a thread pool, though.
-pub trait JobRunner: Send + Sync {
-    type Error;
-    fn run(&self, job: Job) -> Result<(), Self::Error>;
-}
-
-impl<E, T> JobRunner for T
-    where T: Fn(Job) -> Result<(), E> + Send + Sync {
-    type Error = E;
-    fn run(&self, job: Job) -> Result<(), Self::Error> {
-        self(job)
-    }
-}
-
-type BoxedJobRunner<E> = Box<JobRunner<Error=E>>;
+type JobRunner<E> = Fn(Job) -> Result<(), E> + Send + Sync;
+type BoxedJobRunner<E> = Box<JobRunner<E>>;
 
 /// `Consumer` is used to run a worker that processes jobs provided by Faktory.
 ///
@@ -207,7 +188,8 @@ impl<E> ConsumerBuilder<E> {
     pub fn register<K, J>(&mut self, kind: K, handler: J) -> &mut Self
     where
         K: Into<String>,
-        J: JobRunner<Error=E> + 'static
+        // Annoyingly, can't just use the JobRunner<E> type alias here.
+        J: Fn(Job) -> Result<(), E> + Send + Sync + 'static
     {
         self.callbacks.insert(kind.into(), Box::new(handler));
         self
@@ -280,7 +262,7 @@ where
 {
     fn run_job(&mut self, job: Job) -> Result<(), Failed<E>> {
         match self.callbacks.get(&job.kind) {
-            Some(callback) => callback.run(job).map_err(Failed::Application),
+            Some(callback) => callback(job).map_err(Failed::Application),
             None => {
                 // cannot execute job, since no handler exists
                 Err(Failed::BadJobType(job.kind))
