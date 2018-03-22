@@ -185,11 +185,11 @@ impl<E> ConsumerBuilder<E> {
     ///
     /// Whenever a job whose type matches `kind` is fetched from the Faktory, the given handler
     /// function is called with that job as its argument.
-    pub fn register<K, J>(&mut self, kind: K, handler: J) -> &mut Self
+    pub fn register<K, H>(&mut self, kind: K, handler: H) -> &mut Self
     where
         K: Into<String>,
         // Annoyingly, can't just use the JobRunner<E> type alias here.
-        J: Fn(Job) -> Result<(), E> + Send + Sync + 'static
+        H: Fn(Job) -> Result<(), E> + Send + Sync + 'static
     {
         self.callbacks.insert(kind.into(), Box::new(handler));
         self
