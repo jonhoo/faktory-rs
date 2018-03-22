@@ -13,6 +13,9 @@ const STATUS_RUNNING: usize = 0;
 const STATUS_QUIET: usize = 1;
 const STATUS_TERMINATING: usize = 2;
 
+type JobRunner<E> = Fn(Job) -> Result<(), E> + Send + Sync;
+type BoxedJobRunner<E> = Box<JobRunner<E>>;
+
 /// `Consumer` is used to run a worker that processes jobs provided by Faktory.
 ///
 /// # Building the worker
@@ -105,28 +108,27 @@ const STATUS_TERMINATING: usize = 2;
 ///     println!("worker failed: {}", e);
 /// }
 /// ```
-pub struct Consumer<S, F>
+pub struct Consumer<S, E>
 where
     S: Read + Write,
 {
     c: Client<S>,
     last_job_results: Arc<Vec<AtomicOption<Result<String, Fail>>>>,
     running_jobs: Arc<Vec<AtomicOption<String>>>,
-    callbacks: Arc<FnvHashMap<String, F>>,
+    callbacks: Arc<FnvHashMap<String, BoxedJobRunner<E>>>,
     terminated: bool,
 }
 
 /// Convenience wrapper for building a Faktory worker.
 ///
 /// See the [`Consumer`](struct.Consumer.html) documentation for details.
-#[derive(Clone)]
-pub struct ConsumerBuilder<F> {
+pub struct ConsumerBuilder<E> {
     opts: ClientOptions,
     workers: usize,
-    callbacks: FnvHashMap<String, F>,
+    callbacks: FnvHashMap<String, BoxedJobRunner<E>>,
 }
 
-impl<F> Default for ConsumerBuilder<F> {
+impl<E> Default for ConsumerBuilder<E> {
     /// Construct a new worker with default worker options and the url fetched from environment
     /// variables.
     ///
@@ -146,7 +148,7 @@ impl<F> Default for ConsumerBuilder<F> {
     }
 }
 
-impl<F> ConsumerBuilder<F> {
+impl<E> ConsumerBuilder<E> {
     /// Set the hostname to use for this worker.
     ///
     /// Defaults to the machine's hostname as reported by the operating system.
@@ -178,21 +180,18 @@ impl<F> ConsumerBuilder<F> {
         self.workers = w;
         self
     }
-}
 
-impl<F, E> ConsumerBuilder<F>
-where
-    F: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
-{
     /// Register a handler function for the given job type (`kind`).
     ///
     /// Whenever a job whose type matches `kind` is fetched from the Faktory, the given handler
     /// function is called with that job as its argument.
-    pub fn register<K>(&mut self, kind: K, handler: F) -> &mut Self
+    pub fn register<K, J>(&mut self, kind: K, handler: J) -> &mut Self
     where
         K: Into<String>,
+        // Annoyingly, can't just use the JobRunner<E> type alias here.
+        J: Fn(Job) -> Result<(), E> + Send + Sync + 'static
     {
-        self.callbacks.insert(kind.into(), handler);
+        self.callbacks.insert(kind.into(), Box::new(handler));
         self
     }
 
@@ -209,7 +208,7 @@ where
     /// ```
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
-    pub fn connect(self, url: Option<&str>) -> Result<Consumer<TcpStream, F>, Error> {
+    pub fn connect(self, url: Option<&str>) -> Result<Consumer<TcpStream, E>, Error> {
         let url = match url {
             Some(url) => proto::url_parse(url),
             None => proto::url_parse(&proto::get_env_url()),
@@ -223,7 +222,7 @@ where
         mut self,
         stream: S,
         pwd: Option<String>,
-    ) -> Result<Consumer<S, F>, Error> {
+    ) -> Result<Consumer<S, E>, Error> {
         self.opts.password = pwd;
         Ok(Consumer::new(
             Client::new(stream, self.opts)?,
@@ -238,8 +237,8 @@ enum Failed<E: StdError> {
     BadJobType(String),
 }
 
-impl<F, S: Read + Write> Consumer<S, F> {
-    fn new(c: Client<S>, workers: usize, callbacks: FnvHashMap<String, F>) -> Self {
+impl<E, S: Read + Write> Consumer<S, E> {
+    fn new(c: Client<S>, workers: usize, callbacks: FnvHashMap<String, BoxedJobRunner<E>>) -> Self {
         Consumer {
             c: c,
             callbacks: Arc::new(callbacks),
@@ -250,21 +249,20 @@ impl<F, S: Read + Write> Consumer<S, F> {
     }
 }
 
-impl<F, S: Read + Write + Reconnect> Consumer<S, F> {
+impl<E, S: Read + Write + Reconnect> Consumer<S, E> {
     fn reconnect(&mut self) -> Result<(), Error> {
         self.c.reconnect()
     }
 }
 
-impl<S, E, F> Consumer<S, F>
+impl<S, E> Consumer<S, E>
 where
     S: Read + Write,
     E: StdError,
-    F: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
 {
     fn run_job(&mut self, job: Job) -> Result<(), Failed<E>> {
         match self.callbacks.get(&job.kind) {
-            Some(callback) => (callback)(job).map_err(Failed::Application),
+            Some(callback) => callback(job).map_err(Failed::Application),
             None => {
                 // cannot execute job, since no handler exists
                 Err(Failed::BadJobType(job.kind))
@@ -345,11 +343,10 @@ where
     }
 }
 
-impl<S, E, F> Consumer<S, F>
+impl<S, E> Consumer<S, E>
 where
     S: Read + Write + Reconnect + Send + 'static,
-    E: StdError,
-    F: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
+    E: StdError + 'static,
 {
     fn for_worker(&mut self) -> Result<Self, Error> {
         Ok(Consumer {
@@ -581,7 +578,7 @@ mod tests {
         p.enqueue(j).unwrap();
 
         let mut c = ConsumerBuilder::default();
-        c.register("foobar", |job| -> Result<(), io::Error> {
+        c.register("foobar", |job: Job| -> Result<(), io::Error> {
             assert_eq!(job.args, vec!["z"]);
             Ok(())
         });
