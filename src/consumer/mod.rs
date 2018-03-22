@@ -548,7 +548,7 @@ where
     /// Run this worker until the server tells us to exit or a connection cannot be re-established.
     ///
     /// This function never returns. When the worker decides to exit, the process is terminated.
-    pub fn run_to_completion<Q, U>(mut self, queues: &[Q]) -> !
+    pub fn run_to_completion<Q>(mut self, queues: &[Q]) -> !
     where
         Q: AsRef<str>,
     {
