@@ -64,7 +64,7 @@ fn hello_pwd() {
 fn dequeue() {
     let mut s = mock::Stream::default();
     let mut c = ConsumerBuilder::default();
-    c.register("foobar", |job| -> io::Result<()> {
+    c.register("foobar", |job: Job| -> io::Result<()> {
         assert_eq!(job.args(), &["z"]);
         Ok(())
     });
@@ -103,7 +103,7 @@ fn dequeue() {
 fn dequeue_first_empty() {
     let mut s = mock::Stream::default();
     let mut c = ConsumerBuilder::default();
-    c.register("foobar", |job| -> io::Result<()> {
+    c.register("foobar", |job: Job| -> io::Result<()> {
         assert_eq!(job.args(), &["z"]);
         Ok(())
     });
