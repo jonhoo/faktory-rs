@@ -177,7 +177,10 @@ impl<S: Read + Write> Client<S> {
             self.opts.pid = Some(pid);
             let wid = self.opts.wid.clone().unwrap_or_else(|| {
                 use rand::{thread_rng, Rng};
-                thread_rng().gen_ascii_chars().take(32).collect()
+                thread_rng()
+                    .sample_iter(&rand::distributions::Alphanumeric)
+                    .take(32)
+                    .collect()
             });
             self.opts.wid = Some(wid);
 

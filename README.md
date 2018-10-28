@@ -5,6 +5,7 @@
 [![Build Status](https://travis-ci.org/jonhoo/faktory-rs.svg?branch=master)](https://travis-ci.org/jonhoo/faktory-rs)
 [![Windows Build Status](https://ci.appveyor.com/api/projects/status/github/jonhoo/faktory-rs?svg=true&branch=master)](https://ci.appveyor.com/project/jonhoo/faktory-rs)
 [![Codecov](https://codecov.io/github/jonhoo/faktory-rs/coverage.svg?branch=master)](https://codecov.io/gh/jonhoo/faktory-rs)
+[![dependency status](https://deps.rs/repo/github/jonhoo/faktory-rs/status.svg)](https://deps.rs/repo/github/jonhoo/faktory-rs)
 
 API bindings for Faktory workers and job producers.
 
@@ -61,10 +62,4 @@ let mut c = c.connect(None).unwrap();
 if let Err(e) = c.run(&["default"]) {
     println!("worker failed: {}", e);
 }
-```
-
-To start a Faktory server on Docker, use the [Docker Hub
-image](https://hub.docker.com/r/contribsys/faktory/) with:
-```console
-$ docker run --rm -it -v faktory-data:/var/lib/faktory -p 127.0.0.1:7419:7419 -p 127.0.0.1:7420:7420 contribsys/faktory:latest -b 0.0.0.0:7419 -e production
 ```

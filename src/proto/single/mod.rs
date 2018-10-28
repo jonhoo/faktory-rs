@@ -109,7 +109,10 @@ impl Job {
         A: Into<serde_json::Value>,
     {
         use rand::{thread_rng, Rng};
-        let random_jid = thread_rng().gen_ascii_chars().take(16).collect();
+        let random_jid = thread_rng()
+            .sample_iter(&rand::distributions::Alphanumeric)
+            .take(16)
+            .collect();
         use chrono::prelude::*;
         Job {
             jid: random_jid,
