@@ -1,10 +1,10 @@
-use std::io::prelude::*;
-use std::io;
-use std::net::TcpStream;
-use proto::{self, Reconnect};
+use failure::Error;
 use native_tls::TlsConnector;
 use native_tls::TlsStream as NativeTlsStream;
-use failure::Error;
+use proto::{self, Reconnect};
+use std::io;
+use std::io::prelude::*;
+use std::net::TcpStream;
 
 /// A reconnectable stream encrypted with TLS.
 ///
@@ -41,7 +41,7 @@ impl TlsStream<TcpStream> {
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
     pub fn connect(url: Option<&str>) -> Result<Self, Error> {
-        TlsStream::with_connector(TlsConnector::builder()?.build()?, url)
+        TlsStream::with_connector(TlsConnector::builder().build()?, url)
     }
 
     /// Create a new TLS connection over TCP using a non-default TLS configuration.
@@ -64,16 +64,13 @@ where
 {
     /// Create a new TLS connection on an existing stream.
     pub fn default(stream: S, hostname: &str) -> io::Result<Self> {
-        Self::new(
-            stream,
-            TlsConnector::builder().unwrap().build().unwrap(),
-            hostname,
-        )
+        Self::new(stream, TlsConnector::builder().build().unwrap(), hostname)
     }
 
     /// Create a new TLS connection on an existing stream with a non-default TLS configuration.
     pub fn new(stream: S, tls: TlsConnector, hostname: &str) -> io::Result<Self> {
-        let stream = tls.clone()
+        let stream = tls
+            .clone()
             .connect(hostname, stream)
             .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e))?;
 
