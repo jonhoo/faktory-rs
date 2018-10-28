@@ -1,8 +1,8 @@
-use std::collections::HashMap;
 use chrono::{DateTime, Utc};
-use std::io::prelude::*;
-use serde_json;
 use failure::Error;
+use serde_json;
+use std::collections::HashMap;
+use std::io::prelude::*;
 
 mod cmd;
 mod resp;

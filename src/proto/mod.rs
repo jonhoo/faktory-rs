@@ -1,13 +1,13 @@
 use bufstream::BufStream;
+use failure::Error;
 use hostname::get_hostname;
 use libc::getpid;
-use std::io::prelude::*;
-use std::io;
 use serde;
 use serde_json;
+use std::io;
+use std::io::prelude::*;
 use std::net::TcpStream;
 use url::Url;
-use failure::Error;
 use FaktoryError;
 
 pub(crate) const EXPECTED_PROTOCOL_VERSION: usize = 2;
@@ -28,7 +28,10 @@ pub enum ConnectError {
     MissingHostname,
     #[fail(display = "server requires authentication")]
     AuthenticationNeeded,
-    #[fail(display = "server version mismatch (theirs: {}, ours: {})", theirs, ours)]
+    #[fail(
+        display = "server version mismatch (theirs: {}, ours: {})",
+        theirs, ours
+    )]
     VersionMismatch { ours: usize, theirs: usize },
 }
 
@@ -160,13 +163,15 @@ impl<S: Read + Write> Client<S> {
         // fill in any missing options, and remember them for re-connect
         let mut hello = single::Hello::default();
         if !self.opts.is_producer {
-            let hostname = self.opts
+            let hostname = self
+                .opts
                 .hostname
                 .clone()
                 .or_else(get_hostname)
                 .unwrap_or_else(|| "local".to_string());
             self.opts.hostname = Some(hostname);
-            let pid = self.opts
+            let pid = self
+                .opts
                 .pid
                 .unwrap_or_else(|| unsafe { getpid() } as usize);
             self.opts.pid = Some(pid);
@@ -224,7 +229,8 @@ impl<S: Read + Write> Client<S> {
 
         match single::read_json::<_, serde_json::Value>(&mut self.stream)? {
             None => Ok(HeartbeatStatus::Ok),
-            Some(s) => match s.as_object()
+            Some(s) => match s
+                .as_object()
                 .and_then(|m| m.get("state"))
                 .and_then(|s| s.as_str())
             {
@@ -233,7 +239,8 @@ impl<S: Read + Write> Client<S> {
                 _ => Err(FaktoryError::BadType {
                     expected: "heartbeat response",
                     received: format!("{}", s),
-                }.into()),
+                }
+                .into()),
             },
         }
     }
@@ -271,7 +278,8 @@ mod tests {
         Client::new(
             TcpStream::connect("localhost:7419").unwrap(),
             ClientOptions::default(),
-        ).unwrap();
+        )
+        .unwrap();
     }
 
     #[test]
