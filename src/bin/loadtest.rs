@@ -6,13 +6,13 @@ extern crate rand;
 extern crate serde_json;
 
 use clap::{App, Arg};
-use rand::Rng;
-use std::process;
-use std::time;
-use std::thread;
-use std::io;
-use std::sync::{self, atomic};
 use faktory::*;
+use rand::Rng;
+use std::io;
+use std::process;
+use std::sync::{self, atomic};
+use std::thread;
+use std::time;
 
 const QUEUES: &[&str] = &["queue0", "queue1", "queue2", "queue3", "queue4"];
 
@@ -64,7 +64,7 @@ fn main() {
                 let mut c = ConsumerBuilder::default();
                 c.register("SomeJob", |_| {
                     let mut rng = rand::thread_rng();
-                    if rng.gen_weighted_bool(100) {
+                    if rng.gen_bool(0.01) {
                         Err(io::Error::new(io::ErrorKind::Other, "worker closed"))
                     } else {
                         Ok(())
