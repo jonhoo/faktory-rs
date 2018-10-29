@@ -31,7 +31,8 @@ pub enum ConnectError {
     AuthenticationNeeded,
     #[fail(
         display = "server version mismatch (theirs: {}, ours: {})",
-        theirs, ours
+        theirs,
+        ours
     )]
     VersionMismatch { ours: usize, theirs: usize },
 }

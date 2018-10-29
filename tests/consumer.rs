@@ -46,7 +46,8 @@ fn hello_pwd() {
 
     let mut c = ConsumerBuilder::default();
     c.register("never_called", |_| -> io::Result<()> { unreachable!() });
-    let c = c.connect_with(s.clone(), Some("foobar".to_string()))
+    let c = c
+        .connect_with(s.clone(), Some("foobar".to_string()))
         .unwrap();
     let written = s.pop_bytes_written(0);
     assert!(written.starts_with(b"HELLO {"));
@@ -408,9 +409,9 @@ fn terminate() {
         "{}",
         std::str::from_utf8(&written[beat.len()..(written.len() - b"\r\nEND\r\n".len())]).unwrap()
     );
-    let written: serde_json::Value = serde_json::from_slice(
-        &written[beat.len()..(written.len() - b"\r\nEND\r\n".len())],
-    ).unwrap();
+    let written: serde_json::Value =
+        serde_json::from_slice(&written[beat.len()..(written.len() - b"\r\nEND\r\n".len())])
+            .unwrap();
     assert_eq!(
         written
             .as_object()
