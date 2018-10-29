@@ -2,6 +2,7 @@ use bufstream::BufStream;
 use failure::Error;
 use hostname::get_hostname;
 use libc::getpid;
+use rand;
 use serde;
 use serde_json;
 use std::io;

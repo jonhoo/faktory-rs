@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use failure::Error;
+use rand;
 use serde_json;
 use std::collections::HashMap;
 use std::io::prelude::*;
