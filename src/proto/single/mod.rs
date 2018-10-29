@@ -133,6 +133,15 @@ impl Job {
         }
     }
 
+    /// Place this job on the given `queue`.
+    ///
+    /// If this method is not called (or `self.queue` set otherwise), the queue will be set to
+    /// "default".
+    pub fn on_queue<S: Into<String>>(mut self, queue: S) -> Self {
+        self.queue = queue.into();
+        self
+    }
+
     /// This job's id.
     pub fn id(&self) -> &str {
         &self.jid

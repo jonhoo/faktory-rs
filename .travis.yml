@@ -5,6 +5,8 @@ addons:
     apt:
         packages:
             - libssl-dev
+services:
+  - docker
 cache: cargo
 rust:
   - stable
@@ -17,6 +19,9 @@ script:
   - cargo build --verbose
   - cargo test --verbose
   - cargo test --verbose --features tls
+before_install:
+  - docker pull contribsys/faktory:latest
+  - docker run -d -p 127.0.0.1:7419:7419 -p 127.0.0.1:7420:7420 contribsys/faktory:latest /faktory -b :7419 -w :7420
 after_success: |
   if [[ "$TRAVIS_RUST_VERSION" == stable ]]; then
     bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
