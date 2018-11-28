@@ -9,19 +9,16 @@ use failure::Error;
 /// # Connecting to Faktory
 ///
 /// To issue jobs, the `Producer` must first be connected to the Faktory server. Exactly how you do
-/// that depends on your setup. In most cases, you'll want to use `Producer::connect`, and provide
-/// a connection URL (`None` will use the Faktory environment variables). If you supply a URL, it
-/// must be of the form:
+/// that depends on your setup. Faktory suggests using the `FAKTORY_PROVIDER` and `FAKTORY_URL`
+/// environment variables (see their docs for more information) with `localhost:7419` as the
+/// fallback default. If you want this behavior, pass `None` to
+/// [`Producer::connect`](struct.Producer.html#method.connect). If not, you can supply the URL
+/// directly to [`Producer::connect`](struct.Producer.html#method.connect) in the form:
 ///
 /// ```text
 /// protocol://[:password@]hostname[:port]
 /// ```
 ///
-/// Faktory suggests using the `FAKTORY_PROVIDER` and `FAKTORY_URL` environment variables (see
-/// their docs for more information) with `localhost:7419` as the fallback default. If you want
-/// this behavior, use [`Producer::connect_env`](struct.Producer.html#method.connect_env). If not,
-/// you can supply the URL directly to [`Producer::connect`](struct.Producer.html#method.connect).
-/// Both methods take a connection type as described above.
 ///
 /// # Issuing jobs
 ///
