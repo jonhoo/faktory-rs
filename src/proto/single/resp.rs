@@ -1,19 +1,21 @@
-use std::io::prelude::*;
-use serde_json;
-use serde;
-use std;
 use failure::Error;
+use serde;
+use serde_json;
+use std;
+use std::io::prelude::*;
 use FaktoryError;
 
 fn bad(expected: &'static str, got: &RawResponse) -> FaktoryError {
     use std;
     let stringy = match *got {
         RawResponse::String(ref s) => Some(&**s),
-        RawResponse::Blob(ref b) => if let Ok(s) = std::str::from_utf8(b) {
-            Some(s)
-        } else {
-            None
-        },
+        RawResponse::Blob(ref b) => {
+            if let Ok(s) = std::str::from_utf8(b) {
+                Some(s)
+            } else {
+                None
+            }
+        }
         _ => None,
     };
 
@@ -150,7 +152,8 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
                     typed_as: "integer",
                     error: "invalid integer value",
                     bytes: s.into_bytes(),
-                }.into()),
+                }
+                .into()),
             }
         }
         b'$' => {
@@ -197,7 +200,8 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
             typed_as: "unknown",
             error: "invalid response type prefix",
             bytes: vec![c],
-        }.into()),
+        }
+        .into()),
     }
 }
 
@@ -223,10 +227,10 @@ impl From<Vec<u8>> for RawResponse {
 
 #[cfg(test)]
 mod test {
-    use std::io::{self, Cursor};
     use super::{read, RawResponse};
-    use serde_json::{self, Map, Value};
     use failure::Error;
+    use serde_json::{self, Map, Value};
+    use std::io::{self, Cursor};
     use FaktoryError;
 
     fn read_json<C: io::BufRead>(c: C) -> Result<Option<Value>, Error> {

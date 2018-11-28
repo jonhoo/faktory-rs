@@ -1,8 +1,8 @@
-use std::io::prelude::*;
-use std::net::TcpStream;
+use failure::Error;
 use proto::{self, Client, Info, Job, Push};
 use serde_json;
-use failure::Error;
+use std::io::prelude::*;
+use std::net::TcpStream;
 
 /// `Producer` is used to enqueue new jobs that will in turn be processed by Faktory workers.
 ///

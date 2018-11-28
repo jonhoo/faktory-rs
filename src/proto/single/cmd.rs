@@ -1,7 +1,7 @@
-use std::io::prelude::*;
 use super::Job;
-use serde_json;
 use failure::Error;
+use serde_json;
+use std::io::prelude::*;
 
 pub trait FaktoryCommand {
     fn issue<W: Write>(&self, w: &mut Write) -> Result<(), Error>;

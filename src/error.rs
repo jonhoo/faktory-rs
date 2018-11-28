@@ -16,7 +16,10 @@ pub enum FaktoryError {
     },
 
     /// The server sent a response that did not match what was expected.
-    #[fail(display = "expected {}, got unexpected response: {}", expected, received)]
+    #[fail(
+        display = "expected {}, got unexpected response: {}",
+        expected, received
+    )]
     BadType {
         /// The expected response type.
         expected: &'static str,
@@ -26,7 +29,10 @@ pub enum FaktoryError {
     },
 
     /// The server sent a malformed response.
-    #[fail(display = "server sent malformed {} response: {} in {:?}", typed_as, error, bytes)]
+    #[fail(
+        display = "server sent malformed {} response: {} in {:?}",
+        typed_as, error, bytes
+    )]
     BadResponse {
         /// The type of the server response.
         typed_as: &'static str,

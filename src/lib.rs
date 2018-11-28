@@ -72,10 +72,10 @@ extern crate serde_json;
 extern crate sha2;
 extern crate url;
 
-mod producer;
 mod consumer;
-mod proto;
 mod error;
+mod producer;
+mod proto;
 
 #[cfg(feature = "tls")]
 extern crate native_tls;
@@ -85,7 +85,7 @@ mod tls;
 pub use tls::TlsStream;
 
 pub use consumer::{Consumer, ConsumerBuilder};
+pub use error::FaktoryError;
 pub use producer::Producer;
 pub use proto::Job;
 pub use proto::Reconnect;
-pub use error::FaktoryError;

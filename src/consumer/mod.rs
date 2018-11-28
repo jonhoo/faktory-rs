@@ -1,11 +1,11 @@
+use atomic_option::AtomicOption;
+use failure::Error;
+use fnv::FnvHashMap;
+use proto::{self, Client, ClientOptions, HeartbeatStatus, Reconnect};
+use std::error::Error as StdError;
 use std::io::prelude::*;
 use std::net::TcpStream;
-use proto::{self, Client, ClientOptions, HeartbeatStatus, Reconnect};
 use std::sync::{atomic, Arc};
-use atomic_option::AtomicOption;
-use fnv::FnvHashMap;
-use failure::Error;
-use std::error::Error as StdError;
 
 use proto::{Ack, Fail, Job};
 
@@ -189,7 +189,7 @@ impl<E> ConsumerBuilder<E> {
     where
         K: Into<String>,
         // Annoyingly, can't just use the JobRunner<E> type alias here.
-        H: Fn(Job) -> Result<(), E> + Send + Sync + 'static
+        H: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
     {
         self.callbacks.insert(kind.into(), Box::new(handler));
         self
@@ -569,8 +569,8 @@ mod tests {
     //#[allow_fail]
     #[ignore]
     fn it_works() {
-        use std::io;
         use producer::Producer;
+        use std::io;
 
         let mut p = Producer::connect(None).unwrap();
         let mut j = Job::new("foobar", vec!["z"]);

@@ -1,6 +1,6 @@
 use faktory::Reconnect;
-use std::io;
 use mockstream::SyncMockStream;
+use std::io;
 use std::sync::{Arc, Mutex};
 
 struct Inner {
@@ -30,7 +30,8 @@ impl Default for Stream {
 
 impl Reconnect for Stream {
     fn reconnect(&self) -> io::Result<Self> {
-        let mine = self.all
+        let mine = self
+            .all
             .lock()
             .unwrap()
             .take_stream()
