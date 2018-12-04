@@ -1,6 +1,6 @@
 [package]
 name = "faktory"
-version = "0.10.4"
+version = "0.10.5"
 
 description = "API bindings for the language-agnostic Faktory work server"
 readme = "README.md"
@@ -20,6 +20,7 @@ license = "MIT/Apache-2.0"
 travis-ci = { repository = "jonhoo/faktory-rs" }
 appveyor = { repository = "jonhoo/faktory-rs", branch = "master", service = "github" }
 codecov = { repository = "jonhoo/faktory-rs", branch = "master", service = "github" }
+maintenance = { status = "passively-maintained" }
 
 [features]
 default = []
@@ -34,7 +35,7 @@ bufstream = "0.1"
 sha2 = "0.8.0"
 hostname = "0.1.3"
 libc = "0.2"
-rand = "0.5"
+rand = "0.6"
 chrono = { version = "0.4", features = ["serde"] }
 url = "1.5"
 atomic-option = "0.1"
