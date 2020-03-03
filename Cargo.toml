@@ -1,25 +1,19 @@
 [package]
 name = "faktory"
 version = "0.10.5"
-edition = "2018"
-
-description = "API bindings for the language-agnostic Faktory work server"
-readme = "README.md"
-
 authors = ["Jon Gjengset <jon@thesquareplanet.com>"]
+edition = "2018"
+license = "MIT OR Apache-2.0"
 
-documentation = "https://docs.rs/faktory"
-homepage = "https://github.com/jonhoo/faktory-rs"
+readme = "README.md"
+description = "API bindings for the language-agnostic Faktory work server"
 repository = "https://github.com/jonhoo/faktory-rs.git"
 
 keywords = ["faktory", "api-bindings", "work-server", "job-server"]
 categories = ["api-bindings", "asynchronous", "network-programming"]
 
-license = "MIT/Apache-2.0"
-
 [badges]
-travis-ci = { repository = "jonhoo/faktory-rs" }
-appveyor = { repository = "jonhoo/faktory-rs", branch = "master", service = "github" }
+azure-devops = { project = "jonhoo/jonhoo", pipeline = "faktory", build = "19" }
 codecov = { repository = "jonhoo/faktory-rs", branch = "master", service = "github" }
 maintenance = { status = "passively-maintained" }
 

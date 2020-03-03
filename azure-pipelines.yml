@@ -1,5 +1,7 @@
 jobs:
  - template: default.yml@templates
+   parameters:
+     minrust: 1.36.0 # MaybeUninit
  - job: integration
    displayName: cargo test (real)
    pool:
