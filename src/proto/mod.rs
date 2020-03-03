@@ -8,7 +8,7 @@ use std::io;
 use std::io::prelude::*;
 use std::net::TcpStream;
 use url::Url;
-use FaktoryError;
+use crate::FaktoryError;
 
 pub(crate) const EXPECTED_PROTOCOL_VERSION: usize = 2;
 

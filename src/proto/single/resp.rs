@@ -1,12 +1,8 @@
 use failure::Error;
-use serde;
-use serde_json;
-use std;
 use std::io::prelude::*;
-use FaktoryError;
+use crate::FaktoryError;
 
 fn bad(expected: &'static str, got: &RawResponse) -> FaktoryError {
-    use std;
     let stringy = match *got {
         RawResponse::String(ref s) => Some(&**s),
         RawResponse::Blob(ref b) => {
@@ -231,7 +227,7 @@ mod test {
     use failure::Error;
     use serde_json::{self, Map, Value};
     use std::io::{self, Cursor};
-    use FaktoryError;
+    use crate::FaktoryError;
 
     fn read_json<C: io::BufRead>(c: C) -> Result<Option<Value>, Error> {
         super::read_json(c)
@@ -279,7 +275,7 @@ mod test {
     #[should_panic]
     fn it_cant_do_arrays() {
         let c = Cursor::new(b"*\r\n");
-        read(c).is_err();
+        read(c).unwrap_err();
     }
 
     #[test]

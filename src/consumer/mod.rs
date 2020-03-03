@@ -1,19 +1,19 @@
 use atomic_option::AtomicOption;
 use failure::Error;
 use fnv::FnvHashMap;
-use proto::{self, Client, ClientOptions, HeartbeatStatus, Reconnect};
+use crate::proto::{self, Client, ClientOptions, HeartbeatStatus, Reconnect};
 use std::error::Error as StdError;
 use std::io::prelude::*;
 use std::net::TcpStream;
 use std::sync::{atomic, Arc};
 
-use proto::{Ack, Fail, Job};
+use crate::proto::{Ack, Fail, Job};
 
 const STATUS_RUNNING: usize = 0;
 const STATUS_QUIET: usize = 1;
 const STATUS_TERMINATING: usize = 2;
 
-type JobRunner<E> = Fn(Job) -> Result<(), E> + Send + Sync;
+type JobRunner<E> = dyn Fn(Job) -> Result<(), E> + Send + Sync;
 type BoxedJobRunner<E> = Box<JobRunner<E>>;
 
 /// `Consumer` is used to run a worker that processes jobs provided by Faktory.
@@ -308,11 +308,11 @@ where
                     }
                     Failed::Application(e) => {
                         let mut f = Fail::new(jid, "unknown", format!("{}", e));
-                        let mut root = e.cause();
+                        let mut root = e.source();
                         let mut backtrace = Vec::new();
                         while let Some(r) = root.take() {
                             backtrace.push(format!("{}", r));
-                            root = r.cause();
+                            root = r.source();
                         }
                         f.set_backtrace(backtrace);
                         f
@@ -439,8 +439,6 @@ where
             let mut last = time::Instant::now();
 
             loop {
-                use std::thread;
-
                 thread::sleep(time::Duration::from_millis(100));
 
                 // has a worker failed?
@@ -511,7 +509,7 @@ where
 
                     // if this fails, we don't want to exit with Err(),
                     // because we *were* still terminated!
-                    self.c.issue(&f).and_then(|r| r.await_ok()).is_ok();
+                    let _ = self.c.issue(&f).and_then(|r| r.await_ok()).is_ok();
 
                     running += 1;
                 }
@@ -569,7 +567,7 @@ mod tests {
     //#[allow_fail]
     #[ignore]
     fn it_works() {
-        use producer::Producer;
+        use crate::producer::Producer;
         use std::io;
 
         let mut p = Producer::connect(None).unwrap();

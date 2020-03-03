@@ -84,8 +84,8 @@ mod tls;
 #[cfg(feature = "tls")]
 pub use tls::TlsStream;
 
-pub use consumer::{Consumer, ConsumerBuilder};
-pub use error::FaktoryError;
-pub use producer::Producer;
-pub use proto::Job;
-pub use proto::Reconnect;
+pub use crate::consumer::{Consumer, ConsumerBuilder};
+pub use crate::error::FaktoryError;
+pub use crate::producer::Producer;
+pub use crate::proto::Job;
+pub use crate::proto::Reconnect;

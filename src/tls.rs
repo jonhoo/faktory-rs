@@ -1,7 +1,7 @@
 use failure::Error;
 use native_tls::TlsConnector;
 use native_tls::TlsStream as NativeTlsStream;
-use proto::{self, Reconnect};
+use crate::proto::{self, Reconnect};
 use std::io;
 use std::io::prelude::*;
 use std::net::TcpStream;
