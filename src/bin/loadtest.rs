@@ -7,7 +7,7 @@ extern crate serde_json;
 
 use clap::{App, Arg};
 use faktory::*;
-use rand::Rng;
+use rand::prelude::*;
 use std::io;
 use std::process;
 use std::sync::{self, atomic};
@@ -74,7 +74,7 @@ fn main() {
 
                 let mut rng = rand::thread_rng();
                 let mut random_queues = Vec::from(QUEUES);
-                rng.shuffle(&mut random_queues[..]);
+                random_queues.shuffle(&mut rng);
                 for idx in 0..jobs {
                     if idx % 2 == 0 {
                         // push
@@ -83,7 +83,7 @@ fn main() {
                             vec![serde_json::Value::from(1), "string".into(), 3.into()],
                         );
                         job.priority = Some(rng.gen_range(1, 10));
-                        job.queue = rng.choose(QUEUES).unwrap().to_string();
+                        job.queue = QUEUES.choose(&mut rng).unwrap().to_string();
                         p.enqueue(job)?;
                         if pushed.fetch_add(1, atomic::Ordering::SeqCst) >= jobs {
                             return Ok(idx);

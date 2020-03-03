@@ -1,6 +1,5 @@
 use bufstream::BufStream;
 use failure::Error;
-use hostname::get_hostname;
 use libc::getpid;
 use rand;
 use serde;
@@ -168,7 +167,7 @@ impl<S: Read + Write> Client<S> {
                 .opts
                 .hostname
                 .clone()
-                .or_else(get_hostname)
+                .or_else(|| hostname::get().ok()?.into_string().ok())
                 .unwrap_or_else(|| "local".to_string());
             self.opts.hostname = Some(hostname);
             let pid = self
