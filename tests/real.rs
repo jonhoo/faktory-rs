@@ -19,7 +19,7 @@ macro_rules! skip_check {
 #[test]
 fn hello_p() {
     skip_check!();
-    let p = Producer::connect(None);
+    let p = Producer::connect(None).unwrap();
     drop(p);
 }
 
