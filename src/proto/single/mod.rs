@@ -55,7 +55,7 @@ pub struct Job {
     ///
     /// Defaults to 25.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub retry: Option<usize>,
+    pub retry: Option<isize>,
 
     /// The priority of this job from 1-9 (9 is highest).
     ///
