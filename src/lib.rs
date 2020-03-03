@@ -55,30 +55,18 @@
 //! }
 //! ```
 #![deny(missing_docs)]
+#![warn(rust_2018_idioms)]
 
-extern crate atomic_option;
-extern crate bufstream;
-extern crate chrono;
 #[macro_use]
 extern crate failure;
-extern crate fnv;
-extern crate hostname;
-extern crate libc;
-extern crate rand;
-extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate serde_json;
-extern crate sha2;
-extern crate url;
 
 mod consumer;
 mod error;
 mod producer;
 mod proto;
 
-#[cfg(feature = "tls")]
-extern crate native_tls;
 #[cfg(feature = "tls")]
 mod tls;
 #[cfg(feature = "tls")]

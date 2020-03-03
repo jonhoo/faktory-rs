@@ -116,14 +116,14 @@ impl FaktoryCommand for End {
 
 pub struct Fetch<'a, S>
 where
-    S: AsRef<str> + 'a,
+    S: AsRef<str>,
 {
     queues: &'a [S],
 }
 
 impl<'a, S> FaktoryCommand for Fetch<'a, S>
 where
-    S: AsRef<str> + 'a,
+    S: AsRef<str>,
 {
     fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<(), Error> {
         if self.queues.is_empty() {

@@ -207,7 +207,7 @@ impl<S: Read + Write> Drop for Client<S> {
     }
 }
 
-pub struct ReadToken<'a, S: Read + Write + 'a>(&'a mut Client<S>);
+pub struct ReadToken<'a, S: Read + Write>(&'a mut Client<S>);
 
 pub(crate) enum HeartbeatStatus {
     Ok,
@@ -219,7 +219,7 @@ impl<S: Read + Write> Client<S> {
     pub(crate) fn issue<FC: self::single::FaktoryCommand>(
         &mut self,
         c: &FC,
-    ) -> Result<ReadToken<S>, Error> {
+    ) -> Result<ReadToken<'_, S>, Error> {
         single::write_command(&mut self.stream, c)?;
         Ok(ReadToken(self))
     }
