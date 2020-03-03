@@ -1,6 +1,6 @@
+use crate::FaktoryError;
 use failure::Error;
 use std::io::prelude::*;
-use crate::FaktoryError;
 
 fn bad(expected: &'static str, got: &RawResponse) -> FaktoryError {
     let stringy = match *got {
@@ -224,10 +224,10 @@ impl From<Vec<u8>> for RawResponse {
 #[cfg(test)]
 mod test {
     use super::{read, RawResponse};
+    use crate::FaktoryError;
     use failure::Error;
     use serde_json::{self, Map, Value};
     use std::io::{self, Cursor};
-    use crate::FaktoryError;
 
     fn read_json<C: io::BufRead>(c: C) -> Result<Option<Value>, Error> {
         super::read_json(c)

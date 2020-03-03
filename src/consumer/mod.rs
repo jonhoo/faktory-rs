@@ -1,7 +1,7 @@
+use crate::proto::{self, Client, ClientOptions, HeartbeatStatus, Reconnect};
 use atomic_option::AtomicOption;
 use failure::Error;
 use fnv::FnvHashMap;
-use crate::proto::{self, Client, ClientOptions, HeartbeatStatus, Reconnect};
 use std::error::Error as StdError;
 use std::io::prelude::*;
 use std::net::TcpStream;
