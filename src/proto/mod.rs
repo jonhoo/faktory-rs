@@ -291,6 +291,11 @@ mod tests {
     fn correct_env_parsing() {
         use std::env;
 
+        if env::var_os("FAKTORY_URL").is_some() {
+            eprintln!("skipping test to avoid messing with user-set FAKTORY_URL");
+            return;
+        }
+
         assert_eq!(get_env_url(), "tcp://localhost:7419");
 
         env::set_var("FAKTORY_URL", "tcp://example.com:7500");
