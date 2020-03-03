@@ -8,14 +8,24 @@ use serde_json::Value;
 use std::io;
 use std::sync;
 
+macro_rules! skip_check {
+    () => {
+        if std::env::var_os("FAKTORY_URL").is_none() {
+            return;
+        }
+    };
+}
+
 #[test]
 fn hello_p() {
+    skip_check!();
     let p = Producer::connect(None);
     drop(p);
 }
 
 #[test]
 fn hello_c() {
+    skip_check!();
     let mut c = ConsumerBuilder::default();
     c.hostname("tester".to_string())
         .wid("hello".to_string())
@@ -27,6 +37,7 @@ fn hello_c() {
 
 #[test]
 fn roundtrip() {
+    skip_check!();
     let local = "roundtrip";
 
     let (tx, rx) = sync::mpsc::channel();
@@ -54,6 +65,7 @@ fn roundtrip() {
 
 #[test]
 fn multi() {
+    skip_check!();
     let local = "multi";
 
     let (tx, rx) = sync::mpsc::channel();
@@ -90,6 +102,7 @@ fn multi() {
 
 #[test]
 fn fail() {
+    skip_check!();
     let local = "fail";
 
     let (tx, rx) = sync::mpsc::channel();

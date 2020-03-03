@@ -1,0 +1,36 @@
+jobs:
+ - template: default.yml@templates
+ - job: integration
+   displayName: cargo test (real)
+   pool:
+     vmImage: ubuntu-latest
+   services:
+     faktory: faktory
+   steps:
+     - template: install-rust.yml@templates
+     - script: cargo test --tests
+       displayName: cargo test
+       env:
+         FAKTORY_URL: tcp://faktory:7419
+ - template: coverage.yml@templates
+   parameters:
+     token: $(CODECOV_TOKEN_SECRET)
+     nightly: true
+     services:
+       faktory: faktory
+     env:
+       FAKTORY_URL: tcp://faktory:7419
+
+resources:
+  repositories:
+    - repository: templates
+      type: github
+      name: crate-ci/azure-pipelines
+      ref: refs/heads/v0.3
+      endpoint: jonhoo
+  containers:
+   - container: faktory
+     image: contribsys/faktory:latest
+     ports:
+       - 7419:7419
+       - 7420:7420
