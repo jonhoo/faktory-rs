@@ -175,8 +175,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
                 Ok(RawResponse::Null)
             } else {
                 let size = size as usize;
-                let mut bytes = Vec::with_capacity(size);
-                bytes.resize(size, 0u8);
+                let mut bytes = vec![0; size];
                 r.read_exact(&mut bytes[..])?;
                 r.read_exact(&mut [0u8; 2])?;
                 Ok(RawResponse::Blob(bytes))

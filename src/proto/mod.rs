@@ -48,13 +48,14 @@ pub(crate) fn host_from_url(url: &Url) -> String {
 pub(crate) fn url_parse(url: &str) -> Result<Url, Error> {
     let url = Url::parse(url)?;
     if url.scheme() != "tcp" {
-        Err(ConnectError::BadScheme {
+        return Err(ConnectError::BadScheme {
             scheme: url.scheme().to_string(),
-        })?;
+        }
+        .into());
     }
 
     if url.host_str().is_none() || url.host_str().unwrap().is_empty() {
-        Err(ConnectError::MissingHostname)?;
+        return Err(ConnectError::MissingHostname.into());
     }
 
     Ok(url)
@@ -154,10 +155,11 @@ impl<S: Read + Write> Client<S> {
         let hi = single::read_hi(&mut self.stream)?;
 
         if hi.version != EXPECTED_PROTOCOL_VERSION {
-            Err(ConnectError::VersionMismatch {
+            return Err(ConnectError::VersionMismatch {
                 ours: EXPECTED_PROTOCOL_VERSION,
                 theirs: hi.version,
-            })?;
+            }
+            .into());
         }
 
         // fill in any missing options, and remember them for re-connect
@@ -194,7 +196,7 @@ impl<S: Read + Write> Client<S> {
             if let Some(ref pwd) = self.opts.password {
                 hello.set_password(&hi, pwd);
             } else {
-                Err(ConnectError::AuthenticationNeeded)?;
+                return Err(ConnectError::AuthenticationNeeded.into());
             }
         }
         single::write_command_and_await_ok(&mut self.stream, &hello)

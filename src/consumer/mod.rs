@@ -240,7 +240,7 @@ enum Failed<E: StdError> {
 impl<E, S: Read + Write> Consumer<S, E> {
     fn new(c: Client<S>, workers: usize, callbacks: FnvHashMap<String, BoxedJobRunner<E>>) -> Self {
         Consumer {
-            c: c,
+            c,
             callbacks: Arc::new(callbacks),
             running_jobs: Arc::new((0..workers).map(|_| AtomicOption::empty()).collect()),
             last_job_results: Arc::new((0..workers).map(|_| AtomicOption::empty()).collect()),
@@ -418,7 +418,7 @@ where
             .map(|(worker, status)| {
                 let mut w = self.for_worker()?;
                 let status = Arc::clone(status);
-                let queues: Vec<_> = queues.into_iter().map(|s| s.as_ref().to_string()).collect();
+                let queues: Vec<_> = queues.iter().map(|s| s.as_ref().to_string()).collect();
                 Ok(thread::spawn(move || {
                     while status.load(atomic::Ordering::SeqCst) == STATUS_RUNNING {
                         if let Err(e) = w.run_one(worker, &queues[..]) {
