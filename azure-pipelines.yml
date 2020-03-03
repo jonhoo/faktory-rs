@@ -12,8 +12,8 @@ jobs:
      - template: install-rust.yml@templates
      - script: cargo test --tests
        displayName: cargo test
-       env:
-         FAKTORY_URL: tcp://faktory:7419
+       env: # set this explicitly so integration tests will run
+         FAKTORY_URL: tcp://127.0.0.1:7419
  - template: coverage.yml@templates
    parameters:
      token: $(CODECOV_TOKEN_SECRET)
