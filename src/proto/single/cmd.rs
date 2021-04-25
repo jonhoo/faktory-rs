@@ -247,47 +247,34 @@ impl FaktoryCommand for Push {
 
 // ----------------------------------------------
 
-pub struct QueuePause<'a, S>
+pub enum QueueAction {
+    Pause,
+    Resume,
+}
+
+pub struct QueueControl<'a, S>
 where
     S: AsRef<str>,
 {
+    pub action: QueueAction,
     pub queues: &'a [S],
 }
 
-impl<S: AsRef<str>> FaktoryCommand for QueuePause<'_, S> {
+impl<S: AsRef<str>> FaktoryCommand for QueueControl<'_, S> {
     fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<(), Error> {
-        w.write_all(b"QUEUE PAUSE").map_err(serde_json::Error::io)?;
+        let command = match self.action {
+            QueueAction::Pause => b"QUEUE PAUSE".as_ref(),
+            QueueAction::Resume => b"QUEUE RESUME".as_ref(),
+        };
+
+        w.write_all(command).map_err(serde_json::Error::io)?;
         write_queues::<W, _>(w, self.queues)?;
         Ok(w.write_all(b"\r\n").map_err(serde_json::Error::io)?)
     }
 }
 
-impl<'a, S: AsRef<str>> QueuePause<'a, S> {
-    pub fn new(queues: &'a [S]) -> Self {
-        Self { queues }
-    }
-}
-
-// ----------------------------------------------
-
-pub struct QueueResume<'a, S>
-where
-    S: AsRef<str>,
-{
-    pub queues: &'a [S],
-}
-
-impl<S: AsRef<str>> FaktoryCommand for QueueResume<'_, S> {
-    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<(), Error> {
-        w.write_all(b"QUEUE RESUME")
-            .map_err(serde_json::Error::io)?;
-        write_queues::<W, _>(w, self.queues)?;
-        Ok(w.write_all(b"\r\n").map_err(serde_json::Error::io)?)
-    }
-}
-
-impl<'a, S: AsRef<str>> QueueResume<'a, S> {
-    pub fn new(queues: &'a [S]) -> Self {
-        Self { queues }
+impl<'a, S: AsRef<str>> QueueControl<'a, S> {
+    pub fn new(action: QueueAction, queues: &'a [S]) -> Self {
+        Self { action, queues }
     }
 }
