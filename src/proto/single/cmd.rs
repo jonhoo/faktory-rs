@@ -7,6 +7,22 @@ pub trait FaktoryCommand {
     fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<(), Error>;
 }
 
+/// Write queues as part of a command. They are written with a leading space
+/// followed by space separated queue names.
+fn write_queues<W, S>(w: &mut dyn Write, queues: &[S]) -> Result<(), serde_json::Error>
+where
+    W: Write,
+    S: AsRef<str>,
+{
+    for q in queues {
+        w.write_all(b" ").map_err(serde_json::Error::io)?;
+        w.write_all(q.as_ref().as_bytes())
+            .map_err(serde_json::Error::io)?;
+    }
+
+    Ok(())
+}
+
 // ----------------------------------------------
 
 pub struct Info;
@@ -130,11 +146,7 @@ where
             w.write_all(b"FETCH\r\n").map_err(serde_json::Error::io)?;
         } else {
             w.write_all(b"FETCH").map_err(serde_json::Error::io)?;
-            for q in self.queues {
-                w.write_all(b" ").map_err(serde_json::Error::io)?;
-                w.write_all(q.as_ref().as_bytes())
-                    .map_err(serde_json::Error::io)?;
-            }
+            write_queues::<W, _>(w, self.queues)?;
             w.write_all(b"\r\n").map_err(serde_json::Error::io)?;
         }
         Ok(())
@@ -230,5 +242,52 @@ impl FaktoryCommand for Push {
         w.write_all(b"PUSH ").map_err(serde_json::Error::io)?;
         serde_json::to_writer(&mut *w, &**self)?;
         Ok(w.write_all(b"\r\n").map_err(serde_json::Error::io)?)
+    }
+}
+
+// ----------------------------------------------
+
+pub struct QueuePause<'a, S>
+where
+    S: AsRef<str>,
+{
+    pub queues: &'a [S],
+}
+
+impl<S: AsRef<str>> FaktoryCommand for QueuePause<'_, S> {
+    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<(), Error> {
+        w.write_all(b"QUEUE PAUSE").map_err(serde_json::Error::io)?;
+        write_queues::<W, _>(w, self.queues)?;
+        Ok(w.write_all(b"\r\n").map_err(serde_json::Error::io)?)
+    }
+}
+
+impl<'a, S: AsRef<str>> QueuePause<'a, S> {
+    pub fn new(queues: &'a [S]) -> Self {
+        Self { queues }
+    }
+}
+
+// ----------------------------------------------
+
+pub struct QueueResume<'a, S>
+where
+    S: AsRef<str>,
+{
+    pub queues: &'a [S],
+}
+
+impl<S: AsRef<str>> FaktoryCommand for QueueResume<'_, S> {
+    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<(), Error> {
+        w.write_all(b"QUEUE RESUME")
+            .map_err(serde_json::Error::io)?;
+        write_queues::<W, _>(w, self.queues)?;
+        Ok(w.write_all(b"\r\n").map_err(serde_json::Error::io)?)
+    }
+}
+
+impl<'a, S: AsRef<str>> QueueResume<'a, S> {
+    pub fn new(queues: &'a [S]) -> Self {
+        Self { queues }
     }
 }

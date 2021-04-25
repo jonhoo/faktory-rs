@@ -133,3 +133,16 @@ fn fail() {
 
     // TODO: check that jobs *actually* failed!
 }
+
+#[test]
+fn queue() {
+    skip_check!();
+    let mut p = Producer::connect(None).unwrap();
+
+    p.queue_pause(&["paused"]).unwrap();
+
+    p.queue_pause(&["resumed"]).unwrap();
+    p.queue_resume(&["resumed"]).unwrap();
+
+    drop(p);
+}

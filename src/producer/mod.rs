@@ -1,4 +1,4 @@
-use crate::proto::{self, Client, Info, Job, Push};
+use crate::proto::{self, Client, Info, Job, Push, QueuePause, QueueResume};
 use failure::Error;
 use serde_json;
 use std::io::prelude::*;
@@ -115,6 +115,16 @@ impl<S: Read + Write> Producer<S> {
             .issue(&Info)?
             .read_json()
             .map(|v| v.expect("info command cannot give empty response"))
+    }
+
+    /// Pause queues.
+    pub fn queue_pause<T: AsRef<str>>(&mut self, queues: &[T]) -> Result<(), Error> {
+        self.c.issue(&QueuePause::new(queues))?.await_ok()
+    }
+
+    /// Resume queues.
+    pub fn queue_resume<T: AsRef<str>>(&mut self, queues: &[T]) -> Result<(), Error> {
+        self.c.issue(&QueueResume::new(queues))?.await_ok()
     }
 }
 
