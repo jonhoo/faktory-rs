@@ -1,7 +1,7 @@
 jobs:
  - template: default.yml@templates
    parameters:
-     minrust: 1.36.0 # MaybeUninit
+     minrust: 1.42.0
  - job: integration
    displayName: cargo test (real)
    pool:
@@ -28,7 +28,7 @@ resources:
     - repository: templates
       type: github
       name: crate-ci/azure-pipelines
-      ref: refs/heads/v0.3
+      ref: refs/heads/v0.4
       endpoint: jonhoo
   containers:
    - container: faktory
