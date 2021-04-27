@@ -133,3 +133,34 @@ fn fail() {
 
     // TODO: check that jobs *actually* failed!
 }
+
+#[test]
+fn queue() {
+    skip_check!();
+    let local = "pause";
+
+    let (tx, rx) = sync::mpsc::channel();
+    let tx = sync::Arc::new(sync::Mutex::new(tx));
+
+    let mut c = ConsumerBuilder::default();
+    c.hostname("tester".to_string()).wid(local.to_string());
+    c.register(local, move |_job| tx.lock().unwrap().send(true));
+    let mut c = c.connect(None).unwrap();
+
+    let mut p = Producer::connect(None).unwrap();
+    p.queue_pause(&[local]).unwrap();
+    p.enqueue(Job::new(local, vec![Value::from(1)]).on_queue(local))
+        .unwrap();
+
+    let had_job = c.run_one(0, &[local]).unwrap();
+    assert!(!had_job);
+    let worker_executed = rx.try_recv().is_ok();
+    assert!(!worker_executed);
+
+    p.queue_resume(&[local]).unwrap();
+
+    let had_job = c.run_one(0, &[local]).unwrap();
+    assert!(had_job);
+    let worker_executed = rx.try_recv().is_ok();
+    assert!(worker_executed);
+}

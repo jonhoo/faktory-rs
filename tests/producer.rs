@@ -85,3 +85,20 @@ fn enqueue() {
     assert_eq!(written.get("priority").and_then(|h| h.as_u64()), Some(5));
     assert_eq!(written.get("backtrace").and_then(|h| h.as_u64()), Some(0));
 }
+
+#[test]
+fn queue_control() {
+    let mut s = mock::Stream::default();
+    let mut p = Producer::connect_with(s.clone(), None).unwrap();
+    s.ignore(0);
+
+    s.ok(0);
+    p.queue_pause(&vec!["test", "test2"]).unwrap();
+
+    s.ok(0);
+    p.queue_resume(&["test3".to_string(), "test4".to_string()])
+        .unwrap();
+
+    let written = s.pop_bytes_written(0);
+    assert!(written == b"QUEUE PAUSE test test2\r\nQUEUE RESUME test3 test4\r\n");
+}
