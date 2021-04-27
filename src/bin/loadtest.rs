@@ -82,7 +82,7 @@ fn main() {
                             "SomeJob",
                             vec![serde_json::Value::from(1), "string".into(), 3.into()],
                         );
-                        job.priority = Some(rng.gen_range(1, 10));
+                        job.priority = Some(rng.gen_range(1..10));
                         job.queue = QUEUES.choose(&mut rng).unwrap().to_string();
                         p.enqueue(job)?;
                         if pushed.fetch_add(1, atomic::Ordering::SeqCst) >= jobs {

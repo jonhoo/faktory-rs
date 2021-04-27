@@ -112,6 +112,7 @@ impl Job {
         use rand::{thread_rng, Rng};
         let random_jid = thread_rng()
             .sample_iter(&rand::distributions::Alphanumeric)
+            .map(char::from)
             .take(16)
             .collect();
         use chrono::prelude::*;

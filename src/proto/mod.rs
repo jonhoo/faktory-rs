@@ -181,6 +181,7 @@ impl<S: Read + Write> Client<S> {
                 use rand::{thread_rng, Rng};
                 thread_rng()
                     .sample_iter(&rand::distributions::Alphanumeric)
+                    .map(char::from)
                     .take(32)
                     .collect()
             });
