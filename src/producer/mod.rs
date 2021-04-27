@@ -124,7 +124,7 @@ impl<S: Read + Write> Producer<S> {
             .await_ok()
     }
 
-    /// Resume queues.
+    /// Resume the given queues.
     pub fn queue_resume<T: AsRef<str>>(&mut self, queues: &[T]) -> Result<(), Error> {
         self.c
             .issue(&QueueControl::new(QueueAction::Resume, queues))?
