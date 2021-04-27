@@ -117,7 +117,7 @@ impl<S: Read + Write> Producer<S> {
             .map(|v| v.expect("info command cannot give empty response"))
     }
 
-    /// Pause queues.
+    /// Pause the given queues.
     pub fn queue_pause<T: AsRef<str>>(&mut self, queues: &[T]) -> Result<(), Error> {
         self.c
             .issue(&QueueControl::new(QueueAction::Pause, queues))?
