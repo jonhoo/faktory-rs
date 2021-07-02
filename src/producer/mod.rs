@@ -1,8 +1,11 @@
 use crate::proto::{self, Client, Info, Job, Push, QueueAction, QueueControl};
+use chrono::Duration;
 use failure::Error;
 use serde_json;
 use std::io::prelude::*;
 use std::net::TcpStream;
+
+use chrono::{DateTime, Utc};
 
 /// `Producer` is used to enqueue new jobs that will in turn be processed by Faktory workers.
 ///
@@ -106,6 +109,54 @@ impl<S: Read + Write> Producer<S> {
     pub fn enqueue(&mut self, job: Job) -> Result<(), Error> {
         self.c.issue(&Push::from(job))?.await_ok()
     }
+
+    /// Enqueue the given job on the Faktory server.
+    ///
+    /// This is an attempt to replicate the Ruby client semantics.
+    /// I don't know how to deal with function aliasing in a nicer wa and i'm lazy :(
+    ///
+    /// Returns `Ok` if the job was successfully queued by the Faktory server.
+    pub fn perform_async(&mut self, job: Job) -> Result<(), Error> {
+        self.enqueue(job)
+    }
+
+
+    /// Enqueue the given job on the Faktory server to be performed at a certain time
+    ///
+    /// Returns `Ok` if the job was successfully queued by the Faktory server.
+    pub fn perform_at(&mut self, job: Job, at: DateTime<Utc>) -> Result<(), Error> {
+        let mut job = job;
+        job.at = Some(at);
+
+        self.enqueue(job)
+    }
+
+    /// Enqueue the given job on the Faktory server to be performed at some [chrono::Duration] from now
+    ///
+    /// Returns `Ok` if the job was successfully queued by the Faktory server.
+    pub fn perform_in(&mut self, job: Job, from_now: Duration) -> Result<(), Error> {
+        self.perform_at(job, Utc::now() + from_now)
+    }
+
+    /// Enqueue the given job on the Faktory server to be performed at some [chrono::Duration] from now
+    ///
+    /// Again, I'm not sure how to do function aliasing correctly and I'm using ruby lib terminology
+    ///
+    /// Returns `Ok` if the job was successfully queued by the Faktory server.
+    pub fn enqueue_in(&mut self, job: Job, from_now: Duration) -> Result<(), Error> {
+        self.perform_in(job, from_now)
+    }
+
+    /// Enqueue the given job on the Faktory server to be performed at a certain time
+    ///
+    /// Function aliasing stuff again :)
+    ///
+    /// Returns `Ok` if the job was successfully queued by the Faktory server.
+    pub fn enqueue_at(&mut self, job: Job, at: DateTime<Utc>) -> Result<(), Error> {
+        self.perform_at(job, at)
+    }
+
+    
 
     /// Retrieve information about the running server.
     ///

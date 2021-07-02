@@ -6,6 +6,7 @@ extern crate url;
 
 mod mock;
 
+use chrono::{Duration, Utc, DateTime};
 use faktory::*;
 
 #[test]
@@ -76,6 +77,102 @@ fn enqueue() {
                 a[0].as_str()
             }),
         Some("z")
+    );
+    assert_eq!(
+        written.get("reserve_for").and_then(|h| h.as_u64()),
+        Some(600)
+    );
+    assert_eq!(written.get("retry").and_then(|h| h.as_u64()), Some(25));
+    assert_eq!(written.get("priority").and_then(|h| h.as_u64()), Some(5));
+    assert_eq!(written.get("backtrace").and_then(|h| h.as_u64()), Some(0));
+}
+
+#[test]
+fn perform_async() {
+    let mut s = mock::Stream::default();
+    let mut p = Producer::connect_with(s.clone(), None).unwrap();
+    s.ignore(0);
+
+    s.ok(0);
+    p.perform_async(Job::new("foobar", vec!["z"])).unwrap();
+
+    let written = s.pop_bytes_written(0);
+    assert!(written.starts_with(b"PUSH {"));
+    let written: serde_json::Value = serde_json::from_slice(&written[b"PUSH ".len()..]).unwrap();
+    let written = written.as_object().unwrap();
+    assert_eq!(written.get("jid").map(|h| h.is_string()), Some(true));
+    assert_eq!(
+        written.get("queue").and_then(|h| h.as_str()),
+        Some("default")
+    );
+    assert_eq!(
+        written.get("jobtype").and_then(|h| h.as_str()),
+        Some("foobar")
+    );
+    assert_eq!(
+        written
+            .get("args")
+            .and_then(|h| h.as_array())
+            .and_then(|a| {
+                assert_eq!(a.len(), 1);
+                a[0].as_str()
+            }),
+        Some("z")
+    );
+    assert_eq!(
+        written.get("reserve_for").and_then(|h| h.as_u64()),
+        Some(600)
+    );
+    assert_eq!(written.get("retry").and_then(|h| h.as_u64()), Some(25));
+    assert_eq!(written.get("priority").and_then(|h| h.as_u64()), Some(5));
+    assert_eq!(written.get("backtrace").and_then(|h| h.as_u64()), Some(0));
+}
+
+#[test]
+fn perform_at() {
+    let mut s = mock::Stream::default();
+    let mut p = Producer::connect_with(s.clone(), None).unwrap();
+    s.ignore(0);
+
+    s.ok(0);
+    // p.perform_at(Job::new("foobar", vec!["z"])).unwrap();
+
+    let now = Utc::now();
+    p.perform_at(Job::new("foobar", vec!["z"]), now + Duration::seconds(15)).unwrap();
+
+    let written = s.pop_bytes_written(0);
+    assert!(written.starts_with(b"PUSH {"));
+    let written: serde_json::Value = serde_json::from_slice(&written[b"PUSH ".len()..]).unwrap();
+    let written = written.as_object().unwrap();
+    assert_eq!(written.get("jid").map(|h| h.is_string()), Some(true));
+    assert_eq!(
+        written.get("queue").and_then(|h| h.as_str()),
+        Some("default")
+    );
+    assert_eq!(
+        written.get("jobtype").and_then(|h| h.as_str()),
+        Some("foobar")
+    );
+    assert_eq!(
+        written
+            .get("args")
+            .and_then(|h| h.as_array())
+            .and_then(|a| {
+                assert_eq!(a.len(), 1);
+                a[0].as_str()
+            }),
+        Some("z")
+    );
+    assert_eq!(
+        written.get("at").and_then(|h| {
+            // Some(DateTime::parse_from_rfc3339(h.as_str())))
+            let d = h.as_str().unwrap();
+
+            let d = DateTime::parse_from_rfc3339(d).unwrap();
+
+            Some(d.to_rfc3339())
+        }),
+        Some((now + Duration::seconds(15)).to_rfc3339())
     );
     assert_eq!(
         written.get("reserve_for").and_then(|h| h.as_u64()),
