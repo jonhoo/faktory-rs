@@ -120,7 +120,6 @@ impl<S: Read + Write> Producer<S> {
         self.enqueue(job)
     }
 
-
     /// Enqueue the given job on the Faktory server to be performed at a certain time
     ///
     /// Returns `Ok` if the job was successfully queued by the Faktory server.
@@ -155,8 +154,6 @@ impl<S: Read + Write> Producer<S> {
     pub fn enqueue_at(&mut self, job: Job, at: DateTime<Utc>) -> Result<(), Error> {
         self.perform_at(job, at)
     }
-
-    
 
     /// Retrieve information about the running server.
     ///

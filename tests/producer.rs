@@ -6,7 +6,7 @@ extern crate url;
 
 mod mock;
 
-use chrono::{Duration, Utc, DateTime};
+use chrono::{DateTime, Duration, Utc};
 use faktory::*;
 
 #[test]
@@ -138,7 +138,8 @@ fn perform_at() {
     // p.perform_at(Job::new("foobar", vec!["z"])).unwrap();
 
     let now = Utc::now();
-    p.perform_at(Job::new("foobar", vec!["z"]), now + Duration::seconds(15)).unwrap();
+    p.perform_at(Job::new("foobar", vec!["z"]), now + Duration::seconds(15))
+        .unwrap();
 
     let written = s.pop_bytes_written(0);
     assert!(written.starts_with(b"PUSH {"));
