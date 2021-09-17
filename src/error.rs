@@ -1,5 +1,6 @@
 /// The set of observable application-level errors when interacting with a Faktory server.
 #[derive(Debug, Fail)]
+#[allow(clippy::manual_non_exhaustive)]
 pub enum FaktoryError {
     /// The server reports that an issued request was malformed.
     #[fail(display = "request was malformed: {}", desc)]

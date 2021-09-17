@@ -1,6 +1,5 @@
 use super::Job;
 use failure::Error;
-use serde_json;
 use std::io::prelude::*;
 
 pub trait FaktoryCommand {

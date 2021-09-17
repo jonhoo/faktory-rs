@@ -69,8 +69,8 @@ pub struct Hi {
 pub fn read_hi<R: BufRead>(r: R) -> Result<Hi, Error> {
     let rr = read(r)?;
     if let RawResponse::String(ref s) = rr {
-        if s.starts_with("HI ") {
-            return Ok(serde_json::from_str(&s[3..])?);
+        if let Some(s) = s.strip_prefix("HI ") {
+            return Ok(serde_json::from_str(s)?);
         }
     }
 
@@ -142,7 +142,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
             let l = s.len() - 2;
             s.truncate(l);
 
-            match isize::from_str_radix(&*s, 10) {
+            match (&*s).parse::<isize>() {
                 Ok(i) => Ok(RawResponse::Number(i)),
                 Err(_) => Err(FaktoryError::BadResponse {
                     typed_as: "integer",
@@ -165,7 +165,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
                 }
             })?;
 
-            let size = isize::from_str_radix(s, 10).map_err(|_| FaktoryError::BadResponse {
+            let size = s.parse::<isize>().map_err(|_| FaktoryError::BadResponse {
                 typed_as: "bulk string",
                 error: "server bulk response size prefix is not an integer",
                 bytes: s.as_bytes().to_vec(),

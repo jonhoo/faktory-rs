@@ -1,6 +1,5 @@
 use crate::proto::{self, Client, Info, Job, Push, QueueAction, QueueControl};
 use failure::Error;
-use serde_json;
 use std::io::prelude::*;
 use std::net::TcpStream;
 
