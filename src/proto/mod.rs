@@ -2,9 +2,6 @@ use crate::FaktoryError;
 use bufstream::BufStream;
 use failure::Error;
 use libc::getpid;
-use rand;
-use serde;
-use serde_json;
 use std::io;
 use std::io::prelude::*;
 use std::net::TcpStream;
@@ -69,7 +66,7 @@ pub trait Reconnect: Sized {
 
 impl Reconnect for TcpStream {
     fn reconnect(&self) -> io::Result<Self> {
-        Ok(TcpStream::connect(self.peer_addr().unwrap())?)
+        TcpStream::connect(self.peer_addr().unwrap())
     }
 }
 
@@ -143,9 +140,11 @@ impl<S: Read + Write> Client<S> {
     }
 
     pub(crate) fn new_producer(stream: S, pwd: Option<String>) -> Result<Client<S>, Error> {
-        let mut opts = ClientOptions::default();
-        opts.password = pwd;
-        opts.is_producer = true;
+        let opts = ClientOptions {
+            password: pwd,
+            is_producer: true,
+            ..Default::default()
+        };
         Self::new(stream, opts)
     }
 }
@@ -268,7 +267,7 @@ impl<'a, S: Read + Write> ReadToken<'a, S> {
     where
         T: serde::de::DeserializeOwned,
     {
-        Ok(single::read_json(&mut self.0.stream)?)
+        single::read_json(&mut self.0.stream)
     }
 }
 

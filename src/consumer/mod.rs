@@ -535,7 +535,7 @@ where
                     .into_iter()
                     .map(|w| w.join().unwrap())
                     .collect::<Result<Vec<_>, _>>()
-                    .and_then(|_| Err(e))
+                    .and(Err(e))
             }
         }
     }
