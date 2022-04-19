@@ -251,8 +251,7 @@ impl<E, S: Read + Write> Consumer<S, E> {
 
 impl<E, S: Read + Write + Reconnect> Consumer<S, E> {
     fn reconnect(&mut self) -> Result<(), Error> {
-        self.c.reconnect()?;
-        Ok(())
+        self.c.reconnect()
     }
 }
 

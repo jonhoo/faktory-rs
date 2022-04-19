@@ -105,36 +105,31 @@ impl<S: Read + Write> Producer<S> {
     ///
     /// Returns `Ok` if the job was successfully queued by the Faktory server.
     pub fn enqueue(&mut self, job: Job) -> Result<()> {
-        self.c.issue(&Push::from(job))?.await_ok()?;
-        Ok(())
+        self.c.issue(&Push::from(job))?.await_ok()
     }
 
     /// Retrieve information about the running server.
     ///
     /// The returned value is the result of running the `INFO` command on the server.
     pub fn info(&mut self) -> Result<serde_json::Value> {
-        let v = self
-            .c
+        self.c
             .issue(&Info)?
             .read_json()
-            .map(|v| v.expect("info command cannot give empty response"))?;
-        Ok(v)
+            .map(|v| v.expect("info command cannot give empty response"))
     }
 
     /// Pause the given queues.
     pub fn queue_pause<T: AsRef<str>>(&mut self, queues: &[T]) -> Result<()> {
         self.c
             .issue(&QueueControl::new(QueueAction::Pause, queues))?
-            .await_ok()?;
-        Ok(())
+            .await_ok()
     }
 
     /// Resume the given queues.
     pub fn queue_resume<T: AsRef<str>>(&mut self, queues: &[T]) -> Result<()> {
         self.c
             .issue(&QueueControl::new(QueueAction::Resume, queues))?
-            .await_ok()?;
-        Ok(())
+            .await_ok()
     }
 }
 

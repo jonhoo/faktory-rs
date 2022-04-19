@@ -203,8 +203,7 @@ impl<S: Read + Write> Client<S> {
             }
         }
 
-        single::write_command_and_await_ok(&mut self.stream, &hello)?;
-        Ok(())
+        single::write_command_and_await_ok(&mut self.stream, &hello)
     }
 }
 
