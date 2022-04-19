@@ -1,10 +1,11 @@
-use crate::FaktoryError;
+use crate::error::Error;
+use crate::Protocol;
 use bufstream::BufStream;
-use failure::Error;
 use libc::getpid;
 use std::io;
 use std::io::prelude::*;
 use std::net::TcpStream;
+use thiserror::Error;
 use url::Url;
 
 pub(crate) const EXPECTED_PROTOCOL_VERSION: usize = 2;
@@ -17,20 +18,22 @@ pub use self::single::{Ack, Fail, Heartbeat, Info, Job, Push, QueueAction, Queue
 // responses that users can see
 pub use self::single::Hi;
 
-#[derive(Debug, Fail)]
+#[derive(Debug, Error)]
 pub enum ConnectError {
-    #[fail(display = "unknown scheme: {}", scheme)]
+    #[error("unknown scheme: {scheme}")]
     BadScheme { scheme: String },
-    #[fail(display = "no hostname given")]
+    #[error("no hostname given")]
     MissingHostname,
-    #[fail(display = "server requires authentication")]
+    #[error("server requires authentication")]
     AuthenticationNeeded,
-    #[fail(
-        display = "server version mismatch (theirs: {}, ours: {})",
-        theirs, ours
-    )]
+    #[error("server version mismatch (theirs: {theirs}, ours: {ours})")]
     VersionMismatch { ours: usize, theirs: usize },
+    #[error("parse URL: {0}")]
+    ParseUrl(#[source] url::ParseError),
 }
+
+/// Default Error type, aliased in module for convenience.
+type Result<T> = std::result::Result<T, Error>;
 
 pub(crate) fn get_env_url() -> String {
     use std::env;
@@ -42,8 +45,8 @@ pub(crate) fn host_from_url(url: &Url) -> String {
     format!("{}:{}", url.host_str().unwrap(), url.port().unwrap_or(7419))
 }
 
-pub(crate) fn url_parse(url: &str) -> Result<Url, Error> {
-    let url = Url::parse(url)?;
+pub(crate) fn url_parse(url: &str) -> Result<Url> {
+    let url = Url::parse(url).map_err(ConnectError::ParseUrl)?;
     if url.scheme() != "tcp" {
         return Err(ConnectError::BadScheme {
             scheme: url.scheme().to_string(),
@@ -117,12 +120,12 @@ impl<S> Client<S>
 where
     S: Read + Write + Reconnect,
 {
-    pub(crate) fn connect_again(&self) -> Result<Self, Error> {
+    pub(crate) fn connect_again(&self) -> Result<Self> {
         let s = self.stream.get_ref().reconnect()?;
         Client::new(s, self.opts.clone())
     }
 
-    pub fn reconnect(&mut self) -> Result<(), Error> {
+    pub fn reconnect(&mut self) -> Result<()> {
         let s = self.stream.get_ref().reconnect()?;
         self.stream = BufStream::new(s);
         self.init()
@@ -130,7 +133,7 @@ where
 }
 
 impl<S: Read + Write> Client<S> {
-    pub(crate) fn new(stream: S, opts: ClientOptions) -> Result<Client<S>, Error> {
+    pub(crate) fn new(stream: S, opts: ClientOptions) -> Result<Client<S>> {
         let mut c = Client {
             stream: BufStream::new(stream),
             opts,
@@ -139,7 +142,7 @@ impl<S: Read + Write> Client<S> {
         Ok(c)
     }
 
-    pub(crate) fn new_producer(stream: S, pwd: Option<String>) -> Result<Client<S>, Error> {
+    pub(crate) fn new_producer(stream: S, pwd: Option<String>) -> Result<Client<S>> {
         let opts = ClientOptions {
             password: pwd,
             is_producer: true,
@@ -150,7 +153,7 @@ impl<S: Read + Write> Client<S> {
 }
 
 impl<S: Read + Write> Client<S> {
-    fn init(&mut self) -> Result<(), Error> {
+    fn init(&mut self) -> Result<()> {
         let hi = single::read_hi(&mut self.stream)?;
 
         if hi.version != EXPECTED_PROTOCOL_VERSION {
@@ -199,7 +202,9 @@ impl<S: Read + Write> Client<S> {
                 return Err(ConnectError::AuthenticationNeeded.into());
             }
         }
-        single::write_command_and_await_ok(&mut self.stream, &hello)
+
+        single::write_command_and_await_ok(&mut self.stream, &hello)?;
+        Ok(())
     }
 }
 
@@ -221,12 +226,12 @@ impl<S: Read + Write> Client<S> {
     pub(crate) fn issue<FC: self::single::FaktoryCommand>(
         &mut self,
         c: &FC,
-    ) -> Result<ReadToken<'_, S>, Error> {
+    ) -> Result<ReadToken<'_, S>> {
         single::write_command(&mut self.stream, c)?;
         Ok(ReadToken(self))
     }
 
-    pub(crate) fn heartbeat(&mut self) -> Result<HeartbeatStatus, Error> {
+    pub(crate) fn heartbeat(&mut self) -> Result<HeartbeatStatus> {
         single::write_command(
             &mut self.stream,
             &Heartbeat::new(&**self.opts.wid.as_ref().unwrap()),
@@ -241,7 +246,7 @@ impl<S: Read + Write> Client<S> {
             {
                 Some("terminate") => Ok(HeartbeatStatus::Terminate),
                 Some("quiet") => Ok(HeartbeatStatus::Quiet),
-                _ => Err(FaktoryError::BadType {
+                _ => Err(Protocol::BadType {
                     expected: "heartbeat response",
                     received: format!("{}", s),
                 }
@@ -250,7 +255,7 @@ impl<S: Read + Write> Client<S> {
         }
     }
 
-    pub(crate) fn fetch<Q>(&mut self, queues: &[Q]) -> Result<Option<Job>, Error>
+    pub(crate) fn fetch<Q>(&mut self, queues: &[Q]) -> Result<Option<Job>>
     where
         Q: AsRef<str>,
     {
@@ -259,11 +264,11 @@ impl<S: Read + Write> Client<S> {
 }
 
 impl<'a, S: Read + Write> ReadToken<'a, S> {
-    pub(crate) fn await_ok(self) -> Result<(), Error> {
+    pub(crate) fn await_ok(self) -> Result<()> {
         single::read_ok(&mut self.0.stream)
     }
 
-    pub(crate) fn read_json<T>(self) -> Result<Option<T>, Error>
+    pub(crate) fn read_json<T>(self) -> Result<Option<T>>
     where
         T: serde::de::DeserializeOwned,
     {

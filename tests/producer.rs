@@ -1,4 +1,3 @@
-extern crate failure;
 extern crate faktory;
 extern crate mockstream;
 extern crate serde_json;
@@ -93,7 +92,7 @@ fn queue_control() {
     s.ignore(0);
 
     s.ok(0);
-    p.queue_pause(&vec!["test", "test2"]).unwrap();
+    p.queue_pause(&["test", "test2"]).unwrap();
 
     s.ok(0);
     p.queue_resume(&["test3".to_string(), "test4".to_string()])

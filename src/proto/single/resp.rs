@@ -1,8 +1,9 @@
-use crate::FaktoryError;
-use failure::Error;
+use crate::Protocol;
 use std::io::prelude::*;
 
-fn bad(expected: &'static str, got: &RawResponse) -> FaktoryError {
+use super::Error;
+
+fn bad(expected: &'static str, got: &RawResponse) -> Protocol {
     let stringy = match *got {
         RawResponse::String(ref s) => Some(&**s),
         RawResponse::Blob(ref b) => {
@@ -16,11 +17,11 @@ fn bad(expected: &'static str, got: &RawResponse) -> FaktoryError {
     };
 
     match stringy {
-        Some(s) => FaktoryError::BadType {
+        Some(s) => Protocol::BadType {
             expected,
             received: s.to_string(),
         },
-        None => FaktoryError::BadType {
+        None => Protocol::BadType {
             expected,
             received: format!("{:?}", got),
         },
@@ -130,7 +131,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
             let l = s.len() - 2;
             s.truncate(l);
 
-            Err(FaktoryError::new(s).into())
+            Err(Protocol::new(s).into())
         }
         b':' => {
             // Integer
@@ -144,7 +145,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
 
             match (&*s).parse::<isize>() {
                 Ok(i) => Ok(RawResponse::Number(i)),
-                Err(_) => Err(FaktoryError::BadResponse {
+                Err(_) => Err(Protocol::BadResponse {
                     typed_as: "integer",
                     error: "invalid integer value",
                     bytes: s.into_bytes(),
@@ -158,14 +159,14 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
             let mut bytes = Vec::with_capacity(32);
             r.read_until(b'\n', &mut bytes)?;
             let s = std::str::from_utf8(&bytes[0..bytes.len() - 2]).map_err(|_| {
-                FaktoryError::BadResponse {
+                Protocol::BadResponse {
                     typed_as: "bulk string",
                     error: "server bulk response contains non-utf8 size prefix",
                     bytes: bytes[0..bytes.len() - 2].to_vec(),
                 }
             })?;
 
-            let size = s.parse::<isize>().map_err(|_| FaktoryError::BadResponse {
+            let size = s.parse::<isize>().map_err(|_| Protocol::BadResponse {
                 typed_as: "bulk string",
                 error: "server bulk response size prefix is not an integer",
                 bytes: s.as_bytes().to_vec(),
@@ -191,7 +192,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
             // so we'll just give up
             unimplemented!();
         }
-        c => Err(FaktoryError::BadResponse {
+        c => Err(Protocol::BadResponse {
             typed_as: "unknown",
             error: "invalid response type prefix",
             bytes: vec![c],
@@ -222,9 +223,8 @@ impl From<Vec<u8>> for RawResponse {
 
 #[cfg(test)]
 mod test {
-    use super::{read, RawResponse};
-    use crate::FaktoryError;
-    use failure::Error;
+    use super::{read, Error, RawResponse};
+    use crate::Protocol;
     use serde_json::{self, Map, Value};
     use std::io::{self, Cursor};
 
@@ -247,10 +247,9 @@ mod test {
     #[test]
     fn it_errors_on_bad_numbers() {
         let c = Cursor::new(b":x\r\n");
-        let r = read(c).unwrap_err();
-        if let &FaktoryError::BadResponse {
+        if let Error::Protocol(Protocol::BadResponse {
             typed_as, error, ..
-        } = r.downcast_ref().unwrap()
+        }) = read(c).unwrap_err()
         {
             assert_eq!(typed_as, "integer");
             assert_eq!(error, "invalid integer value");
@@ -262,8 +261,7 @@ mod test {
     #[test]
     fn it_parses_errors() {
         let c = Cursor::new(b"-ERR foo\r\n");
-        let r = read(c).unwrap_err();
-        if let &FaktoryError::Internal { ref msg } = r.downcast_ref().unwrap() {
+        if let Error::Protocol(Protocol::Internal { ref msg }) = read(c).unwrap_err() {
             assert_eq!(msg, "foo");
         } else {
             unreachable!();
@@ -286,10 +284,9 @@ mod test {
     #[test]
     fn it_errors_on_bad_sizes() {
         let c = Cursor::new(b"$x\r\n\r\n");
-        let r = read(c).unwrap_err();
-        if let &FaktoryError::BadResponse {
+        if let Error::Protocol(Protocol::BadResponse {
             typed_as, error, ..
-        } = r.downcast_ref().unwrap()
+        }) = read(c).unwrap_err()
         {
             assert_eq!(typed_as, "bulk string");
             assert_eq!(error, "server bulk response size prefix is not an integer");
@@ -356,25 +353,30 @@ mod test {
     #[test]
     fn it_errors_on_bad_json_blob() {
         let c = Cursor::new(b"$9\r\n{\"hello\"}\r\n");
-        let r = read_json(c).unwrap_err();
-        let _: &serde_json::Error = r.downcast_ref().unwrap();
+        if let Error::DeserializePayload(err) = read_json(c).unwrap_err() {
+            let _: serde_json::Error = err;
+        } else {
+            unreachable!();
+        }
     }
 
     #[test]
     fn it_errors_on_bad_json_string() {
         let c = Cursor::new(b"+{\"hello\"}\r\n");
-        let r = read_json(c).unwrap_err();
-        let _: &serde_json::Error = r.downcast_ref().unwrap();
+        if let Error::DeserializePayload(err) = read_json(c).unwrap_err() {
+            let _: serde_json::Error = err;
+        } else {
+            unreachable!();
+        }
     }
 
     #[test]
     fn json_error_on_number() {
         let c = Cursor::new(b":9\r\n");
-        let r = read_json(c).unwrap_err();
-        if let &FaktoryError::BadType {
+        if let Error::Protocol(Protocol::BadType {
             expected,
             ref received,
-        } = r.downcast_ref().unwrap()
+        }) = read_json(c).unwrap_err()
         {
             assert_eq!(expected, "json");
             assert_eq!(received, "Number(9)");
@@ -386,10 +388,9 @@ mod test {
     #[test]
     fn it_errors_on_unknown_resp_type() {
         let c = Cursor::new(b"^\r\n");
-        let r = read_json(c).unwrap_err();
-        if let &FaktoryError::BadResponse {
+        if let Error::Protocol(Protocol::BadResponse {
             typed_as, error, ..
-        } = r.downcast_ref().unwrap()
+        }) = read_json(c).unwrap_err()
         {
             assert_eq!(typed_as, "unknown");
             assert_eq!(error, "invalid response type prefix");
