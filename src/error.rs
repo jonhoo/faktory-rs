@@ -18,7 +18,7 @@ pub enum Error {
     /// Application-level errors.
     /// These generally indicate a mismatch between what the client expects and what the server expects.
     #[error("protocol: {0}")]
-    Protocol(#[from] Protocol),
+    Protocol(#[from] ProtocolError),
 
     /// Faktory payloads are JSON encoded.
     /// This error is one that was encountered when attempting to deserialize a response from the server.
@@ -43,7 +43,7 @@ pub enum Error {
 /// The set of observable application-level errors when interacting with a Faktory server.
 #[derive(Debug, Error)]
 #[allow(clippy::manual_non_exhaustive)]
-pub enum Protocol {
+pub enum ProtocolError {
     /// The server reports that an issued request was malformed.
     #[error("request was malformed: {desc}")]
     Malformed {
@@ -90,25 +90,25 @@ pub enum Protocol {
     __Nonexhaustive,
 }
 
-impl Protocol {
+impl ProtocolError {
     pub(crate) fn new(line: String) -> Self {
         let mut parts = line.splitn(2, ' ');
         let code = parts.next();
         let error = parts.next();
         if error.is_none() {
-            return Protocol::Internal {
+            return ProtocolError::Internal {
                 msg: code.unwrap().to_string(),
             };
         }
         let error = error.unwrap().to_string();
 
         match code {
-            Some("ERR") => Protocol::Internal { msg: error },
-            Some("MALFORMED") => Protocol::Malformed { desc: error },
-            Some(c) => Protocol::Internal {
+            Some("ERR") => ProtocolError::Internal { msg: error },
+            Some("MALFORMED") => ProtocolError::Malformed { desc: error },
+            Some(c) => ProtocolError::Internal {
                 msg: format!("{} {}", c, error),
             },
-            None => Protocol::Internal {
+            None => ProtocolError::Internal {
                 msg: "empty error response".to_string(),
             },
         }

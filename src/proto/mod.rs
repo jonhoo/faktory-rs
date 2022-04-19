@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::Protocol;
+use crate::ProtocolError;
 use bufstream::BufStream;
 use libc::getpid;
 use std::io;
@@ -245,7 +245,7 @@ impl<S: Read + Write> Client<S> {
             {
                 Some("terminate") => Ok(HeartbeatStatus::Terminate),
                 Some("quiet") => Ok(HeartbeatStatus::Quiet),
-                _ => Err(Protocol::BadType {
+                _ => Err(ProtocolError::BadType {
                     expected: "heartbeat response",
                     received: format!("{}", s),
                 }
