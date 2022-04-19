@@ -30,6 +30,14 @@ pub enum Error {
     #[cfg(feature = "tls")]
     #[error("underlying tls stream: {0}")]
     TlsStream(#[from] native_tls::Error),
+
+    // We're going to add more error types in the future
+    // https://github.com/rust-lang/rust/issues/44109
+    //
+    // This forces users to write pattern matches with a catch-all `_` arm.
+    #[error("unreachable")]
+    #[doc(hidden)]
+    __Nonexhaustive,
 }
 
 /// The set of observable application-level errors when interacting with a Faktory server.
