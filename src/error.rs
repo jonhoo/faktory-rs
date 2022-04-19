@@ -25,6 +25,11 @@ pub enum Error {
     /// These generally indicate a mismatch between what the client expects and what the server provided.
     #[error("deserialize payload: {0}")]
     DeserializePayload(#[from] serde_json::Error),
+
+    /// Indicates an error in the underlying TLS stream.
+    #[cfg(feature = "tls")]
+    #[error("underlying tls stream: {0}")]
+    TlsStream(#[from] native_tls::Error),
 }
 
 /// The set of observable application-level errors when interacting with a Faktory server.

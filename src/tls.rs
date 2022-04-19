@@ -1,5 +1,5 @@
 use crate::proto::{self, Reconnect};
-use failure::Error;
+use crate::Error;
 use native_tls::TlsConnector;
 use native_tls::TlsStream as NativeTlsStream;
 use std::io;
@@ -70,14 +70,13 @@ where
     /// Create a new TLS connection on an existing stream with a non-default TLS configuration.
     pub fn new(stream: S, tls: TlsConnector, hostname: &str) -> io::Result<Self> {
         let stream = tls
-            .clone()
             .connect(hostname, stream)
             .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e))?;
 
         Ok(TlsStream {
             connector: tls,
             hostname: hostname.to_string(),
-            stream: stream,
+            stream,
         })
     }
 }
