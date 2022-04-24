@@ -72,7 +72,7 @@ pub struct Job {
     ///
     /// This field is read-only.
     #[serde(skip_serializing)]
-    failure: Option<Failure>,
+    pub(crate) failure: Option<Failure>,
 
     /// Extra context to include with the job.
     ///
