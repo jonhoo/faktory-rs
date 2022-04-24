@@ -50,6 +50,7 @@ pub enum Error {
 
 /// Errors specific to connection logic.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Connect {
     /// The scheme portion of the connection address provided is invalid.
     #[error("unknown scheme: {scheme}")]
