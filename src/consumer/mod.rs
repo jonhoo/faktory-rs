@@ -397,7 +397,7 @@ where
                     // the resulting OK that failed. in that case, we would get an error response
                     // when re-sending the job response. this should not count as critical. other
                     // errors, however, should!
-                    if let Error::GenericIO(_) = e {
+                    if let Error::IO(_) = e {
                         last_job_result.swap(res, atomic::Ordering::SeqCst);
                         return Err(e);
                     }

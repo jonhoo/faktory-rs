@@ -1,16 +1,13 @@
 use super::{Error, Job};
 use std::io::prelude::*;
 
-/// Default Error type, aliased in module for convenience.
-type Result<T> = std::result::Result<T, Error>;
-
 pub trait FaktoryCommand {
-    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<()>;
+    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<(), Error>;
 }
 
 /// Write queues as part of a command. They are written with a leading space
 /// followed by space separated queue names.
-fn write_queues<W, S>(w: &mut dyn Write, queues: &[S]) -> std::result::Result<(), serde_json::Error>
+fn write_queues<W, S>(w: &mut dyn Write, queues: &[S]) -> Result<(), serde_json::Error>
 where
     W: Write,
     S: AsRef<str>,
@@ -29,7 +26,7 @@ where
 pub struct Info;
 
 impl FaktoryCommand for Info {
-    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<()> {
+    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<(), Error> {
         Ok(w.write_all(b"INFO\r\n").map_err(serde_json::Error::io)?)
     }
 }
@@ -43,7 +40,7 @@ pub struct Ack {
 }
 
 impl FaktoryCommand for Ack {
-    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<()> {
+    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<(), Error> {
         w.write_all(b"ACK ").map_err(serde_json::Error::io)?;
         serde_json::to_writer(&mut *w, self)?;
         Ok(w.write_all(b"\r\n").map_err(serde_json::Error::io)?)
@@ -66,7 +63,7 @@ pub struct Heartbeat {
 }
 
 impl FaktoryCommand for Heartbeat {
-    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<()> {
+    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<(), Error> {
         w.write_all(b"BEAT ").map_err(serde_json::Error::io)?;
         serde_json::to_writer(&mut *w, self)?;
         Ok(w.write_all(b"\r\n").map_err(serde_json::Error::io)?)
@@ -93,7 +90,7 @@ pub struct Fail {
 }
 
 impl FaktoryCommand for Fail {
-    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<()> {
+    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<(), Error> {
         w.write_all(b"FAIL ").map_err(serde_json::Error::io)?;
         serde_json::to_writer(&mut *w, self)?;
         Ok(w.write_all(b"\r\n").map_err(serde_json::Error::io)?)
@@ -124,7 +121,7 @@ impl Fail {
 pub struct End;
 
 impl FaktoryCommand for End {
-    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<()> {
+    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<(), Error> {
         Ok(w.write_all(b"END\r\n").map_err(serde_json::Error::io)?)
     }
 }
@@ -142,7 +139,7 @@ impl<'a, S> FaktoryCommand for Fetch<'a, S>
 where
     S: AsRef<str>,
 {
-    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<()> {
+    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<(), Error> {
         if self.queues.is_empty() {
             w.write_all(b"FETCH\r\n").map_err(serde_json::Error::io)?;
         } else {
@@ -213,7 +210,7 @@ impl Hello {
 }
 
 impl FaktoryCommand for Hello {
-    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<()> {
+    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<(), Error> {
         w.write_all(b"HELLO ").map_err(serde_json::Error::io)?;
         serde_json::to_writer(&mut *w, self)?;
         Ok(w.write_all(b"\r\n").map_err(serde_json::Error::io)?)
@@ -239,7 +236,7 @@ impl From<Job> for Push {
 }
 
 impl FaktoryCommand for Push {
-    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<()> {
+    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<(), Error> {
         w.write_all(b"PUSH ").map_err(serde_json::Error::io)?;
         serde_json::to_writer(&mut *w, &**self)?;
         Ok(w.write_all(b"\r\n").map_err(serde_json::Error::io)?)
@@ -262,7 +259,7 @@ where
 }
 
 impl<S: AsRef<str>> FaktoryCommand for QueueControl<'_, S> {
-    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<()> {
+    fn issue<W: Write>(&self, w: &mut dyn Write) -> Result<(), Error> {
         let command = match self.action {
             QueueAction::Pause => b"QUEUE PAUSE".as_ref(),
             QueueAction::Resume => b"QUEUE RESUME".as_ref(),

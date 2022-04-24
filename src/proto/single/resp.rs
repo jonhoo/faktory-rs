@@ -1,9 +1,8 @@
-use crate::ProtocolError;
+use super::Error;
+use crate::error::Protocol;
 use std::io::prelude::*;
 
-use super::Error;
-
-fn bad(expected: &'static str, got: &RawResponse) -> ProtocolError {
+fn bad(expected: &'static str, got: &RawResponse) -> Protocol {
     let stringy = match *got {
         RawResponse::String(ref s) => Some(&**s),
         RawResponse::Blob(ref b) => {
@@ -17,11 +16,11 @@ fn bad(expected: &'static str, got: &RawResponse) -> ProtocolError {
     };
 
     match stringy {
-        Some(s) => ProtocolError::BadType {
+        Some(s) => Protocol::BadType {
             expected,
             received: s.to_string(),
         },
-        None => ProtocolError::BadType {
+        None => Protocol::BadType {
             expected,
             received: format!("{:?}", got),
         },
@@ -131,7 +130,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
             let l = s.len() - 2;
             s.truncate(l);
 
-            Err(ProtocolError::new(s).into())
+            Err(Protocol::new(s).into())
         }
         b':' => {
             // Integer
@@ -145,7 +144,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
 
             match (&*s).parse::<isize>() {
                 Ok(i) => Ok(RawResponse::Number(i)),
-                Err(_) => Err(ProtocolError::BadResponse {
+                Err(_) => Err(Protocol::BadResponse {
                     typed_as: "integer",
                     error: "invalid integer value",
                     bytes: s.into_bytes(),
@@ -159,14 +158,14 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
             let mut bytes = Vec::with_capacity(32);
             r.read_until(b'\n', &mut bytes)?;
             let s = std::str::from_utf8(&bytes[0..bytes.len() - 2]).map_err(|_| {
-                ProtocolError::BadResponse {
+                Protocol::BadResponse {
                     typed_as: "bulk string",
                     error: "server bulk response contains non-utf8 size prefix",
                     bytes: bytes[0..bytes.len() - 2].to_vec(),
                 }
             })?;
 
-            let size = s.parse::<isize>().map_err(|_| ProtocolError::BadResponse {
+            let size = s.parse::<isize>().map_err(|_| Protocol::BadResponse {
                 typed_as: "bulk string",
                 error: "server bulk response size prefix is not an integer",
                 bytes: s.as_bytes().to_vec(),
@@ -192,7 +191,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
             // so we'll just give up
             unimplemented!();
         }
-        c => Err(ProtocolError::BadResponse {
+        c => Err(Protocol::BadResponse {
             typed_as: "unknown",
             error: "invalid response type prefix",
             bytes: vec![c],
@@ -224,7 +223,7 @@ impl From<Vec<u8>> for RawResponse {
 #[cfg(test)]
 mod test {
     use super::{read, Error, RawResponse};
-    use crate::ProtocolError;
+    use crate::error::Protocol;
     use serde_json::{self, Map, Value};
     use std::io::{self, Cursor};
 
@@ -247,7 +246,7 @@ mod test {
     #[test]
     fn it_errors_on_bad_numbers() {
         let c = Cursor::new(b":x\r\n");
-        if let Error::Protocol(ProtocolError::BadResponse {
+        if let Error::Protocol(Protocol::BadResponse {
             typed_as, error, ..
         }) = read(c).unwrap_err()
         {
@@ -261,7 +260,7 @@ mod test {
     #[test]
     fn it_parses_errors() {
         let c = Cursor::new(b"-ERR foo\r\n");
-        if let Error::Protocol(ProtocolError::Internal { ref msg }) = read(c).unwrap_err() {
+        if let Error::Protocol(Protocol::Internal { ref msg }) = read(c).unwrap_err() {
             assert_eq!(msg, "foo");
         } else {
             unreachable!();
@@ -284,7 +283,7 @@ mod test {
     #[test]
     fn it_errors_on_bad_sizes() {
         let c = Cursor::new(b"$x\r\n\r\n");
-        if let Error::Protocol(ProtocolError::BadResponse {
+        if let Error::Protocol(Protocol::BadResponse {
             typed_as, error, ..
         }) = read(c).unwrap_err()
         {
@@ -373,7 +372,7 @@ mod test {
     #[test]
     fn json_error_on_number() {
         let c = Cursor::new(b":9\r\n");
-        if let Error::Protocol(ProtocolError::BadType {
+        if let Error::Protocol(Protocol::BadType {
             expected,
             ref received,
         }) = read_json(c).unwrap_err()
@@ -388,7 +387,7 @@ mod test {
     #[test]
     fn it_errors_on_unknown_resp_type() {
         let c = Cursor::new(b"^\r\n");
-        if let Error::Protocol(ProtocolError::BadResponse {
+        if let Error::Protocol(Protocol::BadResponse {
             typed_as, error, ..
         }) = read_json(c).unwrap_err()
         {

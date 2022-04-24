@@ -1,49 +1,90 @@
-use thiserror::Error;
+//! Enumerates all errors that this crate may return.
+//!
+//! [Error] is the top level error enum.
+//! Most consumers should only need to interact with this type.
+//! This is also where more generic errors such as IO errors are placed,
+//! whereas the more specific errors ([Connection] and [Protocol]) are
+//! related to logic.
+//!
+//! [Connect] describes errors specific to the connection logic, for example
+//! version mismatches or an invalid URL.
+//!
+//! [Protocol] describes lower-level errors relating to communication
+//! with the faktory server. Typically, [Protocol] errors are the result
+//! of the server sending a response this client did not expect.
 
-use crate::proto::ConnectError;
+use thiserror::Error;
 
 /// The set of observable errors when interacting with a Faktory server.
 #[derive(Debug, Error)]
-#[allow(clippy::manual_non_exhaustive)]
+#[non_exhaustive]
 pub enum Error {
     /// The connection to the server, or one of its prerequisites, failed.
-    #[error("connection error: {0}")]
-    Connect(#[from] ConnectError),
+    #[error("connection")]
+    Connect(#[from] Connect),
 
-    /// Underlying io layer errors.
+    /// Underlying IO layer errors.
+    ///
     /// These are overwhelmingly network communication errors on the socket connection to the server.
-    #[error("underlying i/o: {0}")]
-    GenericIO(#[from] std::io::Error),
+    #[error("underlying IO")]
+    IO(#[from] std::io::Error),
 
     /// Application-level errors.
+    ///
     /// These generally indicate a mismatch between what the client expects and what the server expects.
-    #[error("protocol: {0}")]
-    Protocol(#[from] ProtocolError),
+    #[error("protocol")]
+    Protocol(#[from] Protocol),
 
     /// Faktory payloads are JSON encoded.
+    ///
     /// This error is one that was encountered when attempting to deserialize a response from the server.
     /// These generally indicate a mismatch between what the client expects and what the server provided.
-    #[error("deserialize payload: {0}")]
+    #[error("deserialize payload")]
     DeserializePayload(#[from] serde_json::Error),
 
     /// Indicates an error in the underlying TLS stream.
     #[cfg(feature = "tls")]
-    #[error("underlying tls stream: {0}")]
+    #[error("underlying tls stream")]
     TlsStream(#[from] native_tls::Error),
+}
 
-    // We're going to add more error types in the future
-    // https://github.com/rust-lang/rust/issues/44109
-    //
-    // This forces users to write pattern matches with a catch-all `_` arm.
-    #[error("unreachable")]
-    #[doc(hidden)]
-    __Nonexhaustive,
+/// Errors specific to connection logic.
+#[derive(Debug, Error)]
+pub enum Connect {
+    /// The scheme portion of the connection address provided is invalid.
+    #[error("unknown scheme: {scheme}")]
+    BadScheme {
+        /// The scheme that was provided in the connection address.
+        scheme: String,
+    },
+
+    /// The provided connection address does not contain a hostname.
+    #[error("no hostname given")]
+    MissingHostname,
+
+    /// The server requires authentication, but none was provided.
+    #[error("server requires authentication")]
+    AuthenticationNeeded,
+
+    /// The server expects a different protocol version than this library supports.
+    #[error("server version mismatch (theirs: {theirs}, ours: {ours})")]
+    VersionMismatch {
+        /// The protocol version this library supports.
+        ours: usize,
+
+        /// The protocol version the server expects.
+        theirs: usize,
+    },
+
+    /// The connection address provided was not able to be parsed.
+    #[error("parse URL")]
+    ParseUrl(#[source] url::ParseError),
 }
 
 /// The set of observable application-level errors when interacting with a Faktory server.
 #[derive(Debug, Error)]
-#[allow(clippy::manual_non_exhaustive)]
-pub enum ProtocolError {
+#[non_exhaustive]
+pub enum Protocol {
     /// The server reports that an issued request was malformed.
     #[error("request was malformed: {desc}")]
     Malformed {
@@ -80,35 +121,27 @@ pub enum ProtocolError {
         /// The relevant bytes sent by the server.
         bytes: Vec<u8>,
     },
-
-    // We're going to add more error types in the future
-    // https://github.com/rust-lang/rust/issues/44109
-    //
-    // This forces users to write pattern matches with a catch-all `_` arm.
-    #[error("unreachable")]
-    #[doc(hidden)]
-    __Nonexhaustive,
 }
 
-impl ProtocolError {
+impl Protocol {
     pub(crate) fn new(line: String) -> Self {
         let mut parts = line.splitn(2, ' ');
         let code = parts.next();
         let error = parts.next();
         if error.is_none() {
-            return ProtocolError::Internal {
+            return Protocol::Internal {
                 msg: code.unwrap().to_string(),
             };
         }
         let error = error.unwrap().to_string();
 
         match code {
-            Some("ERR") => ProtocolError::Internal { msg: error },
-            Some("MALFORMED") => ProtocolError::Malformed { desc: error },
-            Some(c) => ProtocolError::Internal {
+            Some("ERR") => Protocol::Internal { msg: error },
+            Some("MALFORMED") => Protocol::Malformed { desc: error },
+            Some(c) => Protocol::Internal {
                 msg: format!("{} {}", c, error),
             },
-            None => ProtocolError::Internal {
+            None => Protocol::Internal {
                 msg: "empty error response".to_string(),
             },
         }

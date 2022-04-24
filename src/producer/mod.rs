@@ -3,9 +3,6 @@ use crate::proto::{self, Client, Info, Job, Push, QueueAction, QueueControl};
 use std::io::prelude::*;
 use std::net::TcpStream;
 
-/// Default Error type, aliased in module for convenience.
-type Result<T> = std::result::Result<T, Error>;
-
 /// `Producer` is used to enqueue new jobs that will in turn be processed by Faktory workers.
 ///
 /// # Connecting to Faktory
@@ -84,7 +81,7 @@ impl Producer<TcpStream> {
     /// ```
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
-    pub fn connect(url: Option<&str>) -> Result<Self> {
+    pub fn connect(url: Option<&str>) -> Result<Self, Error> {
         let url = match url {
             Some(url) => proto::url_parse(url),
             None => proto::url_parse(&proto::get_env_url()),
@@ -96,22 +93,23 @@ impl Producer<TcpStream> {
 
 impl<S: Read + Write> Producer<S> {
     /// Connect to a Faktory server with a non-standard stream.
-    pub fn connect_with(stream: S, pwd: Option<String>) -> Result<Producer<S>> {
-        let c = Client::new_producer(stream, pwd)?;
-        Ok(Producer { c })
+    pub fn connect_with(stream: S, pwd: Option<String>) -> Result<Producer<S>, Error> {
+        Ok(Producer {
+            c: Client::new_producer(stream, pwd)?,
+        })
     }
 
     /// Enqueue the given job on the Faktory server.
     ///
     /// Returns `Ok` if the job was successfully queued by the Faktory server.
-    pub fn enqueue(&mut self, job: Job) -> Result<()> {
+    pub fn enqueue(&mut self, job: Job) -> Result<(), Error> {
         self.c.issue(&Push::from(job))?.await_ok()
     }
 
     /// Retrieve information about the running server.
     ///
     /// The returned value is the result of running the `INFO` command on the server.
-    pub fn info(&mut self) -> Result<serde_json::Value> {
+    pub fn info(&mut self) -> Result<serde_json::Value, Error> {
         self.c
             .issue(&Info)?
             .read_json()
@@ -119,14 +117,14 @@ impl<S: Read + Write> Producer<S> {
     }
 
     /// Pause the given queues.
-    pub fn queue_pause<T: AsRef<str>>(&mut self, queues: &[T]) -> Result<()> {
+    pub fn queue_pause<T: AsRef<str>>(&mut self, queues: &[T]) -> Result<(), Error> {
         self.c
             .issue(&QueueControl::new(QueueAction::Pause, queues))?
             .await_ok()
     }
 
     /// Resume the given queues.
-    pub fn queue_resume<T: AsRef<str>>(&mut self, queues: &[T]) -> Result<()> {
+    pub fn queue_resume<T: AsRef<str>>(&mut self, queues: &[T]) -> Result<(), Error> {
         self.c
             .issue(&QueueControl::new(QueueAction::Resume, queues))?
             .await_ok()
