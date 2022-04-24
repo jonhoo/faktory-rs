@@ -1,5 +1,4 @@
-use super::Error;
-use crate::error::Protocol;
+use crate::error::{Error, Protocol};
 use std::io::prelude::*;
 
 fn bad(expected: &'static str, got: &RawResponse) -> Protocol {
@@ -222,8 +221,8 @@ impl From<Vec<u8>> for RawResponse {
 
 #[cfg(test)]
 mod test {
-    use super::{read, Error, RawResponse};
-    use crate::error::Protocol;
+    use super::{read, RawResponse};
+    use crate::error::{Error, Protocol};
     use serde_json::{self, Map, Value};
     use std::io::{self, Cursor};
 
