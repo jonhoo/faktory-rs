@@ -1,4 +1,4 @@
-use crate::error::{Connect, Error, Protocol};
+use crate::error::{self, Error};
 use bufstream::BufStream;
 use libc::getpid;
 use std::io;
@@ -27,16 +27,16 @@ pub(crate) fn host_from_url(url: &Url) -> String {
 }
 
 pub(crate) fn url_parse(url: &str) -> Result<Url, Error> {
-    let url = Url::parse(url).map_err(Connect::ParseUrl)?;
+    let url = Url::parse(url).map_err(error::Connect::ParseUrl)?;
     if url.scheme() != "tcp" {
-        return Err(Connect::BadScheme {
+        return Err(error::Connect::BadScheme {
             scheme: url.scheme().to_string(),
         }
         .into());
     }
 
     if url.host_str().is_none() || url.host_str().unwrap().is_empty() {
-        return Err(Connect::MissingHostname.into());
+        return Err(error::Connect::MissingHostname.into());
     }
 
     Ok(url)
@@ -138,7 +138,7 @@ impl<S: Read + Write> Client<S> {
         let hi = single::read_hi(&mut self.stream)?;
 
         if hi.version != EXPECTED_PROTOCOL_VERSION {
-            return Err(Connect::VersionMismatch {
+            return Err(error::Connect::VersionMismatch {
                 ours: EXPECTED_PROTOCOL_VERSION,
                 theirs: hi.version,
             }
@@ -180,7 +180,7 @@ impl<S: Read + Write> Client<S> {
             if let Some(ref pwd) = self.opts.password {
                 hello.set_password(&hi, pwd);
             } else {
-                return Err(Connect::AuthenticationNeeded.into());
+                return Err(error::Connect::AuthenticationNeeded.into());
             }
         }
 
@@ -226,7 +226,7 @@ impl<S: Read + Write> Client<S> {
             {
                 Some("terminate") => Ok(HeartbeatStatus::Terminate),
                 Some("quiet") => Ok(HeartbeatStatus::Quiet),
-                _ => Err(Protocol::BadType {
+                _ => Err(error::Protocol::BadType {
                     expected: "heartbeat response",
                     received: format!("{}", s),
                 }

@@ -1,7 +1,7 @@
-use crate::error::{Error, Protocol};
+use crate::error::{self, Error};
 use std::io::prelude::*;
 
-fn bad(expected: &'static str, got: &RawResponse) -> Protocol {
+fn bad(expected: &'static str, got: &RawResponse) -> error::Protocol {
     let stringy = match *got {
         RawResponse::String(ref s) => Some(&**s),
         RawResponse::Blob(ref b) => {
@@ -15,11 +15,11 @@ fn bad(expected: &'static str, got: &RawResponse) -> Protocol {
     };
 
     match stringy {
-        Some(s) => Protocol::BadType {
+        Some(s) => error::Protocol::BadType {
             expected,
             received: s.to_string(),
         },
-        None => Protocol::BadType {
+        None => error::Protocol::BadType {
             expected,
             received: format!("{:?}", got),
         },
@@ -91,7 +91,7 @@ pub fn read_ok<R: BufRead>(r: R) -> Result<(), Error> {
 
 // ----------------------------------------------
 //
-// below is the implementation of the Redis RESP protocol
+// below is the implementation of the Redis RESP error::protocol
 //
 // ----------------------------------------------
 
@@ -109,7 +109,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
     match cmdbuf[0] {
         b'+' => {
             // Simple String
-            // https://redis.io/topics/protocol#resp-simple-strings
+            // https://redis.io/topics/error::protocol#resp-simple-strings
             let mut s = String::new();
             r.read_line(&mut s)?;
 
@@ -121,7 +121,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
         }
         b'-' => {
             // Error
-            // https://redis.io/topics/protocol#resp-errors
+            // https://redis.io/topics/error::protocol#resp-errors
             let mut s = String::new();
             r.read_line(&mut s)?;
 
@@ -129,11 +129,11 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
             let l = s.len() - 2;
             s.truncate(l);
 
-            Err(Protocol::new(s).into())
+            Err(error::Protocol::new(s).into())
         }
         b':' => {
             // Integer
-            // https://redis.io/topics/protocol#resp-integers
+            // https://redis.io/topics/error::protocol#resp-integers
             let mut s = String::with_capacity(32);
             r.read_line(&mut s)?;
 
@@ -143,7 +143,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
 
             match (&*s).parse::<isize>() {
                 Ok(i) => Ok(RawResponse::Number(i)),
-                Err(_) => Err(Protocol::BadResponse {
+                Err(_) => Err(error::Protocol::BadResponse {
                     typed_as: "integer",
                     error: "invalid integer value",
                     bytes: s.into_bytes(),
@@ -153,22 +153,24 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
         }
         b'$' => {
             // Bulk String
-            // https://redis.io/topics/protocol#resp-bulk-strings
+            // https://redis.io/topics/error::protocol#resp-bulk-strings
             let mut bytes = Vec::with_capacity(32);
             r.read_until(b'\n', &mut bytes)?;
             let s = std::str::from_utf8(&bytes[0..bytes.len() - 2]).map_err(|_| {
-                Protocol::BadResponse {
+                error::Protocol::BadResponse {
                     typed_as: "bulk string",
                     error: "server bulk response contains non-utf8 size prefix",
                     bytes: bytes[0..bytes.len() - 2].to_vec(),
                 }
             })?;
 
-            let size = s.parse::<isize>().map_err(|_| Protocol::BadResponse {
-                typed_as: "bulk string",
-                error: "server bulk response size prefix is not an integer",
-                bytes: s.as_bytes().to_vec(),
-            })?;
+            let size = s
+                .parse::<isize>()
+                .map_err(|_| error::Protocol::BadResponse {
+                    typed_as: "bulk string",
+                    error: "server bulk response size prefix is not an integer",
+                    bytes: s.as_bytes().to_vec(),
+                })?;
 
             if size == -1 {
                 Ok(RawResponse::Null)
@@ -182,7 +184,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
         }
         b'*' => {
             // Arrays
-            // https://redis.io/topics/protocol#resp-arrays
+            // https://redis.io/topics/error::protocol#resp-arrays
             //
             // not used in faktory.
             // *and* you can't really skip them unless you parse them.
@@ -190,7 +192,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
             // so we'll just give up
             unimplemented!();
         }
-        c => Err(Protocol::BadResponse {
+        c => Err(error::Protocol::BadResponse {
             typed_as: "unknown",
             error: "invalid response type prefix",
             bytes: vec![c],
@@ -222,7 +224,7 @@ impl From<Vec<u8>> for RawResponse {
 #[cfg(test)]
 mod test {
     use super::{read, RawResponse};
-    use crate::error::{Error, Protocol};
+    use crate::error::{self, Error};
     use serde_json::{self, Map, Value};
     use std::io::{self, Cursor};
 
@@ -245,7 +247,7 @@ mod test {
     #[test]
     fn it_errors_on_bad_numbers() {
         let c = Cursor::new(b":x\r\n");
-        if let Error::Protocol(Protocol::BadResponse {
+        if let Error::Protocol(error::Protocol::BadResponse {
             typed_as, error, ..
         }) = read(c).unwrap_err()
         {
@@ -259,7 +261,7 @@ mod test {
     #[test]
     fn it_parses_errors() {
         let c = Cursor::new(b"-ERR foo\r\n");
-        if let Error::Protocol(Protocol::Internal { ref msg }) = read(c).unwrap_err() {
+        if let Error::Protocol(error::Protocol::Internal { ref msg }) = read(c).unwrap_err() {
             assert_eq!(msg, "foo");
         } else {
             unreachable!();
@@ -282,7 +284,7 @@ mod test {
     #[test]
     fn it_errors_on_bad_sizes() {
         let c = Cursor::new(b"$x\r\n\r\n");
-        if let Error::Protocol(Protocol::BadResponse {
+        if let Error::Protocol(error::Protocol::BadResponse {
             typed_as, error, ..
         }) = read(c).unwrap_err()
         {
@@ -371,7 +373,7 @@ mod test {
     #[test]
     fn json_error_on_number() {
         let c = Cursor::new(b":9\r\n");
-        if let Error::Protocol(Protocol::BadType {
+        if let Error::Protocol(error::Protocol::BadType {
             expected,
             ref received,
         }) = read_json(c).unwrap_err()
@@ -386,7 +388,7 @@ mod test {
     #[test]
     fn it_errors_on_unknown_resp_type() {
         let c = Cursor::new(b"^\r\n");
-        if let Error::Protocol(Protocol::BadResponse {
+        if let Error::Protocol(error::Protocol::BadResponse {
             typed_as, error, ..
         }) = read_json(c).unwrap_err()
         {
