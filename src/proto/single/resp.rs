@@ -95,7 +95,7 @@ pub fn read_ok<R: BufRead>(r: R) -> Result<(), Error> {
 
 // ----------------------------------------------
 //
-// below is the implementation of the Redis RESP error::protocol
+// below is the implementation of the Redis RESP protocol
 //
 // ----------------------------------------------
 
@@ -113,7 +113,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
     match cmdbuf[0] {
         b'+' => {
             // Simple String
-            // https://redis.io/topics/error::protocol#resp-simple-strings
+            // https://redis.io/topics/protocol#resp-simple-strings
             let mut s = String::new();
             r.read_line(&mut s)?;
 
@@ -125,7 +125,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
         }
         b'-' => {
             // Error
-            // https://redis.io/topics/error::protocol#resp-errors
+            // https://redis.io/topics/protocol#resp-errors
             let mut s = String::new();
             r.read_line(&mut s)?;
 
@@ -137,7 +137,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
         }
         b':' => {
             // Integer
-            // https://redis.io/topics/error::protocol#resp-integers
+            // https://redis.io/topics/protocol#resp-integers
             let mut s = String::with_capacity(32);
             r.read_line(&mut s)?;
 
@@ -188,7 +188,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
         }
         b'*' => {
             // Arrays
-            // https://redis.io/topics/error::protocol#resp-arrays
+            // https://redis.io/topics/protocol#resp-arrays
             //
             // not used in faktory.
             // *and* you can't really skip them unless you parse them.
