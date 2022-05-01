@@ -37,7 +37,7 @@ pub fn read_json<R: BufRead, T: serde::de::DeserializeOwned>(r: R) -> Result<Opt
         RawResponse::String(ref s) => {
             return serde_json::from_str(s)
                 .map(Some)
-                .map_err(Error::DeserializePayload);
+                .map_err(Error::Serialization);
         }
         RawResponse::Blob(ref b) if b == b"OK" => {
             return Ok(None);
@@ -48,7 +48,7 @@ pub fn read_json<R: BufRead, T: serde::de::DeserializeOwned>(r: R) -> Result<Opt
             }
             return serde_json::from_slice(b)
                 .map(Some)
-                .map_err(Error::DeserializePayload);
+                .map_err(Error::Serialization);
         }
         RawResponse::Null => return Ok(None),
         _ => {}
@@ -73,7 +73,7 @@ pub fn read_hi<R: BufRead>(r: R) -> Result<Hi, Error> {
     let rr = read(r)?;
     if let RawResponse::String(ref s) = rr {
         if let Some(s) = s.strip_prefix("HI ") {
-            return serde_json::from_str(s).map_err(Error::DeserializePayload);
+            return serde_json::from_str(s).map_err(Error::Serialization);
         }
     }
 
@@ -357,7 +357,7 @@ mod test {
     #[test]
     fn it_errors_on_bad_json_blob() {
         let c = Cursor::new(b"$9\r\n{\"hello\"}\r\n");
-        if let Error::DeserializePayload(err) = read_json(c).unwrap_err() {
+        if let Error::Serialization(err) = read_json(c).unwrap_err() {
             let _: serde_json::Error = err;
         } else {
             unreachable!();
@@ -367,7 +367,7 @@ mod test {
     #[test]
     fn it_errors_on_bad_json_string() {
         let c = Cursor::new(b"+{\"hello\"}\r\n");
-        if let Error::DeserializePayload(err) = read_json(c).unwrap_err() {
+        if let Error::Serialization(err) = read_json(c).unwrap_err() {
             let _: serde_json::Error = err;
         } else {
             unreachable!();
