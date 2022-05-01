@@ -23,10 +23,10 @@ pub enum Error {
     #[error("connection")]
     Connect(#[from] Connect),
 
-    /// Underlying IO layer errors.
+    /// Underlying I/O layer errors.
     ///
     /// These are overwhelmingly network communication errors on the socket connection to the server.
-    #[error("underlying IO")]
+    #[error("underlying I/O")]
     IO(#[from] std::io::Error),
 
     /// Application-level errors.
