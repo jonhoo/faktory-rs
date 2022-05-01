@@ -1,16 +1,16 @@
 //! Enumerates all errors that this crate may return.
 //!
-//! [Error] is the top level error enum.
+//! [`Error`] is the top level error enum.
 //! Most consumers should only need to interact with this type.
 //! This is also where more generic errors such as IO errors are placed,
-//! whereas the more specific errors ([Connection] and [Protocol]) are
+//! whereas the more specific errors ([`Connection`] and [`Protocol`]) are
 //! related to logic.
 //!
-//! [Connect] describes errors specific to the connection logic, for example
+//! [`Connect`] describes errors specific to the connection logic, for example
 //! version mismatches or an invalid URL.
 //!
-//! [Protocol] describes lower-level errors relating to communication
-//! with the faktory server. Typically, [Protocol] errors are the result
+//! [`Protocol`] describes lower-level errors relating to communication
+//! with the faktory server. Typically, [`Protocol`] errors are the result
 //! of the server sending a response this client did not expect.
 
 use thiserror::Error;
