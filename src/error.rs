@@ -45,7 +45,7 @@ pub enum Error {
     /// Indicates an error in the underlying TLS stream.
     #[cfg(feature = "tls")]
     #[error("underlying tls stream")]
-    TlsStream(#[from] native_tls::Error),
+    TlsStream(#[source] native_tls::Error),
 }
 
 /// Errors specific to connection logic.
