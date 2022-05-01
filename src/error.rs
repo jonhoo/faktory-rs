@@ -40,7 +40,7 @@ pub enum Error {
     /// This error is one that was encountered when attempting to deserialize a response from the server.
     /// These generally indicate a mismatch between what the client expects and what the server provided.
     #[error("deserialize payload")]
-    DeserializePayload(#[from] serde_json::Error),
+    DeserializePayload(#[source] serde_json::Error),
 
     /// Indicates an error in the underlying TLS stream.
     #[cfg(feature = "tls")]
@@ -147,4 +147,8 @@ impl Protocol {
             },
         }
     }
+}
+
+pub(crate) fn wrap_serde_io(err: std::io::Error) -> Error {
+    Error::DeserializePayload(serde_json::Error::io(err))
 }

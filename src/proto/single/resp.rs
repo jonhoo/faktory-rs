@@ -35,7 +35,9 @@ pub fn read_json<R: BufRead, T: serde::de::DeserializeOwned>(r: R) -> Result<Opt
             return Ok(None);
         }
         RawResponse::String(ref s) => {
-            return Ok(serde_json::from_str(s).map(Some)?);
+            return serde_json::from_str(s)
+                .map(Some)
+                .map_err(Error::DeserializePayload);
         }
         RawResponse::Blob(ref b) if b == b"OK" => {
             return Ok(None);
@@ -44,7 +46,9 @@ pub fn read_json<R: BufRead, T: serde::de::DeserializeOwned>(r: R) -> Result<Opt
             if b.is_empty() {
                 return Ok(None);
             }
-            return Ok(serde_json::from_slice(b).map(Some)?);
+            return serde_json::from_slice(b)
+                .map(Some)
+                .map_err(Error::DeserializePayload);
         }
         RawResponse::Null => return Ok(None),
         _ => {}
@@ -69,7 +73,7 @@ pub fn read_hi<R: BufRead>(r: R) -> Result<Hi, Error> {
     let rr = read(r)?;
     if let RawResponse::String(ref s) = rr {
         if let Some(s) = s.strip_prefix("HI ") {
-            return Ok(serde_json::from_str(s)?);
+            return serde_json::from_str(s).map_err(Error::DeserializePayload);
         }
     }
 
