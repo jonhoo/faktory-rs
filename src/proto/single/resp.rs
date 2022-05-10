@@ -157,7 +157,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
         }
         b'$' => {
             // Bulk String
-            // https://redis.io/topics/error::protocol#resp-bulk-strings
+            // https://redis.io/topics/protocol#resp-bulk-strings
             let mut bytes = Vec::with_capacity(32);
             r.read_until(b'\n', &mut bytes)?;
             let s = std::str::from_utf8(&bytes[0..bytes.len() - 2]).map_err(|_| {
