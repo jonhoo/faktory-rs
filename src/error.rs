@@ -148,7 +148,3 @@ impl Protocol {
         }
     }
 }
-
-pub(crate) fn wrap_serde_io(err: std::io::Error) -> Error {
-    Error::Serialization(serde_json::Error::io(err))
-}
