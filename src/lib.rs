@@ -58,12 +58,10 @@
 #![warn(rust_2018_idioms)]
 
 #[macro_use]
-extern crate failure;
-#[macro_use]
 extern crate serde_derive;
 
 mod consumer;
-mod error;
+pub mod error;
 mod producer;
 mod proto;
 
@@ -73,7 +71,7 @@ mod tls;
 pub use tls::TlsStream;
 
 pub use crate::consumer::{Consumer, ConsumerBuilder};
-pub use crate::error::FaktoryError;
+pub use crate::error::Error;
 pub use crate::producer::Producer;
 pub use crate::proto::Job;
 pub use crate::proto::Reconnect;

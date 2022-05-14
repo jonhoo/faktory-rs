@@ -1,6 +1,5 @@
-use crate::FaktoryError;
+use crate::error::{self, Error};
 use bufstream::BufStream;
-use failure::Error;
 use libc::getpid;
 use std::io;
 use std::io::prelude::*;
@@ -17,21 +16,6 @@ pub use self::single::{Ack, Fail, Heartbeat, Info, Job, Push, QueueAction, Queue
 // responses that users can see
 pub use self::single::Hi;
 
-#[derive(Debug, Fail)]
-pub enum ConnectError {
-    #[fail(display = "unknown scheme: {}", scheme)]
-    BadScheme { scheme: String },
-    #[fail(display = "no hostname given")]
-    MissingHostname,
-    #[fail(display = "server requires authentication")]
-    AuthenticationNeeded,
-    #[fail(
-        display = "server version mismatch (theirs: {}, ours: {})",
-        theirs, ours
-    )]
-    VersionMismatch { ours: usize, theirs: usize },
-}
-
 pub(crate) fn get_env_url() -> String {
     use std::env;
     let var = env::var("FAKTORY_PROVIDER").unwrap_or_else(|_| "FAKTORY_URL".to_string());
@@ -43,16 +27,16 @@ pub(crate) fn host_from_url(url: &Url) -> String {
 }
 
 pub(crate) fn url_parse(url: &str) -> Result<Url, Error> {
-    let url = Url::parse(url)?;
+    let url = Url::parse(url).map_err(error::Connect::ParseUrl)?;
     if url.scheme() != "tcp" {
-        return Err(ConnectError::BadScheme {
+        return Err(error::Connect::BadScheme {
             scheme: url.scheme().to_string(),
         }
         .into());
     }
 
     if url.host_str().is_none() || url.host_str().unwrap().is_empty() {
-        return Err(ConnectError::MissingHostname.into());
+        return Err(error::Connect::MissingHostname.into());
     }
 
     Ok(url)
@@ -154,7 +138,7 @@ impl<S: Read + Write> Client<S> {
         let hi = single::read_hi(&mut self.stream)?;
 
         if hi.version != EXPECTED_PROTOCOL_VERSION {
-            return Err(ConnectError::VersionMismatch {
+            return Err(error::Connect::VersionMismatch {
                 ours: EXPECTED_PROTOCOL_VERSION,
                 theirs: hi.version,
             }
@@ -196,9 +180,10 @@ impl<S: Read + Write> Client<S> {
             if let Some(ref pwd) = self.opts.password {
                 hello.set_password(&hi, pwd);
             } else {
-                return Err(ConnectError::AuthenticationNeeded.into());
+                return Err(error::Connect::AuthenticationNeeded.into());
             }
         }
+
         single::write_command_and_await_ok(&mut self.stream, &hello)
     }
 }
@@ -241,7 +226,7 @@ impl<S: Read + Write> Client<S> {
             {
                 Some("terminate") => Ok(HeartbeatStatus::Terminate),
                 Some("quiet") => Ok(HeartbeatStatus::Quiet),
-                _ => Err(FaktoryError::BadType {
+                _ => Err(error::Protocol::BadType {
                     expected: "heartbeat response",
                     received: format!("{}", s),
                 }

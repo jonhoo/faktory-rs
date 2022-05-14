@@ -1,5 +1,5 @@
 use crate::proto::{self, Reconnect};
-use failure::Error;
+use crate::Error;
 use native_tls::TlsConnector;
 use native_tls::TlsStream as NativeTlsStream;
 use std::io;
@@ -41,7 +41,10 @@ impl TlsStream<TcpStream> {
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
     pub fn connect(url: Option<&str>) -> Result<Self, Error> {
-        TlsStream::with_connector(TlsConnector::builder().build()?, url)
+        TlsStream::with_connector(
+            TlsConnector::builder().build().map_err(Error::TlsStream)?,
+            url,
+        )
     }
 
     /// Create a new TLS connection over TCP using a non-default TLS configuration.
@@ -70,14 +73,13 @@ where
     /// Create a new TLS connection on an existing stream with a non-default TLS configuration.
     pub fn new(stream: S, tls: TlsConnector, hostname: &str) -> io::Result<Self> {
         let stream = tls
-            .clone()
             .connect(hostname, stream)
             .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e))?;
 
         Ok(TlsStream {
             connector: tls,
             hostname: hostname.to_string(),
-            stream: stream,
+            stream,
         })
     }
 }

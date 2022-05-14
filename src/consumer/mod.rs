@@ -1,6 +1,6 @@
+use crate::error::Error;
 use crate::proto::{self, Client, ClientOptions, HeartbeatStatus, Reconnect};
 use atomic_option::AtomicOption;
-use failure::Error;
 use fnv::FnvHashMap;
 use std::error::Error as StdError;
 use std::io::prelude::*;
@@ -397,7 +397,7 @@ where
                     // the resulting OK that failed. in that case, we would get an error response
                     // when re-sending the job response. this should not count as critical. other
                     // errors, however, should!
-                    if e.downcast_ref::<::std::io::Error>().is_some() {
+                    if let Error::IO(_) = e {
                         last_job_result.swap(res, atomic::Ordering::SeqCst);
                         return Err(e);
                     }

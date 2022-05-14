@@ -81,12 +81,12 @@ impl Stream {
 
         let mut inner = Inner {
             take_next: 0,
-            streams: streams,
+            streams,
         };
         let mine = inner.take_stream();
 
         Stream {
-            mine: mine,
+            mine,
             all: Arc::new(Mutex::new(inner)),
         }
     }

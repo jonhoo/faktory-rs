@@ -1,5 +1,5 @@
+use crate::error::Error;
 use crate::proto::{self, Client, Info, Job, Push, QueueAction, QueueControl};
-use failure::Error;
 use std::io::prelude::*;
 use std::net::TcpStream;
 

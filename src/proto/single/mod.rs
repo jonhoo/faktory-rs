@@ -1,10 +1,11 @@
 use chrono::{DateTime, Utc};
-use failure::Error;
 use std::collections::HashMap;
 use std::io::prelude::*;
 
 mod cmd;
 mod resp;
+
+use crate::error::Error;
 
 pub use self::cmd::*;
 pub use self::resp::*;
@@ -71,7 +72,7 @@ pub struct Job {
     ///
     /// This field is read-only.
     #[serde(skip_serializing)]
-    pub(crate) failure: Option<Failure>,
+    failure: Option<Failure>,
 
     /// Extra context to include with the job.
     ///
@@ -154,6 +155,11 @@ impl Job {
     /// The arguments provided for this job.
     pub fn args(&self) -> &[serde_json::Value] {
         &self.args
+    }
+
+    /// Data about this job's most recent failure.
+    pub fn failure(&self) -> &Option<Failure> {
+        &self.failure
     }
 }
 
