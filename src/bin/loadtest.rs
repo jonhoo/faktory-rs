@@ -1,10 +1,4 @@
-#[macro_use]
-extern crate clap;
-extern crate faktory;
-extern crate rand;
-extern crate serde_json;
-
-use clap::{App, Arg};
+use clap::{Arg, Command};
 use faktory::*;
 use rand::prelude::*;
 use std::io;
@@ -16,18 +10,18 @@ use std::time;
 const QUEUES: &[&str] = &["queue0", "queue1", "queue2", "queue3", "queue4"];
 
 fn main() {
-    let matches = App::new("My Super Program")
+    let matches = Command::new("My Super Program")
         .version("0.1")
         .about("Benchmark the performance of Rust Faktory consumers and producers")
         .arg(
-            Arg::with_name("jobs")
+            Arg::new("jobs")
                 .help("Number of jobs to run")
                 .index(1)
                 .default_value("30000")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("threads")
+            Arg::new("threads")
                 .help("Number of consumers/producers to run")
                 .index(2)
                 .default_value("10")
@@ -35,9 +29,8 @@ fn main() {
         )
         .get_matches();
 
-    let jobs = value_t_or_exit!(matches.value_of("jobs"), usize);
-    let threads = value_t_or_exit!(matches.value_of("threads"), usize);
-
+    let jobs = matches.value_of_t_or_exit::<usize>("jobs");
+    let threads = matches.value_of_t_or_exit::<usize>("threads");
     println!(
         "Running loadtest with {} jobs and {} threads",
         jobs, threads
