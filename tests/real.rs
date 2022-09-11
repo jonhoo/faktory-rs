@@ -147,9 +147,9 @@ fn queue() {
     let mut c = c.connect(None).unwrap();
 
     let mut p = Producer::connect(None).unwrap();
-    p.queue_pause(&[local]).unwrap();
     p.enqueue(Job::new(local, vec![Value::from(1)]).on_queue(local))
         .unwrap();
+    p.queue_pause(&[local]).unwrap();
 
     let had_job = c.run_one(0, &[local]).unwrap();
     assert!(!had_job);
