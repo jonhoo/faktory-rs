@@ -1,4 +1,0 @@
-[default]
-features = ["tls"]
-forward-signals = true
-run-types = ["Doctests", "Tests"]

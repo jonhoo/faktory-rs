@@ -12,11 +12,6 @@ repository = "https://github.com/jonhoo/faktory-rs.git"
 keywords = ["faktory", "api-bindings", "work-server", "job-server"]
 categories = ["api-bindings", "asynchronous", "network-programming"]
 
-[badges]
-azure-devops = { project = "jonhoo/jonhoo", pipeline = "faktory", build = "19" }
-codecov = { repository = "jonhoo/faktory-rs", branch = "master", service = "github" }
-maintenance = { status = "passively-maintained" }
-
 [features]
 default = []
 tls = ["native-tls"]
@@ -34,9 +29,9 @@ rand = "0.8"
 chrono = { version = "0.4", features = ["serde", "clock"], default-features = false }
 url = "2"
 atomic-option = "0.1"
-fnv = "1.0.3"
+fnv = "1.0.5"
 native-tls = { version = "0.2", optional = true }
-clap = { version = "3", optional = true }
+clap = { version = "3.1.0", optional = true }
 thiserror = "1.0.30"
 
 [dev-dependencies]
