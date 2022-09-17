@@ -2,7 +2,6 @@
 
 [![Crates.io](https://img.shields.io/crates/v/faktory.svg)](https://crates.io/crates/faktory)
 [![Documentation](https://docs.rs/faktory/badge.svg)](https://docs.rs/faktory/)
-[![Build Status](https://dev.azure.com/jonhoo/jonhoo/_apis/build/status/faktory?branchName=master)](https://dev.azure.com/jonhoo/jonhoo/_build/latest?definitionId=19&branchName=master)
 [![Codecov](https://codecov.io/github/jonhoo/faktory-rs/coverage.svg?branch=master)](https://codecov.io/gh/jonhoo/faktory-rs)
 [![dependency status](https://deps.rs/repo/github/jonhoo/faktory-rs/status.svg)](https://deps.rs/repo/github/jonhoo/faktory-rs)
 
