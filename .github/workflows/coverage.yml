@@ -21,7 +21,7 @@ jobs:
       - name: Generate code coverage
         run: cargo llvm-cov --all-features --lcov --output-path lcov.info
         env: # set this explicitly so integration tests will run
-          FAKTORY_URL: tcp://faktory:7419
+          FAKTORY_URL: tcp://127.0.0.1:7419
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v2
         with:
