@@ -31,7 +31,7 @@ sha2 = "0.10.0"
 hostname = "0.3"
 libc = "0.2"
 rand = "0.8"
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { version = "0.4", features = ["serde", "clock"], default-features = false }
 url = "2"
 atomic-option = "0.1"
 fnv = "1.0.3"

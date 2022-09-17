@@ -145,7 +145,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
             let l = s.len() - 2;
             s.truncate(l);
 
-            match (&*s).parse::<isize>() {
+            match (*s).parse::<isize>() {
                 Ok(i) => Ok(RawResponse::Number(i)),
                 Err(_) => Err(error::Protocol::BadResponse {
                     typed_as: "integer",
