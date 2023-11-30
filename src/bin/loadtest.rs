@@ -17,20 +17,22 @@ fn main() {
             Arg::new("jobs")
                 .help("Number of jobs to run")
                 .index(1)
-                .default_value("30000")
-                .takes_value(true),
+                .default_value("30000"),
         )
         .arg(
             Arg::new("threads")
                 .help("Number of consumers/producers to run")
                 .index(2)
-                .default_value("10")
-                .takes_value(true),
+                .default_value("10"),
         )
         .get_matches();
 
-    let jobs = matches.value_of_t_or_exit::<usize>("jobs");
-    let threads = matches.value_of_t_or_exit::<usize>("threads");
+    let jobs = *matches
+        .get_one::<usize>("jobs")
+        .expect("Number of jobs to run");
+    let threads = *matches
+        .get_one::<usize>("threads")
+        .expect("Number of consumers/producers to run");
     println!(
         "Running loadtest with {} jobs and {} threads",
         jobs, threads
