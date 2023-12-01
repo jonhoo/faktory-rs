@@ -27,11 +27,15 @@ fn main() {
         )
         .get_matches();
 
-    let jobs = *matches
-        .get_one::<usize>("jobs")
+    let jobs = matches
+        .get_one::<String>("jobs")
+        .unwrap()
+        .parse::<usize>()
         .expect("Number of jobs to run");
-    let threads = *matches
-        .get_one::<usize>("threads")
+    let threads = matches
+        .get_one::<String>("threads")
+        .unwrap()
+        .parse::<usize>()
         .expect("Number of consumers/producers to run");
     println!(
         "Running loadtest with {} jobs and {} threads",
