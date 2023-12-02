@@ -179,8 +179,8 @@ fn main() {
 #[cfg(test)]
 mod test {
     use super::{
-        calc_secs_elapsed, do_e2e_jobs, get_opts, setup_parser, AtomicCounter, DEFAULT_JOBS_COUNT,
-        DEFAULT_THREADS_COUNT,
+        calc_secs_elapsed, do_e2e_jobs, get_opts, load_with_jobs, setup_parser, AtomicCounter,
+        DEFAULT_JOBS_COUNT, DEFAULT_THREADS_COUNT,
     };
     use clap::ArgMatches;
     use std::{env, ops::Add as _, time};
@@ -248,7 +248,7 @@ mod test {
     }
 
     #[test]
-    fn test_do_jobs_and_report() {
+    fn test_do_e2e_jobs() {
         if env::var_os("FAKTORY_URL").is_none() {
             return;
         }
@@ -258,5 +258,16 @@ mod test {
         let _ = do_e2e_jobs(e2e_jobs_count, jobs_produced.clone(), jobs_consumed.clone());
         assert!(jobs_produced.get() == e2e_jobs_count / 2);
         assert!(jobs_consumed.get() == e2e_jobs_count / 2);
+    }
+
+    #[test]
+    fn test_load_with_jobs() {
+        if env::var_os("FAKTORY_URL").is_none() {
+            return;
+        }
+        let e2e_jobs_count = 30_000;
+        let (_, produced, consumed) = load_with_jobs(e2e_jobs_count, 10);
+        assert!(produced.get() >= e2e_jobs_count);
+        assert!(consumed.get() >= e2e_jobs_count);
     }
 }
