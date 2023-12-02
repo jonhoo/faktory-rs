@@ -9,8 +9,6 @@ use std::sync::{self, atomic};
 use std::thread;
 use std::time;
 
-type Counter = sync::Arc<atomic::AtomicUsize>;
-
 const QUEUES: &[&str] = &["queue0", "queue1", "queue2", "queue3", "queue4"];
 const DEFAULT_JOBS_COUNT: &str = "30000";
 const DEFAULT_THREADS_COUNT: &str = "10";
@@ -71,26 +69,44 @@ fn get_opts(parse: Option<Box<dyn FnOnce() -> ArgMatches>>) -> HashMap<&'static 
     opts
 }
 
-fn get_new_counter(initial: usize) -> Counter {
-    sync::Arc::new(atomic::AtomicUsize::new(initial))
+struct AtomicCounter {
+    value: sync::Arc<atomic::AtomicUsize>,
 }
 
-fn clone_counter(counter: &Counter) -> Counter {
-    sync::Arc::clone(counter)
+impl AtomicCounter {
+    fn new(init_val: usize) -> Self {
+        Self {
+            value: sync::Arc::new(atomic::AtomicUsize::new(init_val)),
+        }
+    }
+
+    fn inc(&self) -> usize {
+        self.value.fetch_add(1, atomic::Ordering::SeqCst)
+    }
+
+    fn get(&self) -> usize {
+        self.value.load(atomic::Ordering::SeqCst)
+    }
 }
 
-fn count_up(counter: &Counter, val: usize) -> usize {
-    counter.fetch_add(val, atomic::Ordering::SeqCst)
+impl Default for AtomicCounter {
+    fn default() -> Self {
+        Self::new(0)
+    }
 }
 
-fn ask_counter(counter: &Counter) -> usize {
-    counter.load(atomic::Ordering::SeqCst)
+impl Clone for AtomicCounter {
+    fn clone(&self) -> Self {
+        Self {
+            value: sync::Arc::clone(&self.value),
+        }
+    }
 }
 
 fn do_jobs_and_report(
     jobs_total_count: usize,
-    jobs_produced_counter: Counter,
-    jobs_consumed_counter: Counter,
+    jobs_produced_counter: AtomicCounter,
+    jobs_consumed_counter: AtomicCounter,
 ) -> Result<usize, Error> {
     let mut p = Producer::connect(None).unwrap();
 
@@ -118,10 +134,10 @@ fn do_jobs_and_report(
             job.priority = Some(rng.gen_range(1..10));
             job.queue = QUEUES.choose(&mut rng).unwrap().to_string();
             p.enqueue(job)?;
-            count_up(&jobs_produced_counter, 1);
+            jobs_produced_counter.inc();
         } else {
             c.run_one(0, &random_queues[..])?;
-            count_up(&jobs_consumed_counter, 1);
+            jobs_consumed_counter.inc();
         }
     }
 
@@ -144,13 +160,13 @@ fn main() {
 
     ping!();
 
-    let pushed = get_new_counter(0);
-    let popped = get_new_counter(0);
+    let pushed = AtomicCounter::default();
+    let popped = AtomicCounter::default();
     let start = time::Instant::now();
     let threads: Vec<thread::JoinHandle<Result<_, Error>>> = (0..threads_count)
         .map(|_| {
-            let pushed = clone_counter(&pushed);
-            let popped = clone_counter(&popped);
+            let pushed = pushed.clone();
+            let popped = popped.clone();
             thread::spawn(move || do_jobs_and_report(jobs_count, pushed, popped))
         })
         .collect();
@@ -160,8 +176,8 @@ fn main() {
 
     println!(
         "Processed {} pushes and {} pops in {:.2} seconds, rate: {} jobs/s",
-        ask_counter(&pushed),
-        ask_counter(&popped),
+        pushed.get(),
+        popped.get(),
         stop,
         jobs_count as f64 / stop,
     );
@@ -169,9 +185,11 @@ fn main() {
 
 #[cfg(test)]
 mod test {
+    use crate::AtomicCounter;
+
     use super::{
-        ask_counter, calc_secs_elapsed, clone_counter, do_jobs_and_report, get_new_counter,
-        get_opts, setup_parser, DEFAULT_JOBS_COUNT, DEFAULT_THREADS_COUNT,
+        calc_secs_elapsed, do_jobs_and_report, get_opts, setup_parser, DEFAULT_JOBS_COUNT,
+        DEFAULT_THREADS_COUNT,
     };
     use clap::ArgMatches;
     use std::{env, ops::Add as _, time};
@@ -244,14 +262,14 @@ mod test {
             return;
         }
         let total_jobs_count = 10_000;
-        let jobs_produced = get_new_counter(0);
-        let jobs_consumed = get_new_counter(0);
+        let jobs_produced = AtomicCounter::default();
+        let jobs_consumed = AtomicCounter::default();
         let _ = do_jobs_and_report(
             total_jobs_count,
-            clone_counter(&jobs_produced),
-            clone_counter(&jobs_consumed),
+            jobs_produced.clone(),
+            jobs_consumed.clone(),
         );
-        assert!(ask_counter(&jobs_produced) >= total_jobs_count / 2);
-        assert!(ask_counter(&jobs_consumed) >= total_jobs_count / 2);
+        assert!(jobs_produced.get() >= total_jobs_count / 2);
+        assert!(jobs_consumed.get() >= total_jobs_count / 2);
     }
 }
