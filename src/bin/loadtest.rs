@@ -152,19 +152,16 @@ fn calc_secs_elapsed(elapsed: &time::Duration) -> f64 {
     elapsed_nanos as f64 / 1_000_000_000.0
 }
 
-fn main() {
-    let opts = get_opts(None);
-    let jobs_count = opts.get("jobs").unwrap().to_owned();
-    let threads_count = opts.get("threads").unwrap().to_owned();
+fn run_loadtest(jobs: usize, threads: usize) {
     println!(
         "Running loadtest with {} jobs and {} threads",
-        jobs_count, threads_count
+        jobs, threads
     );
 
     ping!();
 
     let start = time::Instant::now();
-    let (_ops_count, pushed, popped) = load_with_jobs(jobs_count, threads_count);
+    let (_ops_count, pushed, popped) = load_with_jobs(jobs, threads);
     let stop = calc_secs_elapsed(&start.elapsed());
 
     println!(
@@ -172,8 +169,15 @@ fn main() {
         pushed.get(),
         popped.get(),
         stop,
-        jobs_count as f64 / stop,
+        jobs as f64 / stop,
     );
+}
+
+fn main() {
+    let opts = get_opts(None);
+    let jobs = opts.get("jobs").unwrap();
+    let threads = opts.get("threads").unwrap();
+    run_loadtest(*jobs, *threads)
 }
 
 #[cfg(test)]
