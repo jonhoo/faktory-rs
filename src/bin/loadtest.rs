@@ -183,11 +183,19 @@ fn main() {
 #[cfg(test)]
 mod test {
     use super::{
-        calc_secs_elapsed, do_e2e_jobs, get_opts, load_with_jobs, setup_parser, AtomicCounter,
-        DEFAULT_JOBS_COUNT, DEFAULT_THREADS_COUNT,
+        calc_secs_elapsed, do_e2e_jobs, get_opts, load_with_jobs, run_loadtest, setup_parser,
+        AtomicCounter, DEFAULT_JOBS_COUNT, DEFAULT_THREADS_COUNT,
     };
     use clap::ArgMatches;
     use std::{env, ops::Add as _, time};
+
+    macro_rules! skip_test_if_faktory_url_not_provided {
+        () => {
+            if env::var_os("FAKTORY_URL").is_none() {
+                return;
+            };
+        };
+    }
 
     fn parse_command_line_args_mock(argv: &[&str]) -> ArgMatches {
         let cmd = setup_parser();
@@ -253,9 +261,7 @@ mod test {
 
     #[test]
     fn test_do_e2e_jobs() {
-        if env::var_os("FAKTORY_URL").is_none() {
-            return;
-        }
+        skip_test_if_faktory_url_not_provided!();
         let e2e_jobs_count = 10_000;
         let jobs_produced = AtomicCounter::default();
         let jobs_consumed = AtomicCounter::default();
@@ -266,12 +272,21 @@ mod test {
 
     #[test]
     fn test_load_with_jobs() {
-        if env::var_os("FAKTORY_URL").is_none() {
-            return;
-        }
+        skip_test_if_faktory_url_not_provided!();
         let e2e_jobs_count = 30_000;
         let (_, produced, consumed) = load_with_jobs(e2e_jobs_count, 10);
         assert!(produced.get() >= e2e_jobs_count);
         assert!(consumed.get() >= e2e_jobs_count);
+    }
+
+    #[test]
+    fn test_loadtest_flow() {     
+        skip_test_if_faktory_url_not_provided!();        
+        let argv = ["./target/release/loadtest", "21000", "10"];
+        let parse_fn = prepare_parse_fn(&argv);
+        let opts = get_opts(Some(Box::new(parse_fn)));
+        let jobs = opts.get("jobs").unwrap();
+        let threads = opts.get("threads").unwrap();
+        run_loadtest(*jobs, *threads);
     }
 }
