@@ -69,37 +69,18 @@ fn get_opts(parse: Option<Box<dyn FnOnce() -> ArgMatches>>) -> HashMap<&'static 
     opts
 }
 
+#[derive(Clone, Default)]
 struct AtomicCounter {
     value: sync::Arc<atomic::AtomicUsize>,
 }
 
 impl AtomicCounter {
-    fn new(init_val: usize) -> Self {
-        Self {
-            value: sync::Arc::new(atomic::AtomicUsize::new(init_val)),
-        }
-    }
-
     fn inc(&self) -> usize {
         self.value.fetch_add(1, atomic::Ordering::SeqCst)
     }
 
     fn get(&self) -> usize {
         self.value.load(atomic::Ordering::SeqCst)
-    }
-}
-
-impl Default for AtomicCounter {
-    fn default() -> Self {
-        Self::new(0)
-    }
-}
-
-impl Clone for AtomicCounter {
-    fn clone(&self) -> Self {
-        Self {
-            value: sync::Arc::clone(&self.value),
-        }
     }
 }
 
@@ -185,11 +166,9 @@ fn main() {
 
 #[cfg(test)]
 mod test {
-    use crate::AtomicCounter;
-
     use super::{
-        calc_secs_elapsed, do_jobs_and_report, get_opts, setup_parser, DEFAULT_JOBS_COUNT,
-        DEFAULT_THREADS_COUNT,
+        calc_secs_elapsed, do_jobs_and_report, get_opts, setup_parser, AtomicCounter,
+        DEFAULT_JOBS_COUNT, DEFAULT_THREADS_COUNT,
     };
     use clap::ArgMatches;
     use std::{env, ops::Add as _, time};
