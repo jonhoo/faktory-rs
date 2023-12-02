@@ -84,7 +84,7 @@ impl AtomicCounter {
     }
 }
 
-fn do_jobs_and_report(
+fn do_e2e_jobs(
     e2e_jobs_count: usize,
     jobs_produced_counter: AtomicCounter,
     jobs_consumed_counter: AtomicCounter,
@@ -129,6 +129,24 @@ fn do_jobs_and_report(
     Ok(e2e_jobs_count)
 }
 
+fn load_with_jobs(
+    jobs: usize,
+    threads: usize,
+) -> (Result<Vec<usize>, Error>, AtomicCounter, AtomicCounter) {
+    let pushed = AtomicCounter::default();
+    let popped = AtomicCounter::default();
+    let threads: Vec<thread::JoinHandle<Result<_, Error>>> = (0..threads)
+        .map(|_| {
+            let pushed = pushed.clone();
+            let popped = popped.clone();
+            thread::spawn(move || do_e2e_jobs(jobs, pushed, popped))
+        })
+        .collect();
+
+    let ops_per_thread = threads.into_iter().map(|jt| jt.join().unwrap()).collect();
+    (ops_per_thread, pushed, popped)
+}
+
 fn calc_secs_elapsed(elapsed: &time::Duration) -> f64 {
     let elapsed_nanos = elapsed.as_secs() * 1_000_000_000 + u64::from(elapsed.subsec_nanos());
     elapsed_nanos as f64 / 1_000_000_000.0
@@ -145,18 +163,8 @@ fn main() {
 
     ping!();
 
-    let pushed = AtomicCounter::default();
-    let popped = AtomicCounter::default();
     let start = time::Instant::now();
-    let threads: Vec<thread::JoinHandle<Result<_, Error>>> = (0..threads_count)
-        .map(|_| {
-            let pushed = pushed.clone();
-            let popped = popped.clone();
-            thread::spawn(move || do_jobs_and_report(jobs_count, pushed, popped))
-        })
-        .collect();
-
-    let _ops_count: Result<Vec<_>, _> = threads.into_iter().map(|jt| jt.join().unwrap()).collect();
+    let (_ops_count, pushed, popped) = load_with_jobs(jobs_count, threads_count);
     let stop = calc_secs_elapsed(&start.elapsed());
 
     println!(
@@ -171,8 +179,8 @@ fn main() {
 #[cfg(test)]
 mod test {
     use super::{
-        calc_secs_elapsed, do_jobs_and_report, get_opts, setup_parser, AtomicCounter,
-        DEFAULT_JOBS_COUNT, DEFAULT_THREADS_COUNT,
+        calc_secs_elapsed, do_e2e_jobs, get_opts, setup_parser, AtomicCounter, DEFAULT_JOBS_COUNT,
+        DEFAULT_THREADS_COUNT,
     };
     use clap::ArgMatches;
     use std::{env, ops::Add as _, time};
@@ -247,7 +255,7 @@ mod test {
         let e2e_jobs_count = 10_000;
         let jobs_produced = AtomicCounter::default();
         let jobs_consumed = AtomicCounter::default();
-        let _ = do_jobs_and_report(e2e_jobs_count, jobs_produced.clone(), jobs_consumed.clone());
+        let _ = do_e2e_jobs(e2e_jobs_count, jobs_produced.clone(), jobs_consumed.clone());
         assert!(jobs_produced.get() == e2e_jobs_count / 2);
         assert!(jobs_consumed.get() == e2e_jobs_count / 2);
     }
