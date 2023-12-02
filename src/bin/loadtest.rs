@@ -9,6 +9,8 @@ use std::sync::{self, atomic};
 use std::thread;
 use std::time;
 
+type Counter = sync::Arc<atomic::AtomicUsize>;
+
 const QUEUES: &[&str] = &["queue0", "queue1", "queue2", "queue3", "queue4"];
 const DEFAULT_JOBS_COUNT: &str = "30000";
 const DEFAULT_THREADS_COUNT: &str = "10";
@@ -69,10 +71,26 @@ fn get_opts(parse: Option<Box<dyn FnOnce() -> ArgMatches>>) -> HashMap<&'static 
     opts
 }
 
+fn get_new_counter(initial: usize) -> Counter {
+    sync::Arc::new(atomic::AtomicUsize::new(initial))
+}
+
+fn clone_counter(counter: &Counter) -> Counter {
+    sync::Arc::clone(counter)
+}
+
+fn count_up(counter: &Counter, val: usize) -> usize {
+    counter.fetch_add(val, atomic::Ordering::SeqCst)
+}
+
+fn ask_counter(counter: &Counter) -> usize {
+    counter.load(atomic::Ordering::SeqCst)
+}
+
 fn do_jobs_and_report(
-    jobs_to_perform_count: usize,
-    jobs_produced_count: sync::Arc<atomic::AtomicUsize>,
-    jobs_consumed_count: sync::Arc<atomic::AtomicUsize>,
+    jobs_total_count: usize,
+    jobs_produced_counter: Counter,
+    jobs_consumed_counter: Counter,
 ) -> Result<usize, Error> {
     let mut p = Producer::connect(None).unwrap();
 
@@ -91,7 +109,7 @@ fn do_jobs_and_report(
     let mut random_queues = Vec::from(QUEUES);
     random_queues.shuffle(&mut rng);
 
-    for idx in 0..jobs_to_perform_count {
+    for idx in 0..jobs_total_count {
         if idx % 2 == 0 {
             let mut job = Job::new(
                 "SomeJob",
@@ -100,18 +118,14 @@ fn do_jobs_and_report(
             job.priority = Some(rng.gen_range(1..10));
             job.queue = QUEUES.choose(&mut rng).unwrap().to_string();
             p.enqueue(job)?;
-            if jobs_produced_count.fetch_add(1, atomic::Ordering::SeqCst) >= jobs_to_perform_count {
-                return Ok(idx);
-            }
+            count_up(&jobs_produced_counter, 1);
         } else {
             c.run_one(0, &random_queues[..])?;
-            if jobs_consumed_count.fetch_add(1, atomic::Ordering::SeqCst) >= jobs_to_perform_count {
-                return Ok(idx);
-            }
+            count_up(&jobs_consumed_counter, 1);
         }
     }
 
-    Ok(jobs_to_perform_count)
+    Ok(jobs_total_count)
 }
 
 fn calc_secs_elapsed(elapsed: &time::Duration) -> f64 {
@@ -130,14 +144,13 @@ fn main() {
 
     ping!();
 
-    let pushed = sync::Arc::new(atomic::AtomicUsize::new(0));
-    let popped = sync::Arc::new(atomic::AtomicUsize::new(0));
-
+    let pushed = get_new_counter(0);
+    let popped = get_new_counter(0);
     let start = time::Instant::now();
     let threads: Vec<thread::JoinHandle<Result<_, Error>>> = (0..threads_count)
         .map(|_| {
-            let pushed = sync::Arc::clone(&pushed);
-            let popped = sync::Arc::clone(&popped);
+            let pushed = clone_counter(&pushed);
+            let popped = clone_counter(&popped);
             thread::spawn(move || do_jobs_and_report(jobs_count, pushed, popped))
         })
         .collect();
@@ -147,21 +160,21 @@ fn main() {
 
     println!(
         "Processed {} pushes and {} pops in {:.2} seconds, rate: {} jobs/s",
-        pushed.load(atomic::Ordering::SeqCst),
-        popped.load(atomic::Ordering::SeqCst),
+        ask_counter(&pushed),
+        ask_counter(&popped),
         stop,
         jobs_count as f64 / stop,
     );
-    // println!("{:?}", _ops_count);
 }
 
 #[cfg(test)]
 mod test {
     use super::{
-        calc_secs_elapsed, get_opts, setup_parser, DEFAULT_JOBS_COUNT, DEFAULT_THREADS_COUNT,
+        ask_counter, calc_secs_elapsed, clone_counter, do_jobs_and_report, get_new_counter,
+        get_opts, setup_parser, DEFAULT_JOBS_COUNT, DEFAULT_THREADS_COUNT,
     };
     use clap::ArgMatches;
-    use std::{ops::Add as _, time};
+    use std::{env, ops::Add as _, time};
 
     fn parse_command_line_args_mock(argv: &[&str]) -> ArgMatches {
         let cmd = setup_parser();
@@ -223,5 +236,22 @@ mod test {
         let elapsed = stop - start;
         let res = calc_secs_elapsed(&elapsed);
         assert!(elapsed.as_secs() as f64 <= res);
+    }
+
+    #[test]
+    fn test_do_jobs_and_report() {
+        if env::var_os("FAKTORY_URL").is_none() {
+            return;
+        }
+        let total_jobs_count = 10_000;
+        let jobs_produced = get_new_counter(0);
+        let jobs_consumed = get_new_counter(0);
+        let _ = do_jobs_and_report(
+            total_jobs_count,
+            clone_counter(&jobs_produced),
+            clone_counter(&jobs_consumed),
+        );
+        assert!(ask_counter(&jobs_produced) >= total_jobs_count / 2);
+        assert!(ask_counter(&jobs_consumed) >= total_jobs_count / 2);
     }
 }
