@@ -85,7 +85,7 @@ impl AtomicCounter {
 }
 
 fn do_jobs_and_report(
-    jobs_total_count: usize,
+    e2e_jobs_count: usize,
     jobs_produced_counter: AtomicCounter,
     jobs_consumed_counter: AtomicCounter,
 ) -> Result<usize, Error> {
@@ -106,7 +106,7 @@ fn do_jobs_and_report(
     let mut random_queues = Vec::from(QUEUES);
     random_queues.shuffle(&mut rng);
 
-    for idx in 0..jobs_total_count {
+    for idx in 0..e2e_jobs_count {
         if idx % 2 == 0 {
             let mut job = Job::new(
                 "SomeJob",
@@ -115,14 +115,18 @@ fn do_jobs_and_report(
             job.priority = Some(rng.gen_range(1..10));
             job.queue = QUEUES.choose(&mut rng).unwrap().to_string();
             p.enqueue(job)?;
-            jobs_produced_counter.inc();
+            if jobs_produced_counter.inc() >= e2e_jobs_count {
+                return Ok(idx);
+            };
         } else {
             c.run_one(0, &random_queues[..])?;
-            jobs_consumed_counter.inc();
+            if jobs_consumed_counter.inc() >= e2e_jobs_count {
+                return Ok(idx);
+            }
         }
     }
 
-    Ok(jobs_total_count)
+    Ok(e2e_jobs_count)
 }
 
 fn calc_secs_elapsed(elapsed: &time::Duration) -> f64 {
@@ -240,15 +244,11 @@ mod test {
         if env::var_os("FAKTORY_URL").is_none() {
             return;
         }
-        let total_jobs_count = 10_000;
+        let e2e_jobs_count = 10_000;
         let jobs_produced = AtomicCounter::default();
         let jobs_consumed = AtomicCounter::default();
-        let _ = do_jobs_and_report(
-            total_jobs_count,
-            jobs_produced.clone(),
-            jobs_consumed.clone(),
-        );
-        assert!(jobs_produced.get() >= total_jobs_count / 2);
-        assert!(jobs_consumed.get() >= total_jobs_count / 2);
+        let _ = do_jobs_and_report(e2e_jobs_count, jobs_produced.clone(), jobs_consumed.clone());
+        assert!(jobs_produced.get() == e2e_jobs_count / 2);
+        assert!(jobs_consumed.get() == e2e_jobs_count / 2);
     }
 }
