@@ -2,7 +2,6 @@ use clap::ArgMatches;
 use clap::{Arg, Command};
 use faktory::{ConsumerBuilder, Error, Job, Producer};
 use rand::prelude::*;
-use std::collections::HashMap;
 use std::io;
 use std::process;
 use std::sync::{self, atomic};
@@ -45,28 +44,30 @@ fn setup_parser() -> Command<'static> {
         )
 }
 
+struct LoadtestOptions {
+    jobs: usize,
+    threads: usize,
+}
+
 fn parse_command_line_args() -> ArgMatches {
     let parser = setup_parser();
     parser.get_matches()
 }
 
-fn get_opts(parse: Option<Box<dyn FnOnce() -> ArgMatches>>) -> HashMap<&'static str, usize> {
+fn get_opts(parse: Option<Box<dyn FnOnce() -> ArgMatches>>) -> LoadtestOptions {
     let matches = parse.unwrap_or(Box::new(parse_command_line_args))();
-    let jobs_count = matches
+    let jobs = matches
         .get_one::<String>("jobs")
         .unwrap()
         .parse::<usize>()
         .expect("Number of jobs to run");
-    let threads_count = matches
+    let threads = matches
         .get_one::<String>("threads")
         .unwrap()
         .parse::<usize>()
         .expect("Number of consumers/producers to run");
 
-    let mut opts: HashMap<&'static str, usize> = HashMap::new();
-    opts.insert("jobs", jobs_count);
-    opts.insert("threads", threads_count);
-    opts
+    LoadtestOptions { jobs, threads }
 }
 
 #[derive(Clone, Default)]
@@ -152,16 +153,16 @@ fn calc_secs_elapsed(elapsed: &time::Duration) -> f64 {
     elapsed_nanos as f64 / 1_000_000_000.0
 }
 
-fn run_loadtest(jobs: usize, threads: usize) {
+fn run_loadtest(opts: &LoadtestOptions) {
     println!(
         "Running loadtest with {} jobs and {} threads",
-        jobs, threads
+        opts.jobs, opts.threads
     );
 
     ping!();
 
     let start = time::Instant::now();
-    let (_ops_count, pushed, popped) = load_with_jobs(jobs, threads);
+    let (_ops_count, pushed, popped) = load_with_jobs(opts.jobs, opts.threads);
     let stop = calc_secs_elapsed(&start.elapsed());
 
     println!(
@@ -169,15 +170,13 @@ fn run_loadtest(jobs: usize, threads: usize) {
         pushed.get(),
         popped.get(),
         stop,
-        jobs as f64 / stop,
+        opts.jobs as f64 / stop,
     );
 }
 
 fn main() {
     let opts = get_opts(None);
-    let jobs = opts.get("jobs").unwrap();
-    let threads = opts.get("threads").unwrap();
-    run_loadtest(*jobs, *threads)
+    run_loadtest(&opts)
 }
 
 #[cfg(test)]
@@ -230,11 +229,9 @@ mod test {
         let argv = ["./target/release/loadtest"];
         let parse_fn = prepare_parse_fn(&argv);
         let opts = get_opts(Some(Box::new(parse_fn)));
-        let jobs_count = opts.get("jobs").unwrap().to_owned();
-        let threads_count = opts.get("threads").unwrap().to_owned();
-        assert_eq!(jobs_count, DEFAULT_JOBS_COUNT.parse::<usize>().unwrap());
+        assert_eq!(opts.jobs, DEFAULT_JOBS_COUNT.parse::<usize>().unwrap());
         assert_eq!(
-            threads_count,
+            opts.threads,
             DEFAULT_THREADS_COUNT.parse::<usize>().unwrap()
         );
     }
@@ -244,10 +241,8 @@ mod test {
         let argv = ["./target/release/loadtest", "20000", "8"];
         let parse_fn = prepare_parse_fn(&argv);
         let opts = get_opts(Some(Box::new(parse_fn)));
-        let jobs_count = opts.get("jobs").unwrap().to_owned();
-        let threads_count = opts.get("threads").unwrap().to_owned();
-        assert_eq!(jobs_count, 20_000);
-        assert_eq!(threads_count, 8);
+        assert_eq!(opts.jobs, 20_000);
+        assert_eq!(opts.threads, 8);
     }
 
     #[test]
@@ -280,13 +275,11 @@ mod test {
     }
 
     #[test]
-    fn test_loadtest_flow() {     
-        skip_test_if_faktory_url_not_provided!();        
+    fn test_loadtest_flow() {
+        skip_test_if_faktory_url_not_provided!();
         let argv = ["./target/release/loadtest", "21000", "10"];
         let parse_fn = prepare_parse_fn(&argv);
         let opts = get_opts(Some(Box::new(parse_fn)));
-        let jobs = opts.get("jobs").unwrap();
-        let threads = opts.get("threads").unwrap();
-        run_loadtest(*jobs, *threads);
+        run_loadtest(&opts);
     }
 }
