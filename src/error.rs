@@ -12,6 +12,9 @@
 //! [`Protocol`] describes lower-level errors relating to communication
 //! with the faktory server. Typically, [`Protocol`] errors are the result
 //! of the server sending a response this client did not expect.
+//!
+//! [`Client`] describes errors that occur even before communication with the server, e.g.
+//! errors when building a 'Job'.
 
 use thiserror::Error;
 
@@ -22,7 +25,11 @@ pub enum Error {
     /// The connection to the server, or one of its prerequisites, failed.
     #[error("connection")]
     Connect(#[from] Connect),
-
+    /// Client-side errors.
+    ///
+    /// These are errors arising even before communicating to server, e.g. malformed job.
+    #[error("client")]
+    Client(#[from] Client),
     /// Underlying I/O layer errors.
     ///
     /// These are overwhelmingly network communication errors on the socket connection to the server.
@@ -80,6 +87,18 @@ pub enum Connect {
     /// The connection address provided was not able to be parsed.
     #[error("parse URL")]
     ParseUrl(#[source] url::ParseError),
+}
+
+/// Errors happening client side
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub enum Client {
+    /// The 'Job' is malformed.
+    #[error("job is malformed: {desc}")]
+    MalformedJob {
+        /// Details on what is missing or incorrect about the 'Job'
+        desc: String,
+    },
 }
 
 /// The set of observable application-level errors when interacting with a Faktory server.
