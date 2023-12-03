@@ -6,7 +6,7 @@ use std::io::prelude::*;
 mod cmd;
 mod resp;
 
-use crate::error::Error;
+use crate::error::{self, Error};
 
 pub use self::cmd::*;
 pub use self::resp::*;
@@ -15,7 +15,7 @@ pub use self::resp::*;
 ///
 /// See also the [Faktory wiki](https://github.com/contribsys/faktory/wiki/The-Job-Payload).
 #[derive(Serialize, Deserialize, Debug, Builder)]
-#[builder(setter(into))]
+#[builder(setter(into), build_fn(name = "try_build"))]
 pub struct Job {
     /// The job's unique identifier.
     pub(crate) jid: String,
@@ -86,6 +86,18 @@ pub struct Job {
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     #[serde(default = "HashMap::default")]
     pub custom: HashMap<String, serde_json::Value>,
+}
+
+impl JobBuilder {
+    #[allow(dead_code)]
+    fn build(&self) -> Result<Job, error::Client> {
+        let job = self
+            .try_build()
+            .map_err(|err| error::Client::MalformedJob {
+                desc: err.to_string(),
+            })?;
+        Ok(job)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -180,10 +192,15 @@ pub fn write_command_and_await_ok<X: BufRead + Write, C: FaktoryCommand>(
 
 #[cfg(test)]
 mod test {
-    use super::JobBuilder;
+    use super::*;
+
     #[test]
     fn test_job_can_be_created_with_builder() {
         let job = JobBuilder::default().build();
-        assert!(job.is_err());
+        let err = job.unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "job is malformed: `jid` must be initialized"
+        )
     }
 }
