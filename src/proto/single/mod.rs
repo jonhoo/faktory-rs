@@ -177,3 +177,13 @@ pub fn write_command_and_await_ok<X: BufRead + Write, C: FaktoryCommand>(
     write_command(x, command)?;
     read_ok(x)
 }
+
+#[cfg(test)]
+mod test {
+    use super::JobBuilder;
+    #[test]
+    fn test_job_can_be_created_with_builder() {
+        let job = JobBuilder::default().build();
+        assert!(job.is_err());
+    }
+}
