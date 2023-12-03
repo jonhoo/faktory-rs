@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use derive_builder::Builder;
 use std::collections::HashMap;
 use std::io::prelude::*;
 
@@ -13,7 +14,8 @@ pub use self::resp::*;
 /// A Faktory job.
 ///
 /// See also the [Faktory wiki](https://github.com/contribsys/faktory/wiki/The-Job-Payload).
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Builder)]
+#[builder(setter(into))]
 pub struct Job {
     /// The job's unique identifier.
     pub(crate) jid: String,
@@ -86,7 +88,7 @@ pub struct Job {
     pub custom: HashMap<String, serde_json::Value>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Failure {
     retry_count: usize,
     failed_at: String,
