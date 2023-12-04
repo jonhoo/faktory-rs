@@ -5,6 +5,7 @@ use std::io::prelude::*;
 
 mod cmd;
 mod resp;
+mod utils;
 
 use crate::error::{self, Error};
 
@@ -122,12 +123,7 @@ impl Job {
         S: Into<String>,
         A: Into<serde_json::Value>,
     {
-        use rand::{thread_rng, Rng};
-        let random_jid = thread_rng()
-            .sample_iter(&rand::distributions::Alphanumeric)
-            .map(char::from)
-            .take(16)
-            .collect();
+        let random_jid = utils::gen_random_jid();
         use chrono::prelude::*;
         Job {
             jid: random_jid,
