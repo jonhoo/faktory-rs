@@ -37,16 +37,19 @@ pub struct Job {
     // note that serializing works correctly here since the default chrono serialization
     // is RFC3339, which is also what Faktory expects.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[builder(default = "Some(Utc::now())")]
     pub created_at: Option<DateTime<Utc>>,
 
     /// When this job was supplied to the Faktory server.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[builder(default = "None")]
     pub enqueued_at: Option<DateTime<Utc>>,
 
     /// When this job is scheduled for.
     ///
     /// Defaults to immediately.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[builder(default = "None")]
     pub at: Option<DateTime<Utc>>,
 
     /// How long to allow this job to run for.
@@ -222,7 +225,7 @@ mod test {
         let err = job.unwrap_err();
         assert_eq!(
             err.to_string(),
-            "job is malformed: `created_at` must be initialized"
+            "job is malformed: `reserve_for` must be initialized"
         )
     }
 }
