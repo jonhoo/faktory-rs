@@ -191,12 +191,38 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_job_can_be_created_with_builder() {
-        let job = JobBuilder::default().build();
+    fn test_job_build_fails_if_kind_missing() {
+        let job = JobBuilder::default()
+            .args(vec![serde_json::Value::from("ISBN-13:9781718501850")])
+            .build();
         let err = job.unwrap_err();
         assert_eq!(
             err.to_string(),
             "job is malformed: `kind` must be initialized"
+        )
+    }
+
+    #[test]
+    fn test_job_build_fails_if_args_missing() {
+        let job = JobBuilder::default().kind("order").build();
+        let err = job.unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "job is malformed: `args` must be initialized"
+        );
+    }
+
+    #[test]
+    fn test_job_can_be_created_with_builder() {
+        let job = JobBuilder::default()
+            .kind("order")
+            .args(vec![serde_json::Value::from("ISBN-13:9781718501850")])
+            .build();
+
+        let err = job.unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "job is malformed: `created_at` must be initialized"
         )
     }
 }
