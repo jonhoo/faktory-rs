@@ -23,6 +23,7 @@ pub struct Job {
     pub(crate) jid: String,
 
     /// The queue this job belongs to. Usually `default`.
+    #[builder(default = r#"String::from("default")"#)]
     pub queue: String,
 
     /// The job's type. Called `kind` because `type` is reserved.
@@ -195,7 +196,7 @@ mod test {
         let err = job.unwrap_err();
         assert_eq!(
             err.to_string(),
-            "job is malformed: `queue` must be initialized"
+            "job is malformed: `kind` must be initialized"
         )
     }
 }
