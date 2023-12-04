@@ -19,6 +19,7 @@ pub use self::resp::*;
 #[builder(setter(into), build_fn(name = "try_build"))]
 pub struct Job {
     /// The job's unique identifier.
+    #[builder(default = "utils::gen_random_jid()")]
     pub(crate) jid: String,
 
     /// The queue this job belongs to. Usually `default`.
@@ -194,7 +195,7 @@ mod test {
         let err = job.unwrap_err();
         assert_eq!(
             err.to_string(),
-            "job is malformed: `jid` must be initialized"
+            "job is malformed: `queue` must be initialized"
         )
     }
 }
