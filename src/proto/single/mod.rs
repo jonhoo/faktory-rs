@@ -123,10 +123,8 @@ impl Job {
         S: Into<String>,
         A: Into<serde_json::Value>,
     {
-        let random_jid = utils::gen_random_jid();
-        use chrono::prelude::*;
         Job {
-            jid: random_jid,
+            jid: utils::gen_random_jid(),
             queue: "default".into(),
             kind: kind.into(),
             args: args.into_iter().map(|s| s.into()).collect(),
