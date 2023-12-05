@@ -155,17 +155,17 @@ impl Job {
     {
         Job {
             jid: utils::gen_random_jid(),
-            queue: "default".into(),
+            queue: JOB_DEFAULT_QUEUE.into(),
             kind: kind.into(),
             args: args.into_iter().map(|s| s.into()).collect(),
 
             created_at: Some(Utc::now()),
             enqueued_at: None,
             at: None,
-            reserve_for: Some(600),
-            retry: Some(25),
-            priority: Some(5),
-            backtrace: Some(0),
+            reserve_for: Some(JOB_DEFAULT_RESERVED_FOR_SECS),
+            retry: Some(JOB_DEFAULT_RETRY_COUNT),
+            priority: Some(JOB_DEFAULT_PRIORITY),
+            backtrace: Some(JOB_DEFAULT_BACKTRACE),
             failure: None,
             custom: Default::default(),
         }
