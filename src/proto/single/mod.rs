@@ -12,10 +12,12 @@ use crate::error::{self, Error};
 pub use self::cmd::*;
 pub use self::resp::*;
 
+const JOB_DEFAULT_QUEUE: &str = "default";
 const JOB_DEFAULT_RESERVED_FOR_SECS: usize = 600;
-const JOB_DEFAULT_RETRIES_COUNT: usize = 25;
+const JOB_DEFAULT_RETRY_COUNT: usize = 25;
 const JOB_PRIORITY_MAX: u8 = 9;
 const JOB_DEFAULT_PRIORITY: u8 = 5;
+const JOB_DEFAULT_BACKTRACE: usize = 0;
 
 /// A Faktory job.
 ///
@@ -31,7 +33,7 @@ pub struct Job {
     pub(crate) jid: String,
 
     /// The queue this job belongs to. Usually `default`.
-    #[builder(default = r#"String::from("default")"#)]
+    #[builder(default = "JOB_DEFAULT_QUEUE.into()")]
     pub queue: String,
 
     /// The job's type. Called `kind` because `type` is reserved.
@@ -71,7 +73,7 @@ pub struct Job {
     ///
     /// Defaults to 25.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[builder(default = "Some(JOB_DEFAULT_RETRIES_COUNT)")]
+    #[builder(default = "Some(JOB_DEFAULT_RETRY_COUNT)")]
     pub retry: Option<usize>,
 
     /// The priority of this job from 1-9 (9 is highest).
@@ -85,12 +87,14 @@ pub struct Job {
     ///
     /// Defaults to 0.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[builder(default = "Some(JOB_DEFAULT_BACKTRACE)")]
     pub backtrace: Option<usize>,
 
     /// Data about this job's most recent failure.
     ///
     /// This field is read-only.
     #[serde(skip_serializing)]
+    #[builder(default = "None")]
     failure: Option<Failure>,
 
     /// Extra context to include with the job.
@@ -102,6 +106,7 @@ pub struct Job {
     /// across a complex distributed system, etc.
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     #[serde(default = "HashMap::default")]
+    #[builder(default = "HashMap::default()")]
     pub custom: HashMap<String, serde_json::Value>,
 }
 
@@ -251,15 +256,26 @@ mod test {
 
     #[test]
     fn test_job_can_be_created_with_builder() {
+        let job_kind = "order";
+        let job_args = vec![serde_json::Value::from("ISBN-13:9781718501850")];
         let job = JobBuilder::default()
-            .kind("order")
-            .args(vec![serde_json::Value::from("ISBN-13:9781718501850")])
-            .build();
+            .kind(job_kind)
+            .args(job_args.clone())
+            .build()
+            .unwrap();
 
-        let err = job.unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            "job is malformed: `backtrace` must be initialized"
-        )
+        assert!(job.jid != "".to_owned());
+        assert!(job.queue == JOB_DEFAULT_QUEUE.to_string());
+        assert_eq!(job.kind, job_kind);
+        assert_eq!(job.args, job_args);
+        assert!(job.created_at < Some(Utc::now()));
+        assert!(job.enqueued_at.is_none());
+        assert!(job.at.is_none());
+        assert_eq!(job.reserve_for, Some(JOB_DEFAULT_RESERVED_FOR_SECS));
+        assert_eq!(job.retry, Some(JOB_DEFAULT_RETRY_COUNT));
+        assert_eq!(job.priority, Some(JOB_DEFAULT_PRIORITY));
+        assert_eq!(job.backtrace, Some(JOB_DEFAULT_BACKTRACE));
+        assert!(job.failure.is_none());
+        assert_eq!(job.custom, HashMap::default());
     }
 }
