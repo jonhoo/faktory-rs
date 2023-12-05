@@ -12,6 +12,10 @@ use crate::error::{self, Error};
 pub use self::cmd::*;
 pub use self::resp::*;
 
+const JOB_DEFAULT_RESERVED_FOR_SECS: usize = 600;
+const JOB_DEFAULT_RETRIES_COUNT: usize = 25;
+const JOB_DEFAULT_PRIORITY: u8 = 5;
+
 /// A Faktory job.
 ///
 /// See also the [Faktory wiki](https://github.com/contribsys/faktory/wiki/The-Job-Payload).
@@ -56,18 +60,21 @@ pub struct Job {
     ///
     /// Defaults to 600 seconds.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[builder(default = "Some(JOB_DEFAULT_RESERVED_FOR_SECS)")]
     pub reserve_for: Option<usize>,
 
     /// Number of times to retry this job.
     ///
     /// Defaults to 25.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub retry: Option<isize>,
+    #[builder(default = "Some(JOB_DEFAULT_RETRIES_COUNT)")]
+    pub retry: Option<usize>,
 
     /// The priority of this job from 1-9 (9 is highest).
     ///
     /// Pushing a job with priority 9 will effectively put it at the front of the queue.
     /// Defaults to 5.
+    #[builder(default = "Some(JOB_DEFAULT_PRIORITY)")]
     pub priority: Option<u8>,
 
     /// Number of lines of backtrace to keep if this job fails.
@@ -225,7 +232,7 @@ mod test {
         let err = job.unwrap_err();
         assert_eq!(
             err.to_string(),
-            "job is malformed: `reserve_for` must be initialized"
+            "job is malformed: `backtrace` must be initialized"
         )
     }
 }
