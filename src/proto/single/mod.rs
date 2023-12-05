@@ -21,6 +21,22 @@ const JOB_DEFAULT_BACKTRACE: usize = 0;
 
 /// A Faktory job.
 ///
+/// To create a job, use 'Job::new' specifying 'kind' and 'args':
+/// ```
+/// use faktory::Job;
+/// let _job = Job::new("order", vec!["ISBN-13:9781718501850"]);
+/// ```
+///
+/// Alternatively, 'JobBuilder' a builder to construct a job:
+/// ```ignore
+/// use faktory::JobBuilder;
+/// let result = JobBuilder::default().kind("order").args(vec!["ISBN-13:9781718501850"]).build();
+/// if result.is_err() {
+///     todo!("Handle me gracefully in userland")
+/// };
+/// let _job = result.unwrap();
+/// ```
+///
 /// See also the [Faktory wiki](https://github.com/contribsys/faktory/wiki/The-Job-Payload).
 #[derive(Serialize, Deserialize, Debug, Builder)]
 #[builder(
@@ -41,6 +57,7 @@ pub struct Job {
     pub(crate) kind: String,
 
     /// The arguments provided for this job.
+    #[builder(setter(custom))]
     pub(crate) args: Vec<serde_json::Value>,
 
     /// When this job was created.
@@ -111,6 +128,15 @@ pub struct Job {
 }
 
 impl JobBuilder {
+    #[allow(dead_code)]
+    fn args<A>(&mut self, args: Vec<A>) -> &mut Self
+    where
+        A: Into<serde_json::Value>,
+    {
+        self.args = Some(args.into_iter().map(|s| s.into()).collect());
+        self
+    }
+
     fn validate(&self) -> Result<(), String> {
         if let Some(ref priority) = self.priority {
             if *priority > Some(JOB_PRIORITY_MAX) {
@@ -131,7 +157,7 @@ impl JobBuilder {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Failure {
     retry_count: usize,
     failed_at: String,
@@ -221,7 +247,7 @@ mod test {
     #[test]
     fn test_job_build_fails_if_kind_missing() {
         let job = JobBuilder::default()
-            .args(vec![serde_json::Value::from("ISBN-13:9781718501850")])
+            .args(vec!["ISBN-13:9781718501850"])
             .build();
         let err = job.unwrap_err();
         assert_eq!(
@@ -244,7 +270,7 @@ mod test {
     fn test_job_build_fails_if_priority_invalid() {
         let job = JobBuilder::default()
             .kind("order")
-            .args(vec![])
+            .args(vec!["ISBN-13:9781718501850"])
             .priority(JOB_PRIORITY_MAX + 1)
             .build();
         let err = job.unwrap_err();
@@ -257,7 +283,7 @@ mod test {
     #[test]
     fn test_job_can_be_created_with_builder() {
         let job_kind = "order";
-        let job_args = vec![serde_json::Value::from("ISBN-13:9781718501850")];
+        let job_args = vec!["ISBN-13:9781718501850"];
         let job = JobBuilder::default()
             .kind(job_kind)
             .args(job_args.clone())
@@ -277,5 +303,44 @@ mod test {
         assert_eq!(job.backtrace, Some(JOB_DEFAULT_BACKTRACE));
         assert!(job.failure.is_none());
         assert_eq!(job.custom, HashMap::default());
+    }
+
+    #[test]
+    fn test_method_mew_and_builder_align() {
+        let job1 = Job::new("order", vec!["ISBN-13:9781718501850"]);
+        let job2 = JobBuilder::default()
+            .kind("order")
+            .args(vec!["ISBN-13:9781718501850"])
+            .build()
+            .unwrap();
+
+        assert_eq!(job1.kind, job2.kind);
+        assert_eq!(job1.args, job2.args);
+        assert_eq!(job1.queue, job2.queue);
+        assert_eq!(job1.enqueued_at, job2.enqueued_at);
+        assert_eq!(job1.at, job2.at);
+        assert_eq!(job1.reserve_for, job2.reserve_for);
+        assert_eq!(job1.retry, job2.retry);
+        assert_eq!(job1.priority, job2.priority);
+        assert_eq!(job1.backtrace, job2.backtrace);
+        assert_eq!(job1.failure, job2.failure);
+        assert_eq!(job1.custom, job2.custom);
+
+        assert_ne!(job1.jid, job2.jid);
+        assert_ne!(job1.created_at, job2.created_at);
+    }
+
+    #[test]
+    fn test_ignored_snippet_in_docs() {
+        // This is a snippet which is marked `ignore` in the docs and
+        // which will fail since 'JobBuilder' is undeclared at doc test run
+        let result = JobBuilder::default()
+            .kind("order")
+            .args(vec!["ISBN-13:9781718501850"])
+            .build();
+        if result.is_err() {
+            todo!("Handle me gracefully in userland")
+        };
+        let _job = result.unwrap();
     }
 }
