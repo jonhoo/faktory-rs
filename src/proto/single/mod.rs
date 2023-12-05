@@ -28,7 +28,7 @@ const JOB_DEFAULT_BACKTRACE: usize = 0;
 /// ```
 ///
 /// Alternatively, 'JobBuilder' a builder to construct a job:
-/// ```ignore
+/// ```
 /// use faktory::JobBuilder;
 /// let result = JobBuilder::default().kind("order").args(vec!["ISBN-13:9781718501850"]).build();
 /// if result.is_err() {
@@ -128,8 +128,8 @@ pub struct Job {
 }
 
 impl JobBuilder {
-    #[allow(dead_code)]
-    fn args<A>(&mut self, args: Vec<A>) -> &mut Self
+    /// Setter for the arguments provided for this job.
+    pub fn args<A>(&mut self, args: Vec<A>) -> &mut Self
     where
         A: Into<serde_json::Value>,
     {
@@ -146,8 +146,8 @@ impl JobBuilder {
         Ok(())
     }
 
-    #[allow(dead_code)]
-    fn build(&self) -> Result<Job, error::Client> {
+    /// Builds a new job (a.k.a. bulder's finalizer)
+    pub fn build(&self) -> Result<Job, error::Client> {
         let job = self
             .try_build()
             .map_err(|err| error::Client::MalformedJob {
@@ -328,19 +328,5 @@ mod test {
 
         assert_ne!(job1.jid, job2.jid);
         assert_ne!(job1.created_at, job2.created_at);
-    }
-
-    #[test]
-    fn test_ignored_snippet_in_docs() {
-        // This is a snippet which is marked `ignore` in the docs and
-        // which will fail since 'JobBuilder' is undeclared at doc test run
-        let result = JobBuilder::default()
-            .kind("order")
-            .args(vec!["ISBN-13:9781718501850"])
-            .build();
-        if result.is_err() {
-            todo!("Handle me gracefully in userland")
-        };
-        let _job = result.unwrap();
     }
 }
