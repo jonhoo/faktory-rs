@@ -24,15 +24,20 @@ const JOB_DEFAULT_BACKTRACE: usize = 0;
 /// To create a job, use 'Job::new' specifying 'kind' and 'args':
 /// ```
 /// use faktory::Job;
+///
 /// let _job = Job::new("order", vec!["ISBN-13:9781718501850"]);
 /// ```
 ///
-/// Alternatively, 'JobBuilder' a builder to construct a job:
+/// Alternatively, use 'JobBuilder' to construct a job:
 /// ```
 /// use faktory::JobBuilder;
-/// let result = JobBuilder::default().kind("order").args(vec!["ISBN-13:9781718501850"]).build();
+///
+/// let result = JobBuilder::default()
+///     .kind("order")
+///     .args(vec!["ISBN-13:9781718501850"])
+///     .build();
 /// if result.is_err() {
-///     todo!("Handle me gracefully in userland")
+///     todo!("Handle me gracefully, please.")
 /// };
 /// let _job = result.unwrap();
 /// ```
@@ -146,7 +151,7 @@ impl JobBuilder {
         Ok(())
     }
 
-    /// Builds a new job (a.k.a. bulder's finalizer)
+    /// Builds a new job
     pub fn build(&self) -> Result<Job, error::Client> {
         let job = self
             .try_build()

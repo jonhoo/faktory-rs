@@ -13,8 +13,8 @@
 //! with the faktory server. Typically, [`Protocol`] errors are the result
 //! of the server sending a response this client did not expect.
 //!
-//! [`Client`] describes errors that occur even before communication with the server, e.g.
-//! errors when building a 'Job'.
+//! [`Client`] describes errors that occur even before submitting a job to the server, e.g.
+//! errors when building a 'Job' (missing required fields, invalid values).
 
 use thiserror::Error;
 
@@ -27,7 +27,7 @@ pub enum Error {
     Connect(#[from] Connect),
     /// Client-side errors.
     ///
-    /// These are errors arising even before communicating to server, e.g. malformed job.
+    /// These are errors arising even before submitting a job to the server, e.g. malformed job.
     #[error("client")]
     Client(#[from] Client),
     /// Underlying I/O layer errors.
