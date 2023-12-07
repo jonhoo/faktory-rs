@@ -46,7 +46,7 @@ const JOB_DEFAULT_BACKTRACE: usize = 0;
 #[derive(Serialize, Deserialize, Debug, Builder)]
 #[builder(
     setter(into),
-    build_fn(name = "try_build", validate = "Self::validate")
+    build_fn(name = "try_build", private, validate = "Self::validate")
 )]
 pub struct Job {
     /// The job's unique identifier.
