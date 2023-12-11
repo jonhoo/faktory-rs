@@ -83,6 +83,12 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest]
     steps:
+      # https://github.com/sfackler/rust-openssl/issues/1542#issuecomment-1399358351
+      - name: Procure openssl on windows
+        if: runner.os == 'Windows'
+        run: |
+          echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Append
+          vcpkg install openssl:x64-windows-static-md
       - uses: actions/checkout@v3
         with:
           submodules: true
