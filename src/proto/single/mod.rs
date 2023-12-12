@@ -74,7 +74,7 @@ pub struct Job {
 
     /// When this job was supplied to the Faktory server.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[builder(default = "None")]
+    #[builder(setter(skip))]
     pub enqueued_at: Option<DateTime<Utc>>,
 
     /// When this job is scheduled for.
