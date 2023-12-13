@@ -152,7 +152,7 @@ impl JobBuilder {
     }
 
     /// Builds a new job
-    pub fn build(&self) -> Result<Job, error::Client> {
+    pub fn build(&self) -> Result<Job, Error> {
         let job = self
             .try_build()
             .map_err(|err| error::Client::MalformedJob {
@@ -254,21 +254,27 @@ mod test {
         let job = JobBuilder::default()
             .args(vec!["ISBN-13:9781718501850"])
             .build();
-        let err = job.unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            "job is malformed: `kind` must be initialized"
-        )
+        if let Error::Client(e) = job.unwrap_err() {
+            assert_eq!(
+                e.to_string(),
+                "job is malformed: `kind` must be initialized"
+            )
+        } else {
+            unreachable!()
+        }
     }
 
     #[test]
     fn test_job_build_fails_if_args_missing() {
         let job = JobBuilder::default().kind("order").build();
-        let err = job.unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            "job is malformed: `args` must be initialized"
-        );
+        if let Error::Client(e) = job.unwrap_err() {
+            assert_eq!(
+                e.to_string(),
+                "job is malformed: `args` must be initialized"
+            );
+        } else {
+            unreachable!();
+        }
     }
 
     #[test]
@@ -278,11 +284,14 @@ mod test {
             .args(vec!["ISBN-13:9781718501850"])
             .priority(JOB_PRIORITY_MAX + 1)
             .build();
-        let err = job.unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            "job is malformed: `priority` must be in the range from 0 to 9 inclusive"
-        );
+        if let Error::Client(e) = job.unwrap_err() {
+            assert_eq!(
+                e.to_string(),
+                "job is malformed: `priority` must be in the range from 0 to 9 inclusive"
+            );
+        } else {
+            unreachable!()
+        }
     }
 
     #[test]
