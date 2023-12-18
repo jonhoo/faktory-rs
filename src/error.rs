@@ -12,9 +12,6 @@
 //! [`Protocol`] describes lower-level errors relating to communication
 //! with the faktory server. Typically, [`Protocol`] errors are the result
 //! of the server sending a response this client did not expect.
-//!
-//! [`Client`] describes errors that occur even before submitting a job to the server, e.g.
-//! errors when building a 'Job' (missing required fields, invalid values).
 
 use thiserror::Error;
 
