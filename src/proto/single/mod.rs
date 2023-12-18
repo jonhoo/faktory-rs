@@ -15,7 +15,6 @@ pub use self::resp::*;
 const JOB_DEFAULT_QUEUE: &str = "default";
 const JOB_DEFAULT_RESERVED_FOR_SECS: usize = 600;
 const JOB_DEFAULT_RETRY_COUNT: usize = 25;
-const JOB_PRIORITY_MAX: u8 = 9;
 const JOB_DEFAULT_PRIORITY: u8 = 5;
 const JOB_DEFAULT_BACKTRACE: usize = 0;
 
@@ -44,10 +43,7 @@ const JOB_DEFAULT_BACKTRACE: usize = 0;
 ///
 /// See also the [Faktory wiki](https://github.com/contribsys/faktory/wiki/The-Job-Payload).
 #[derive(Serialize, Deserialize, Debug, Builder)]
-#[builder(
-    setter(into),
-    build_fn(name = "try_build", private, validate = "Self::validate")
-)]
+#[builder(setter(into), build_fn(name = "try_build", private))]
 pub struct Job {
     /// The job's unique identifier.
     #[builder(default = "utils::gen_random_jid()")]
@@ -140,15 +136,6 @@ impl JobBuilder {
     {
         self.args = Some(args.into_iter().map(|s| s.into()).collect());
         self
-    }
-
-    fn validate(&self) -> Result<(), String> {
-        if let Some(ref priority) = self.priority {
-            if *priority > Some(JOB_PRIORITY_MAX) {
-                return Err("`priority` must be in the range from 0 to 9 inclusive".to_string());
-            }
-        }
-        Ok(())
     }
 
     /// Builds a new job
@@ -274,23 +261,6 @@ mod test {
             );
         } else {
             unreachable!();
-        }
-    }
-
-    #[test]
-    fn test_job_build_fails_if_priority_invalid() {
-        let job = JobBuilder::default()
-            .kind("order")
-            .args(vec!["ISBN-13:9781718501850"])
-            .priority(JOB_PRIORITY_MAX + 1)
-            .build();
-        if let Error::Client(e) = job.unwrap_err() {
-            assert_eq!(
-                e.to_string(),
-                "job is malformed: `priority` must be in the range from 0 to 9 inclusive"
-            );
-        } else {
-            unreachable!()
         }
     }
 
