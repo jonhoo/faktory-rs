@@ -7,7 +7,7 @@ mod cmd;
 mod resp;
 mod utils;
 
-use crate::error::{self, Error};
+use crate::error::Error;
 
 pub use self::cmd::*;
 pub use self::resp::*;
@@ -33,9 +33,7 @@ const JOB_DEFAULT_BACKTRACE: usize = 0;
 ///
 /// let _job = JobBuilder::new("order")
 ///     .args(vec!["ISBN-13:9781718501850"])
-///     .build()?;
-/// 
-/// # Ok(())
+///     .build();
 /// ```
 ///
 /// See also the [Faktory wiki](https://github.com/contribsys/faktory/wiki/The-Job-Payload).
@@ -60,7 +58,7 @@ pub struct Job {
     pub(crate) kind: String,
 
     /// The arguments provided for this job.
-    #[builder(setter(custom))]
+    #[builder(setter(custom), default = "Vec::new()")]
     pub(crate) args: Vec<serde_json::Value>,
 
     /// When this job was created.
@@ -149,13 +147,8 @@ impl JobBuilder {
     }
 
     /// Builds a new job
-    pub fn build(&self) -> Result<Job, Error> {
-        let job = self
-            .try_build()
-            .map_err(|err| error::Client::MalformedJob {
-                desc: err.to_string(),
-            })?;
-        Ok(job)
+    pub fn build(&self) -> Job {
+        self.try_build().expect("All required fields have been set")
     }
 }
 
@@ -247,32 +240,19 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_job_build_fails_if_args_missing() {
-        let job = JobBuilder::new("order").build();
-        if let Error::Client(e) = job.unwrap_err() {
-            assert_eq!(
-                e.to_string(),
-                "job is malformed: `args` must be initialized"
-            );
-        } else {
-            unreachable!();
-        }
-    }
-
-    #[test]
     fn test_job_can_be_created_with_builder() {
         let job_kind = "order";
         let job_args = vec!["ISBN-13:9781718501850"];
-        let job = JobBuilder::new(job_kind)
-            .args(job_args.clone())
-            .build()
-            .unwrap();
+        let job = JobBuilder::new(job_kind).args(job_args.clone()).build();
 
         assert!(job.jid != "".to_owned());
         assert!(job.queue == JOB_DEFAULT_QUEUE.to_string());
         assert_eq!(job.kind, job_kind);
         assert_eq!(job.args, job_args);
+
+        assert!(job.created_at.is_some());
         assert!(job.created_at < Some(Utc::now()));
+
         assert!(job.enqueued_at.is_none());
         assert!(job.at.is_none());
         assert_eq!(job.reserve_for, Some(JOB_DEFAULT_RESERVED_FOR_SECS));
@@ -288,8 +268,7 @@ mod test {
         let job1 = Job::new("order", vec!["ISBN-13:9781718501850"]);
         let job2 = JobBuilder::new("order")
             .args(vec!["ISBN-13:9781718501850"])
-            .build()
-            .unwrap();
+            .build();
 
         assert_eq!(job1.kind, job2.kind);
         assert_eq!(job1.args, job2.args);
