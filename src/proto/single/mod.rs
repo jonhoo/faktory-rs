@@ -48,7 +48,7 @@ const JOB_DEFAULT_BACKTRACE: usize = 0;
 /// In case no arguments are expected 'on the other side', you can simply go with:
 /// ```
 /// use faktory::Job;
-/// 
+///
 /// let _job = Job::builder("rebuild_index").build();
 /// ```
 ///
@@ -191,26 +191,13 @@ impl Job {
         S: Into<String>,
         A: Into<serde_json::Value>,
     {
-        Job {
-            jid: utils::gen_random_jid(),
-            queue: JOB_DEFAULT_QUEUE.into(),
-            kind: kind.into(),
-            args: args.into_iter().map(|s| s.into()).collect(),
-
-            created_at: Some(Utc::now()),
-            enqueued_at: None,
-            at: None,
-            reserve_for: Some(JOB_DEFAULT_RESERVED_FOR_SECS),
-            retry: Some(JOB_DEFAULT_RETRY_COUNT),
-            priority: Some(JOB_DEFAULT_PRIORITY),
-            backtrace: Some(JOB_DEFAULT_BACKTRACE),
-            failure: None,
-            custom: Default::default(),
-        }
+        JobBuilder::new(kind).args(args).build()
     }
 
-    /// Craete an instance of JobBuilder with 'kind' already set.
-    pub fn builder(kind: impl Into<String>) -> JobBuilder {
+    /// Create an instance of JobBuilder with 'kind' already set.
+    ///
+    /// Equivalent to 'JobBuilder::new'
+    pub fn builder<S: Into<String>>(kind: S) -> JobBuilder {
         JobBuilder::new(kind)
     }
 
@@ -283,15 +270,17 @@ mod test {
         assert_eq!(job.backtrace, Some(JOB_DEFAULT_BACKTRACE));
         assert!(job.failure.is_none());
         assert_eq!(job.custom, HashMap::default());
+
+        let job = JobBuilder::new(job_kind).build();
+        assert!(job.args.is_empty());
     }
 
     #[test]
-    fn test_method_mew_and_builder_align() {
+    fn test_all_job_creation_variants_align() {
         let job1 = Job::new("order", vec!["ISBN-13:9781718501850"]);
         let job2 = JobBuilder::new("order")
             .args(vec!["ISBN-13:9781718501850"])
             .build();
-
         assert_eq!(job1.kind, job2.kind);
         assert_eq!(job1.args, job2.args);
         assert_eq!(job1.queue, job2.queue);
@@ -305,5 +294,14 @@ mod test {
 
         assert_ne!(job1.jid, job2.jid);
         assert_ne!(job1.created_at, job2.created_at);
+
+        let job3 = Job::builder("order")
+            .args(vec!["ISBN-13:9781718501850"])
+            .build();
+        assert_eq!(job2.kind, job3.kind);
+        assert_eq!(job1.args, job2.args);
+
+        assert_ne!(job2.jid, job3.jid);
+        assert_ne!(job2.created_at, job3.created_at);
     }
 }
