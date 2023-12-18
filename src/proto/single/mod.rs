@@ -31,19 +31,20 @@ const JOB_DEFAULT_BACKTRACE: usize = 0;
 /// ```
 /// use faktory::JobBuilder;
 ///
-/// let result = JobBuilder::default()
-///     .kind("order")
+/// let _job = JobBuilder::new("order")
 ///     .args(vec!["ISBN-13:9781718501850"])
-///     .build();
-/// if result.is_err() {
-///     todo!("Handle me gracefully, please.")
-/// };
-/// let _job = result.unwrap();
+///     .build()?;
+/// 
+/// # Ok(())
 /// ```
 ///
 /// See also the [Faktory wiki](https://github.com/contribsys/faktory/wiki/The-Job-Payload).
 #[derive(Serialize, Deserialize, Debug, Builder)]
-#[builder(setter(into), build_fn(name = "try_build", private))]
+#[builder(
+    custom_constructor,
+    setter(into),
+    build_fn(name = "try_build", private)
+)]
 pub struct Job {
     /// The job's unique identifier.
     #[builder(default = "utils::gen_random_jid()")]
@@ -55,6 +56,7 @@ pub struct Job {
 
     /// The job's type. Called `kind` because `type` is reserved.
     #[serde(rename = "jobtype")]
+    #[builder(setter(custom))]
     pub(crate) kind: String,
 
     /// The arguments provided for this job.
@@ -129,6 +131,14 @@ pub struct Job {
 }
 
 impl JobBuilder {
+    /// docs
+    pub fn new(kind: impl Into<String>) -> JobBuilder {
+        JobBuilder {
+            kind: Some(kind.into()),
+            ..JobBuilder::create_empty()
+        }
+    }
+
     /// Setter for the arguments provided for this job.
     pub fn args<A>(&mut self, args: Vec<A>) -> &mut Self
     where
@@ -237,23 +247,8 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_job_build_fails_if_kind_missing() {
-        let job = JobBuilder::default()
-            .args(vec!["ISBN-13:9781718501850"])
-            .build();
-        if let Error::Client(e) = job.unwrap_err() {
-            assert_eq!(
-                e.to_string(),
-                "job is malformed: `kind` must be initialized"
-            )
-        } else {
-            unreachable!()
-        }
-    }
-
-    #[test]
     fn test_job_build_fails_if_args_missing() {
-        let job = JobBuilder::default().kind("order").build();
+        let job = JobBuilder::new("order").build();
         if let Error::Client(e) = job.unwrap_err() {
             assert_eq!(
                 e.to_string(),
@@ -268,8 +263,7 @@ mod test {
     fn test_job_can_be_created_with_builder() {
         let job_kind = "order";
         let job_args = vec!["ISBN-13:9781718501850"];
-        let job = JobBuilder::default()
-            .kind(job_kind)
+        let job = JobBuilder::new(job_kind)
             .args(job_args.clone())
             .build()
             .unwrap();
@@ -292,8 +286,7 @@ mod test {
     #[test]
     fn test_method_mew_and_builder_align() {
         let job1 = Job::new("order", vec!["ISBN-13:9781718501850"]);
-        let job2 = JobBuilder::default()
-            .kind("order")
+        let job2 = JobBuilder::new("order")
             .args(vec!["ISBN-13:9781718501850"])
             .build()
             .unwrap();
