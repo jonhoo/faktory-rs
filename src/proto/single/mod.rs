@@ -162,7 +162,7 @@ impl JobBuilder {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Failure {
     retry_count: usize,
     failed_at: String,
@@ -337,7 +337,6 @@ mod test {
         assert_eq!(job1.retry, job2.retry);
         assert_eq!(job1.priority, job2.priority);
         assert_eq!(job1.backtrace, job2.backtrace);
-        assert_eq!(job1.failure, job2.failure);
         assert_eq!(job1.custom, job2.custom);
 
         assert_ne!(job1.jid, job2.jid);
