@@ -36,6 +36,22 @@ const JOB_DEFAULT_BACKTRACE: usize = 0;
 ///     .build();
 /// ```
 ///
+/// Equivalently:
+/// ```
+/// use faktory::Job;
+///
+/// let _job = Job::builder("order")
+///     .args(vec!["ISBN-13:9781718501850"])
+///     .build();
+/// ```
+///
+/// In case no arguments are expected 'on the other side', you can simply go with:
+/// ```
+/// use faktory::Job;
+/// 
+/// let _job = Job::builder("rebuild_index").build();
+/// ```
+///
 /// See also the [Faktory wiki](https://github.com/contribsys/faktory/wiki/The-Job-Payload).
 #[derive(Serialize, Deserialize, Debug, Builder)]
 #[builder(
@@ -129,7 +145,7 @@ pub struct Job {
 }
 
 impl JobBuilder {
-    /// docs
+    /// Create a new instance of 'JobBuilder'
     pub fn new(kind: impl Into<String>) -> JobBuilder {
         JobBuilder {
             kind: Some(kind.into()),
@@ -146,9 +162,10 @@ impl JobBuilder {
         self
     }
 
-    /// Builds a new job
+    /// Builds a new 'Job'
     pub fn build(&self) -> Job {
-        self.try_build().expect("All required fields have been set")
+        self.try_build()
+            .expect("All required fields have been set.")
     }
 }
 
@@ -190,6 +207,11 @@ impl Job {
             failure: None,
             custom: Default::default(),
         }
+    }
+
+    /// Craete an instance of JobBuilder with 'kind' already set.
+    pub fn builder(kind: impl Into<String>) -> JobBuilder {
+        JobBuilder::new(kind)
     }
 
     /// Place this job on the given `queue`.
