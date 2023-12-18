@@ -70,26 +70,12 @@ fn main() {
                 for idx in 0..jobs {
                     if idx % 2 == 0 {
                         // push
-                        let job = match idx % 4 {
-                            // Solely to demo how 'JobBuilder' works in userland
-                            0 => JobBuilder::default()
-                                .kind("SomeJob")
-                                .args(vec![serde_json::Value::from(1), "string".into(), 3.into()])
-                                .priority(Some(rng.gen_range(1..10)))
-                                .queue(QUEUES.choose(&mut rng).unwrap().to_string())
-                                .build()
-                                .unwrap(),
-                            _ => {
-                                let mut job = Job::new(
-                                    "SomeJob",
-                                    vec![serde_json::Value::from(1), "string".into(), 3.into()],
-                                );
-                                job.priority = Some(rng.gen_range(1..10));
-                                job.queue = QUEUES.choose(&mut rng).unwrap().to_string();
-                                job
-                            }
-                        };
-
+                        let mut job = Job::new(
+                            "SomeJob",
+                            vec![serde_json::Value::from(1), "string".into(), 3.into()],
+                        );
+                        job.priority = Some(rng.gen_range(1..10));
+                        job.queue = QUEUES.choose(&mut rng).unwrap().to_string();
                         p.enqueue(job)?;
                         if pushed.fetch_add(1, atomic::Ordering::SeqCst) >= jobs {
                             return Ok(idx);
