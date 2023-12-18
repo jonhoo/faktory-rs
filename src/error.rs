@@ -25,11 +25,13 @@ pub enum Error {
     /// The connection to the server, or one of its prerequisites, failed.
     #[error("connection")]
     Connect(#[from] Connect),
+
     /// Client-side errors.
     ///
     /// These are errors arising even before submitting a job to the server, e.g. malformed job.
     #[error("client")]
     Client(#[from] Client),
+
     /// Underlying I/O layer errors.
     ///
     /// These are overwhelmingly network communication errors on the socket connection to the server.
