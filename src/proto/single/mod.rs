@@ -164,7 +164,7 @@ impl Job {
 }
 
 pub fn write_command<W: Write, C: FaktoryCommand>(w: &mut W, command: &C) -> Result<(), Error> {
-    command.issue::<W>(w)?;
+    command.issue(w)?;
     Ok(w.flush()?)
 }
 
