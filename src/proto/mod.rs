@@ -11,7 +11,9 @@ pub(crate) const EXPECTED_PROTOCOL_VERSION: usize = 2;
 mod single;
 
 // commands that users can issue
-pub use self::single::{Ack, Fail, Heartbeat, Info, Job, Push, QueueAction, QueueControl};
+pub use self::single::{
+    Ack, Fail, Heartbeat, Info, Job, JobBuilder, Push, QueueAction, QueueControl,
+};
 
 // responses that users can see
 pub use self::single::Hi;

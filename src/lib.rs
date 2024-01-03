@@ -73,5 +73,5 @@ pub use tls::TlsStream;
 pub use crate::consumer::{Consumer, ConsumerBuilder};
 pub use crate::error::Error;
 pub use crate::producer::Producer;
-pub use crate::proto::Job;
 pub use crate::proto::Reconnect;
+pub use crate::proto::{Job, JobBuilder};

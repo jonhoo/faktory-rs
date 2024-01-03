@@ -163,3 +163,56 @@ fn queue() {
     let worker_executed = rx.try_recv().is_ok();
     assert!(worker_executed);
 }
+
+#[test]
+fn test_jobs_created_with_builder() {
+    skip_check!();
+
+    // prepare a producer ("client" in Faktory terms) and consumer ("worker"):
+    let mut producer = Producer::connect(None).unwrap();
+    let mut consumer = ConsumerBuilder::default();
+    consumer.register("rebuild_index", move |job| -> io::Result<_> {
+        assert!(job.args().is_empty());
+        Ok(eprintln!("{:?}", job))
+    });
+    consumer.register("register_order", move |job| -> io::Result<_> {
+        assert!(job.args().len() != 0);
+        Ok(eprintln!("{:?}", job))
+    });
+
+    let mut consumer = consumer.connect(None).unwrap();
+
+    // prepare some jobs with JobBuilder:
+    let job1 = JobBuilder::new("rebuild_index")
+        .queue("test_jobs_created_with_builder_0")
+        .build();
+
+    let job2 = Job::builder("register_order")
+        .args(vec!["ISBN-13:9781718501850"])
+        .queue("test_jobs_created_with_builder_1")
+        .build();
+
+    let mut job3 = Job::new("register_order", vec!["ISBN-13:9781718501850"]);
+    job3.queue = "test_jobs_created_with_builder_1".to_string();
+
+    // enqueue ...
+    producer.enqueue(job1).unwrap();
+    producer.enqueue(job2).unwrap();
+    producer.enqueue(job3).unwrap();
+
+    // ... and execute:
+    let had_job = consumer
+        .run_one(0, &["test_jobs_created_with_builder_0"])
+        .unwrap();
+    assert!(had_job);
+
+    let had_job = consumer
+        .run_one(0, &["test_jobs_created_with_builder_1"])
+        .unwrap();
+    assert!(had_job);
+
+    let had_job = consumer
+        .run_one(0, &["test_jobs_created_with_builder_1"])
+        .unwrap();
+    assert!(had_job);
+}
