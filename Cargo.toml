@@ -1,11 +1,10 @@
 [package]
 name = "faktory"
-version = "0.12.1"
+version = "0.12.2"
 authors = ["Jon Gjengset <jon@thesquareplanet.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
-readme = "README.md"
 description = "API bindings for the language-agnostic Faktory work server"
 repository = "https://github.com/jonhoo/faktory-rs.git"
 
