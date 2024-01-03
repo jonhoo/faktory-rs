@@ -37,6 +37,10 @@ thiserror = "1.0.30"
 [dev-dependencies]
 mockstream = "0.0.3"
 
+# to make -Zminimal-versions work
+[target.'cfg(any())'.dependencies]
+openssl = { version = "0.10.60", optional = true }
+
 [[bin]]
 name = "loadtest"
 path = "src/bin/loadtest.rs"
