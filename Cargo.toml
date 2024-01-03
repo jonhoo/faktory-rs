@@ -16,6 +16,7 @@ categories = ["api-bindings", "asynchronous", "network-programming"]
 default = []
 tls = ["native-tls"]
 binaries = ["clap"]
+ent = []
 
 [dependencies]
 serde_json = "1.0"
