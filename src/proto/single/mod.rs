@@ -27,7 +27,7 @@ const JOB_DEFAULT_BACKTRACE: usize = 0;
 /// let _job = Job::new("order", vec!["ISBN-13:9781718501850"]);
 /// ```
 ///
-/// Alternatively, use 'JobBuilder' to construct a job:
+/// Alternatively, use [`JobBuilder`] to configure more aspects of a job:
 /// ```
 /// use faktory::JobBuilder;
 ///
@@ -145,7 +145,7 @@ pub struct Job {
 }
 
 impl JobBuilder {
-    /// Create a new instance of 'JobBuilder'
+    /// Create a new builder for a [`Job`]
     pub fn new(kind: impl Into<String>) -> JobBuilder {
         JobBuilder {
             kind: Some(kind.into()),
@@ -162,7 +162,7 @@ impl JobBuilder {
         self
     }
 
-    /// Builds a new 'Job'
+    /// Builds a new [`Job`] from the parameters of this builder.
     pub fn build(&self) -> Job {
         self.try_build()
             .expect("All required fields have been set.")
@@ -194,9 +194,9 @@ impl Job {
         JobBuilder::new(kind).args(args).build()
     }
 
-    /// Create an instance of JobBuilder with 'kind' already set.
+    /// Creates an ergonomic constructor for a new [`Job`].
     ///
-    /// Equivalent to 'JobBuilder::new'
+    /// Also equivalent to [`JobBuilder::new`].
     pub fn builder<S: Into<String>>(kind: S) -> JobBuilder {
         JobBuilder::new(kind)
     }
