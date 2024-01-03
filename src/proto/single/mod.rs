@@ -14,7 +14,7 @@ pub use self::resp::*;
 
 const JOB_DEFAULT_QUEUE: &str = "default";
 const JOB_DEFAULT_RESERVED_FOR_SECS: usize = 600;
-const JOB_DEFAULT_RETRY_COUNT: usize = 25;
+const JOB_DEFAULT_RETRY_COUNT: isize = 25;
 const JOB_DEFAULT_PRIORITY: u8 = 5;
 const JOB_DEFAULT_BACKTRACE: usize = 0;
 
@@ -108,7 +108,7 @@ pub struct Job {
     /// Defaults to 25.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[builder(default = "Some(JOB_DEFAULT_RETRY_COUNT)")]
-    pub retry: Option<usize>,
+    pub retry: Option<isize>,
 
     /// The priority of this job from 1-9 (9 is highest).
     ///
