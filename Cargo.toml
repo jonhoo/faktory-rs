@@ -14,7 +14,7 @@ categories = ["api-bindings", "asynchronous", "network-programming"]
 
 [features]
 default = []
-tls = ["native-tls", "openssl"]
+tls = ["native-tls"]
 binaries = ["clap"]
 
 [dependencies]
@@ -30,7 +30,6 @@ chrono = { version = "0.4", features = ["serde", "clock"], default-features = fa
 url = "2"
 fnv = "1.0.5"
 native-tls = { version = "0.2", optional = true }
-openssl = { version = "0.10.61", optional = true }
 clap = { version = "4.4.10", optional = true }
 thiserror = "1.0.30"
 derive_builder = "0.12.0"
