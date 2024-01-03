@@ -165,7 +165,7 @@ impl JobBuilder {
         self
     }
 
-    /// Set arbitrary key-value pairs to this job's custom data hash
+    /// Sets arbitrary key-value pairs to this job's custom data hash.
     pub fn add_to_custom_data(&mut self, k: String, v: impl Into<serde_json::Value>) -> &mut Self {
         let custom = self.custom.get_or_insert_with(HashMap::new);
         custom.insert(k, v.into());

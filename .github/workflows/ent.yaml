@@ -1,11 +1,16 @@
-name: Test Enterprise Faktory Features
-
+# This is a CI workflow that runs the test against Enterprise Edition of Faktory.
+# The binary (for macos only) is avalable for download for testing purposes with each Faktory release.
+permissions:
+  contents: read
 on:
   push:
     branches:
       - main
   pull_request:
-
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+name: enterprise
 jobs:
   test:
     runs-on: macos-latest
@@ -32,7 +37,6 @@ jobs:
           FAKTORY_URL: tcp://127.0.0.1:7419
           FAKTORY_ENT: true
         run: cargo test --locked --features ent --all-targets
-
   doc:
     runs-on: ubuntu-latest
     steps:
