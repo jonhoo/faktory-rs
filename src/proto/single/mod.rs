@@ -148,7 +148,7 @@ pub struct Job {
 }
 
 impl JobBuilder {
-    /// Create a new builder for a [`JobBuilder`]
+    /// Creates a new builder for a [`Job`]
     pub fn new(kind: impl Into<String>) -> JobBuilder {
         JobBuilder {
             kind: Some(kind.into()),
