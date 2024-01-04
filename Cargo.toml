@@ -1,11 +1,10 @@
 [package]
 name = "faktory"
-version = "0.12.1"
+version = "0.12.2"
 authors = ["Jon Gjengset <jon@thesquareplanet.com>"]
-edition = "2018"
+edition = "2021"
 license = "MIT OR Apache-2.0"
 
-readme = "README.md"
 description = "API bindings for the language-agnostic Faktory work server"
 repository = "https://github.com/jonhoo/faktory-rs.git"
 
@@ -31,7 +30,7 @@ chrono = { version = "0.4", features = ["serde", "clock"], default-features = fa
 url = "2"
 fnv = "1.0.5"
 native-tls = { version = "0.2", optional = true }
-clap = { version = "3.1.0", optional = true }
+clap = { version = "4.4.10", optional = true }
 thiserror = "1.0.30"
 derive_builder = "0.12.0"
 

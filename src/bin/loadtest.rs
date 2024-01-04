@@ -1,3 +1,4 @@
+use clap::value_parser;
 use clap::{Arg, Command};
 use faktory::*;
 use rand::prelude::*;
@@ -16,21 +17,21 @@ fn main() {
         .arg(
             Arg::new("jobs")
                 .help("Number of jobs to run")
+                .value_parser(value_parser!(usize))
                 .index(1)
-                .default_value("30000")
-                .takes_value(true),
+                .default_value("30000"),
         )
         .arg(
             Arg::new("threads")
                 .help("Number of consumers/producers to run")
+                .value_parser(value_parser!(usize))
                 .index(2)
-                .default_value("10")
-                .takes_value(true),
+                .default_value("10"),
         )
         .get_matches();
 
-    let jobs = matches.value_of_t_or_exit::<usize>("jobs");
-    let threads = matches.value_of_t_or_exit::<usize>("threads");
+    let jobs: usize = *matches.get_one("jobs").expect("default_value is set");
+    let threads: usize = *matches.get_one("threads").expect("default_value is set");
     println!(
         "Running loadtest with {} jobs and {} threads",
         jobs, threads
