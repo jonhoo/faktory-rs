@@ -245,15 +245,15 @@ fn ent_unique_job_until_success() {
 
     // Not that the job submitted in a spawned thread has been successfully executed
     // (with ACK sent to server), the producer 'B' can push another one:
-    assert!(producer_b
+    producer_b
         .enqueue(
             JobBuilder::new(job_type)
                 .args(vec![difficulty_level])
                 .queue(queue_name)
                 .unique_for(unique_for)
-                .build()
+                .build(),
         )
-        .is_ok());
+        .unwrap();
 }
 
 #[test]
@@ -307,15 +307,15 @@ fn ent_unique_job_until_start() {
 
     // the unique lock has been released by this time, so the job is enqueued successfully:
     let mut producer_b = Producer::connect(Some(&url)).unwrap();
-    assert!(producer_b
+    producer_b
         .enqueue(
             JobBuilder::new(job_type)
                 .args(vec![difficulty_level])
                 .queue(queue_name)
                 .unique_for(unique_for)
-                .build()
+                .build(),
         )
-        .is_ok());
+        .unwrap();
 
     handle.join().expect("should join successfully");
 }
