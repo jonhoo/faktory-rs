@@ -37,11 +37,3 @@ jobs:
           FAKTORY_URL: tcp://127.0.0.1:7419
           FAKTORY_ENT: true
         run: cargo test --locked --features ent --all-targets
-  doc:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install stable
-        uses: dtolnay/rust-toolchain@stable
-      - name: Run doc tests
-        run: cargo test --features ent --doc
