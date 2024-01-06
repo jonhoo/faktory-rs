@@ -42,15 +42,18 @@ impl JobBuilder {
 
     /// How long the Faktory will not accept duplicates of this job.
     ///
-    /// The job will be considered unique for kind-args-queue combination.
-    /// The uniqueness is best-effort, rather than a guarantee. Check out
-    /// the Enterprise Faktory [docs](https://github.com/contribsys/faktory/wiki/Ent-Unique-Jobs)
-    /// for details on how scheduling, retries and other features live together with `unique_for`.
+    /// The job will be considered unique for the kind-args-queue combination. The uniqueness is best-effort,
+    /// rather than a guarantee. Check out the Enterprise Faktory [docs](https://github.com/contribsys/faktory/wiki/Ent-Unique-Jobs)
+    /// for details on how scheduling, retries, and other features live together with `unique_for`.
     pub fn unique_for(&mut self, secs: usize) -> &mut Self {
         self.add_to_custom_data("unique_for", secs)
     }
 
     /// Remove unique lock for this job right before the job starts executing.
+    ///
+    /// Another job with the same kind-args-queue combination will be accepted by the Faktory server
+    /// after the period specified in [`unique_for`](struct.JobBuilder.html#method.unique_for) has finished
+    /// _or_ after this job has been been consumed (i.e. its execution has ***started***).
     pub fn unique_until_start(&mut self) -> &mut Self {
         self.add_to_custom_data("unique_until", "start")
     }
@@ -58,6 +61,9 @@ impl JobBuilder {
     /// Do not remove unique lock for this job until it successfully finishes.
     ///
     /// Sets `unique_until` on the Job's custom hash to `success`, which is Faktory's default.
+    /// Another job with the same kind-args-queue combination will be accepted by the Faktory server
+    /// after the period specified in [`unique_for`](struct.JobBuilder.html#method.unique_for) has finished
+    /// _or_ after this job has been been ***successfully*** processed.
     pub fn unique_until_success(&mut self) -> &mut Self {
         self.add_to_custom_data("unique_until", "success")
     }
