@@ -17,7 +17,7 @@ impl JobBuilder {
     /// ```
     pub fn expires_at(&mut self, dt: DateTime<Utc>) -> &mut Self {
         self.add_to_custom_data(
-            "expires_at".into(),
+            "expires_at",
             dt.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
         )
     }
@@ -47,19 +47,19 @@ impl JobBuilder {
     /// the Enterprise Faktory [docs](https://github.com/contribsys/faktory/wiki/Ent-Unique-Jobs)
     /// for details on how scheduling, retries and other features live together with `unique_for`.
     pub fn unique_for(&mut self, secs: usize) -> &mut Self {
-        self.add_to_custom_data("unique_for".into(), secs)
+        self.add_to_custom_data("unique_for", secs)
     }
 
     /// Remove unique lock for this job right before the job starts executing.
     pub fn unique_until_start(&mut self) -> &mut Self {
-        self.add_to_custom_data("unique_until".into(), "start")
+        self.add_to_custom_data("unique_until", "start")
     }
 
     /// Do not remove unique lock for this job until it successfully finishes.
     ///
     /// Sets `unique_until` on the Job's custom hash to `success`, which is Faktory's default.
     pub fn unique_until_success(&mut self) -> &mut Self {
-        self.add_to_custom_data("unique_until".into(), "success")
+        self.add_to_custom_data("unique_until", "success")
     }
 }
 
@@ -114,9 +114,9 @@ mod test {
         let expires_at2 = Utc::now() + chrono::Duration::seconds(300);
         let job = half_stuff()
             .unique_for(60)
-            .add_to_custom_data("unique_for".into(), 600)
+            .add_to_custom_data("unique_for", 600)
             .unique_for(40)
-            .add_to_custom_data("expires_at".into(), to_iso_string(expires_at1))
+            .add_to_custom_data("expires_at", to_iso_string(expires_at1))
             .expires_at(expires_at2)
             .build();
         let stored_unique_for = job.custom.get("unique_for").unwrap();

@@ -166,9 +166,13 @@ impl JobBuilder {
     }
 
     /// Sets arbitrary key-value pairs to this job's custom data hash.
-    pub fn add_to_custom_data(&mut self, k: String, v: impl Into<serde_json::Value>) -> &mut Self {
+    pub fn add_to_custom_data(
+        &mut self,
+        k: impl Into<String>,
+        v: impl Into<serde_json::Value>,
+    ) -> &mut Self {
         let custom = self.custom.get_or_insert_with(HashMap::new);
-        custom.insert(k, v.into());
+        custom.insert(k.into(), v.into());
         self
     }
 
@@ -319,7 +323,7 @@ mod test {
     fn test_arbitrary_custom_data_setter() {
         let job = JobBuilder::new("order")
             .args(vec!["ISBN-13:9781718501850"])
-            .add_to_custom_data("arbitrary_key".into(), "arbitrary_value")
+            .add_to_custom_data("arbitrary_key", "arbitrary_value")
             .build();
 
         assert_eq!(
