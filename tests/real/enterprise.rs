@@ -136,12 +136,14 @@ fn ent_unique_job() {
         panic!("Expected protocol error.")
     }
 
+    // Let's now consume the job which is 'holding' a unique lock:
     let had_job = consumer.run_one(0, &[queue_name]).unwrap();
     assert!(had_job);
-    let had_another_one = consumer.run_one(0, &[queue_name]).unwrap();
 
-    // For the non-enterprise edition of Faktory, this assertion WILL FAIL:
-    assert!(!had_another_one);
+    // And check that the queue is really empty (`job2` from above
+    // has not been queued indeed):
+    let queue_is_empty = !consumer.run_one(0, &[queue_name]).unwrap();
+    assert!(queue_is_empty);
 
     // Now let's repeat the latter case, but providing different args to job2:
     let job1 = JobBuilder::new(job_type)
