@@ -60,7 +60,7 @@ fn ent_expiring_job() {
         .expires_at(chrono::Utc::now() + ttl)
         .build();
 
-    // enquere and then fetch job2, but after ttl:
+    // enqueue and then fetch job2, but after ttl:
     producer.enqueue(job2).unwrap();
     thread::sleep(time::Duration::from_secs(job_ttl_secs * 2));
     let had_job = consumer.run_one(0, &["default"]).unwrap();
@@ -130,8 +130,8 @@ fn ent_unique_job() {
         .build();
     // ... so the server will respond accordingly:
     let res = producer.enqueue(job2).unwrap_err();
-    if let error::Error::Protocol(error::Protocol::Internal { msg }) = res {
-        assert_eq!(msg, "NOTUNIQUE Job not unique");
+    if let error::Error::Protocol(error::Protocol::UniqueConstraintViolation { msg }) = res {
+        assert_eq!(msg, "Job not unique");
     } else {
         panic!("Expected protocol error.")
     }
