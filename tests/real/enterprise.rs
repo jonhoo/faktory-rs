@@ -245,7 +245,7 @@ fn ent_unique_job_until_success() {
 
     handle.join().expect("should join successfully");
 
-    // Not that the job submitted in a spawned thread has been successfully executed
+    // Now that the job submitted in a spawned thread has been successfully executed
     // (with ACK sent to server), the producer 'B' can push another one:
     producer_b
         .enqueue(
@@ -320,4 +320,44 @@ fn ent_unique_job_until_start() {
         .unwrap();
 
     handle.join().expect("should join successfully");
+}
+
+#[test]
+fn ent_unique_job_bypass_unique_lock() {
+    use faktory::error;
+    use serde_json::Value;
+
+    skip_if_not_enterprise!();
+
+    let url = learn_faktory_url();
+    let mut producer = Producer::connect(Some(&url)).unwrap();
+
+    let job1 = Job::builder("order")
+        .queue("ent_unique_job_bypass_unique_lock")
+        .unique_for(60)
+        .build();
+
+    // Now the following job is _technically_ a 'duplicate', BUT if the `unique_for` value is not set,
+    // the uniqueness lock will be bypassed on the server. This special case is mentioned in the docs:
+    // https://github.com/contribsys/faktory/wiki/Ent-Unique-Jobs#bypassing-uniqueness
+    let job2 = Job::builder("order") // same jobtype and args (args are just not set)
+        .queue("ent_unique_job_bypass_unique_lock") // same queue
+        .build(); // NB: `unique_for` not set
+
+    producer.enqueue(job1).unwrap();
+    producer.enqueue(job2).unwrap(); // bypassing the lock!
+
+    // This _is_ a 'duplicate'.
+    let job3 = Job::builder("order")
+        .queue("ent_unique_job_bypass_unique_lock")
+        .unique_for(60) // NB
+        .build();
+
+    let res = producer.enqueue(job3).unwrap_err(); // NOT bypassing the lock!
+
+    if let error::Error::Protocol(error::Protocol::UniqueConstraintViolation { msg }) = res {
+        assert_eq!(msg, "Job not unique");
+    } else {
+        panic!("Expected protocol error.")
+    }
 }
