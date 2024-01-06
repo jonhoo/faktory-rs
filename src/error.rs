@@ -93,7 +93,7 @@ pub enum Protocol {
         desc: String,
     },
 
-    /// The server reported unique constraint violation.
+    /// The server reported a unique constraint violation.
     #[cfg(feature = "ent")]
     #[error("server reported unique constraint violation: {msg}")]
     UniqueConstraintViolation {
