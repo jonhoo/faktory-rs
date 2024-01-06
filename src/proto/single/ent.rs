@@ -8,9 +8,8 @@ impl JobBuilder {
     /// Faktory Enterprise allows for expiring jobs. This is setter for `expires_at`
     /// field in the job's custom data.
     /// ```
-    /// use faktory::JobBuilder;
-    /// use chrono::{Duration, Utc};
-    ///
+    /// # use faktory::JobBuilder;
+    /// # use chrono::{Duration, Utc};
     /// let _job = JobBuilder::new("order")
     ///     .args(vec!["ISBN-13:9781718501850"])
     ///     .expires_at(Utc::now() + Duration::hours(1))
@@ -25,12 +24,13 @@ impl JobBuilder {
 
     /// In what period of time from now (UTC) the Faktory should expire this job.
     ///
-    /// Use this setter when you are unwilling to populate the `expires_at` field in custom
-    /// options with some exact date and time, e.g.:
+    /// Under the hood, the method will call `Utc::now` and add the provided `ttl` duration.
+    /// You can use this setter when you have a duration rather than some exact date and time,
+    /// expected by [`expires_at`](struct.JobBuilder.html#method.expires_at) setter.
+    /// Example usage:
     /// ```
-    /// use faktory::JobBuilder;
-    /// use chrono::Duration;
-    ///
+    /// # use faktory::JobBuilder;
+    /// # use chrono::Duration;
     /// let _job = JobBuilder::new("order")
     ///     .args(vec!["ISBN-13:9781718501850"])
     ///     .expires_in(Duration::weeks(1))
