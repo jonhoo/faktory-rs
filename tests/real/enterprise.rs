@@ -66,7 +66,7 @@ fn ent_expiring_job() {
     let had_job = consumer.run_one(0, &["default"]).unwrap();
 
     // For the non-enterprise edition of Faktory, this assertion will
-    // fail, which should be take into account when running the test suite on CI.
+    // fail, which should be taken into account when running the test suite on CI.
     assert!(!had_job);
 }
 
