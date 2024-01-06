@@ -45,6 +45,11 @@ impl JobBuilder {
     /// The job will be considered unique for the kind-args-queue combination. The uniqueness is best-effort,
     /// rather than a guarantee. Check out the Enterprise Faktory [docs](https://github.com/contribsys/faktory/wiki/Ent-Unique-Jobs)
     /// for details on how scheduling, retries, and other features live together with `unique_for`.
+    ///
+    /// If you've already created and pushed a unique job (job "A") to the Faktory server and now have got another one
+    /// of same kind, with the same args and destined for the same queue (job "B") and you would like - for some reason - to
+    /// bypass the unique constraint, simply leave `unique_for` field on the job's custom hash empty, i.e. do not use this setter.
+    /// In this case, the Faktory server will accept job "B", though technically this job "B" is a duplicate.
     pub fn unique_for(&mut self, secs: usize) -> &mut Self {
         self.add_to_custom_data("unique_for", secs)
     }
