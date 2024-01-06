@@ -235,8 +235,8 @@ fn ent_unique_job_until_success() {
 
     // as a result:
     let res = producer_b.enqueue(job).unwrap_err();
-    if let error::Error::Protocol(error::Protocol::Internal { msg }) = res {
-        assert_eq!(msg, "NOTUNIQUE Job not unique");
+    if let error::Error::Protocol(error::Protocol::UniqueConstraintViolation { msg }) = res {
+        assert_eq!(msg, "Job not unique");
     } else {
         panic!("Expected protocol error.")
     }
