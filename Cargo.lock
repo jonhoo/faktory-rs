@@ -288,7 +288,7 @@ dependencies = [
 
 [[package]]
 name = "faktory"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "bufstream",
  "chrono",
