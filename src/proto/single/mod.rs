@@ -7,6 +7,9 @@ mod cmd;
 mod resp;
 mod utils;
 
+#[cfg(feature = "ent")]
+mod ent;
+
 use crate::error::Error;
 
 pub use self::cmd::*;
@@ -145,7 +148,7 @@ pub struct Job {
 }
 
 impl JobBuilder {
-    /// Create a new builder for a [`Job`]
+    /// Creates a new builder for a [`Job`]
     pub fn new(kind: impl Into<String>) -> JobBuilder {
         JobBuilder {
             kind: Some(kind.into()),
@@ -159,6 +162,17 @@ impl JobBuilder {
         A: Into<serde_json::Value>,
     {
         self.args = Some(args.into_iter().map(|s| s.into()).collect());
+        self
+    }
+
+    /// Sets arbitrary key-value pairs to this job's custom data hash.
+    pub fn add_to_custom_data(
+        &mut self,
+        k: impl Into<String>,
+        v: impl Into<serde_json::Value>,
+    ) -> &mut Self {
+        let custom = self.custom.get_or_insert_with(HashMap::new);
+        custom.insert(k.into(), v.into());
         self
     }
 
@@ -303,5 +317,18 @@ mod test {
 
         assert_ne!(job2.jid, job3.jid);
         assert_ne!(job2.created_at, job3.created_at);
+    }
+
+    #[test]
+    fn test_arbitrary_custom_data_setter() {
+        let job = JobBuilder::new("order")
+            .args(vec!["ISBN-13:9781718501850"])
+            .add_to_custom_data("arbitrary_key", "arbitrary_value")
+            .build();
+
+        assert_eq!(
+            job.custom.get("arbitrary_key").unwrap(),
+            &serde_json::Value::from("arbitrary_value")
+        );
     }
 }

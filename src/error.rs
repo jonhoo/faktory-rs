@@ -93,6 +93,14 @@ pub enum Protocol {
         desc: String,
     },
 
+    /// The server reported a unique constraint violation.
+    #[cfg(feature = "ent")]
+    #[error("server reported unique constraint violation: {msg}")]
+    UniqueConstraintViolation {
+        /// The error message given by the server.
+        msg: String,
+    },
+
     /// The server responded with an error.
     #[error("an internal server error occurred: {msg}")]
     Internal {
@@ -139,6 +147,8 @@ impl Protocol {
         match code {
             Some("ERR") => Protocol::Internal { msg: error },
             Some("MALFORMED") => Protocol::Malformed { desc: error },
+            #[cfg(feature = "ent")]
+            Some("NOTUNIQUE") => Protocol::UniqueConstraintViolation { msg: error },
             Some(c) => Protocol::Internal {
                 msg: format!("{} {}", c, error),
             },
