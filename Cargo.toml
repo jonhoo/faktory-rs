@@ -45,3 +45,7 @@ openssl = { version = "0.10.60", optional = true }
 name = "loadtest"
 path = "src/bin/loadtest.rs"
 required-features = ["binaries"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

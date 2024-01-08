@@ -44,6 +44,7 @@ pub enum Error {
 
     /// Indicates an error in the underlying TLS stream.
     #[cfg(feature = "tls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
     #[error("underlying tls stream")]
     TlsStream(#[source] native_tls::Error),
 }
@@ -95,6 +96,7 @@ pub enum Protocol {
 
     /// The server reported a unique constraint violation.
     #[cfg(feature = "ent")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
     #[error("server reported unique constraint violation: {msg}")]
     UniqueConstraintViolation {
         /// The error message given by the server.

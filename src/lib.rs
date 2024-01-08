@@ -55,6 +55,7 @@
 //! }
 //! ```
 #![deny(missing_docs)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![warn(rust_2018_idioms)]
 
 #[macro_use]
@@ -66,8 +67,10 @@ mod producer;
 mod proto;
 
 #[cfg(feature = "tls")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 mod tls;
 #[cfg(feature = "tls")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use tls::TlsStream;
 
 pub use crate::consumer::{Consumer, ConsumerBuilder};
