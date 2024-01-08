@@ -3,7 +3,7 @@
 //! [`enum@Error`] is the top level error enum.
 //! Most consumers should only need to interact with this type.
 //! This is also where more generic errors such as I/O errors are placed,
-//! whereas the more specific errors ([`Connect`] and [`Protocol`]) are 
+//! whereas the more specific errors ([`Connect`] and [`Protocol`]) are
 //! related to logic.
 //!
 //! [`Connect`] describes errors specific to the connection logic, for example
