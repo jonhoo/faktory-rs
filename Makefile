@@ -31,6 +31,9 @@ readme:
 test:
 	cargo t --locked --all-features --all-targets
 
+test/doc:
+	cargo test --locked --all-features --doc
+
 test/e2e:
 	FAKTORY_URL=tcp://${FAKTORY_HOST}:${FAKTORY_PORT} cargo test --locked --all-features --all-targets
 
