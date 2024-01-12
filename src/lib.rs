@@ -60,7 +60,7 @@
 #[macro_use]
 extern crate serde_derive;
 
-mod asynchrono;
+mod r#async;
 mod consumer;
 pub mod error;
 mod producer;
@@ -76,3 +76,4 @@ pub use crate::error::Error;
 pub use crate::producer::Producer;
 pub use crate::proto::Reconnect;
 pub use crate::proto::{Job, JobBuilder};
+pub use crate::r#async::Producer as AsyncProducer;
