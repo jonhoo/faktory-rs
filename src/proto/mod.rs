@@ -94,6 +94,15 @@ impl Default for ClientOptions {
     }
 }
 
+impl ClientOptions {
+    pub(crate) fn default_for_producer() -> Self {
+        Self {
+            is_producer: true,
+            ..Default::default()
+        }
+    }
+}
+
 pub(crate) struct Client<S: Read + Write> {
     stream: BufStream<S>,
     opts: ClientOptions,

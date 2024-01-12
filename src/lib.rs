@@ -60,6 +60,7 @@
 #[macro_use]
 extern crate serde_derive;
 
+mod asynchrono;
 mod consumer;
 pub mod error;
 mod producer;
