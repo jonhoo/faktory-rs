@@ -1,7 +1,7 @@
 use crate::error::{self, Error};
 use std::io::prelude::*;
 
-fn bad(expected: &'static str, got: &RawResponse) -> error::Protocol {
+pub fn bad(expected: &'static str, got: &RawResponse) -> error::Protocol {
     let stringy = match *got {
         RawResponse::String(ref s) => Some(&**s),
         RawResponse::Blob(ref b) => {
@@ -100,7 +100,7 @@ pub fn read_ok<R: BufRead>(r: R) -> Result<(), Error> {
 // ----------------------------------------------
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-enum RawResponse {
+pub enum RawResponse {
     String(String),
     Blob(Vec<u8>),
     Number(isize),

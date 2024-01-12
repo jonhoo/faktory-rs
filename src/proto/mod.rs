@@ -12,7 +12,8 @@ mod single;
 
 // commands that users can issue
 pub use self::single::{
-    Ack, Fail, Heartbeat, Info, Job, JobBuilder, Push, QueueAction, QueueControl,
+    bad, Ack, Fail, Heartbeat, Hello, Info, Job, JobBuilder, Push, QueueAction, QueueControl,
+    RawResponse,
 };
 
 // responses that users can see
@@ -100,6 +101,10 @@ impl ClientOptions {
             is_producer: true,
             ..Default::default()
         }
+    }
+
+    pub(crate) fn is_producer(&self) -> bool {
+        self.is_producer
     }
 }
 
