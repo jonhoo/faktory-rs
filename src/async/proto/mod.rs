@@ -52,7 +52,6 @@ where
             }
             .into());
         }
-
         // fill in any missing options, and remember them for re-connect
         let mut hello = Hello::default();
         if !self.opts.is_producer() {
@@ -103,5 +102,25 @@ where
         let mut opts = ClientOptions::default_for_producer();
         opts.password = pwd;
         Client::new(stream, opts).await
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::proto::ClientOptions;
+
+    use super::Client;
+    use tokio::io::BufStream;
+    use tokio::net::TcpStream;
+
+    #[tokio::test]
+    async fn test_client_receives_hi_from_server() {
+        if std::env::var_os("FAKTORY_URL").is_none() {
+            return;
+        }
+        let stream = BufStream::new(TcpStream::connect("127.0.0.1:7419").await.unwrap());
+        let opts = ClientOptions::default();
+        let mut c = Client { stream, opts };
+        c.init().await.expect("successful handshake with Faktory");
     }
 }

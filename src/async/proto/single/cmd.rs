@@ -11,9 +11,8 @@ pub trait FaktoryCommand {
 impl FaktoryCommand for Hello {
     async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
         w.write_all(b"HELLO ").await?;
-
         let r = serde_json::to_vec(self).map_err(Error::Serialization)?;
-        w.write(&r).await;
+        w.write(&r).await?;
         Ok(w.write_all(b"\r\n").await?)
     }
 }
