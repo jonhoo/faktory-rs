@@ -38,6 +38,7 @@ async-trait = "0.1.77"
 
 [dev-dependencies]
 mockstream = "0.0.3"
+tokio = { version = "1.35.1", features = ["rt", "macros"] }
 
 # to make -Zminimal-versions work
 [target.'cfg(any())'.dependencies]

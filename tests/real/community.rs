@@ -7,13 +7,7 @@ use serde_json::Value;
 use std::io;
 use std::sync;
 
-macro_rules! skip_check {
-    () => {
-        if std::env::var_os("FAKTORY_URL").is_none() {
-            return;
-        }
-    };
-}
+use crate::skip_check;
 
 #[test]
 fn hello_p() {
