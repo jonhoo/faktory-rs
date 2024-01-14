@@ -16,6 +16,7 @@ macro_rules! skip_if_not_enterprise {
     };
 }
 
+#[cfg(feature = "ent")]
 pub fn learn_faktory_url() -> String {
     let url = std::env::var_os("FAKTORY_URL").expect(
         "Enterprise Faktory should be running for this test, and 'FAKTORY_URL' environment variable should be provided",

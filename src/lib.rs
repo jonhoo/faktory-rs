@@ -76,4 +76,4 @@ pub use crate::error::Error;
 pub use crate::producer::Producer;
 pub use crate::proto::Reconnect;
 pub use crate::proto::{Job, JobBuilder};
-pub use crate::r#async::Producer as AsyncProducer;
+pub use crate::r#async::{AsyncConsumer, AsyncConsumerBuilder, AsyncProducer};

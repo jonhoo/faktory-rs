@@ -11,14 +11,14 @@ use crate::{
 use super::Client;
 
 /// `Producer` is used to enqueue new jobs that will in turn be processed by Faktory workers.
-pub struct Producer<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> {
+pub struct AsyncProducer<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> {
     c: Client<S>,
 }
 
-impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> Producer<S> {
+impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> AsyncProducer<S> {
     /// Connect to a Faktory server with a non-standard stream.
-    pub async fn connect_with(stream: S, pwd: Option<String>) -> Result<Producer<S>, Error> {
-        Ok(Producer {
+    pub async fn connect_with(stream: S, pwd: Option<String>) -> Result<AsyncProducer<S>, Error> {
+        Ok(AsyncProducer {
             c: Client::new_producer(stream, pwd).await?,
         })
     }
@@ -31,7 +31,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> Producer<S> {
     }
 }
 
-impl Producer<BufStream<TokioStream>> {
+impl AsyncProducer<BufStream<TokioStream>> {
     /// Create a producer and asynchronously connect to a Faktory server.
     ///
     /// If `url` is not given, will use the standard Faktory environment variables. Specifically,

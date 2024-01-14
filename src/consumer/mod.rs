@@ -118,7 +118,7 @@ where
 }
 
 #[derive(Default)]
-struct WorkerState {
+pub struct WorkerState {
     last_job_result: Option<Result<String, Fail>>,
     running_job: Option<String>,
 }
