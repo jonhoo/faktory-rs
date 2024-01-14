@@ -1,4 +1,4 @@
-use super::AsyncJobRunner;
+use super::BoxAsyncJobRunner;
 use crate::consumer::WorkerState;
 use fnv::FnvHashMap;
 use std::{
@@ -6,16 +6,16 @@ use std::{
     sync::Mutex,
 };
 
-pub(crate) struct WorkerStatesRegistry(Vec<Mutex<WorkerState>>);
+pub(crate) struct StatesRegistry(Vec<Mutex<WorkerState>>);
 
-impl Deref for WorkerStatesRegistry {
+impl Deref for StatesRegistry {
     type Target = Vec<Mutex<WorkerState>>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl WorkerStatesRegistry {
+impl StatesRegistry {
     pub(crate) fn new(workers_count: usize) -> Self {
         Self((0..workers_count).map(|_| Default::default()).collect())
     }
@@ -23,12 +23,18 @@ impl WorkerStatesRegistry {
     pub(crate) fn register_running(&self, worker: usize, jid: String) {
         self[worker].lock().expect("lock acquired").running_job = Some(jid);
     }
+
+    pub(crate) fn reset(&self, worker: usize) {
+        let mut state = self[worker].lock().expect("lock acquired");
+        state.last_job_result = None;
+        state.running_job = None;
+    }
 }
 
-pub(crate) struct CallbacksRegistry<E>(FnvHashMap<String, AsyncJobRunner<E>>);
+pub(crate) struct CallbacksRegistry<E>(FnvHashMap<String, BoxAsyncJobRunner<E>>);
 
 impl<E> Deref for CallbacksRegistry<E> {
-    type Target = FnvHashMap<String, AsyncJobRunner<E>>;
+    type Target = FnvHashMap<String, BoxAsyncJobRunner<E>>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }

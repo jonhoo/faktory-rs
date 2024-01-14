@@ -9,7 +9,7 @@ use crate::{
     Error, Job,
 };
 
-use super::{AsyncConsumer, AsyncJobRunner, CallbacksRegistry, Client};
+use super::{AsyncConsumer, CallbacksRegistry, Client};
 
 /// Convenience wrapper for building a Faktory worker.
 ///
@@ -73,21 +73,7 @@ impl<E: 'static> AsyncConsumerBuilder<E> {
         K: Into<String>,
         H: Fn(Job) -> Pin<Box<dyn Future<Output = Result<(), E>>>> + 'static,
     {
-        let runner = AsyncJobRunner::new(handler);
-        self.callbacks.insert(kind.into(), runner);
-        self
-    }
-
-    /// Register a job runner for the given job type (`kind`).
-    ///
-    /// Serving same purpose as [`register`](struct.AsyncConsumerBuilder.html#structmethod.register),
-    /// but accepting an instance of [`JobRunnner`] as the second argument.
-    pub fn register_runner(
-        &mut self,
-        kind: impl Into<String>,
-        runner: AsyncJobRunner<E>,
-    ) -> &mut Self {
-        self.callbacks.insert(kind.into(), runner);
+        self.callbacks.insert(kind.into(), Box::new(handler));
         self
     }
 

@@ -2,7 +2,7 @@ use tokio::io::AsyncWriteExt;
 
 use crate::{
     proto::{Fetch, Hello, Push},
-    Error, Job,
+    Error,
 };
 
 #[async_trait::async_trait]
