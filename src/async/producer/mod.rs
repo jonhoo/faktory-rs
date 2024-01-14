@@ -1,6 +1,8 @@
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
+use crate::proto::Push;
+use crate::Job;
 use crate::{
     proto::{get_env_url, host_from_url, url_parse},
     Error,
@@ -19,6 +21,13 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> Producer<S> {
         Ok(Producer {
             c: Client::new_producer(stream, pwd).await?,
         })
+    }
+
+    /// Asynchronously enqueue the given job on the Faktory server.
+    ///
+    /// Returns `Ok` if the job was successfully queued by the Faktory server.
+    pub async fn enqueue(&mut self, job: Job) -> Result<(), Error> {
+        self.c.issue(&Push::from(job)).await?.read_ok().await
     }
 }
 

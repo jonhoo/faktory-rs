@@ -1,3 +1,7 @@
+//! This is `faktory::proto::single::resp` adjusted for asynchrony;
+//! The original module hosts Redis RESP implementation and deserialization
+//! utilites which are in the center of our conversation with the Faktory server.
+
 use tokio::io::{AsyncBufReadExt, AsyncReadExt};
 
 use crate::{
@@ -17,6 +21,37 @@ pub async fn read_ok<R: AsyncBufReadExt + Unpin>(r: R) -> Result<(), Error> {
     Err(bad("server ok", &rr).into())
 }
 
+pub async fn read_json<R: AsyncBufReadExt + Unpin, T: serde::de::DeserializeOwned>(
+    r: R,
+) -> Result<Option<T>, Error> {
+    let rr = read(r).await?;
+    match rr {
+        RawResponse::String(ref s) if s == "OK" => {
+            return Ok(None);
+        }
+        RawResponse::String(ref s) => {
+            return serde_json::from_str(s)
+                .map(Some)
+                .map_err(Error::Serialization);
+        }
+        RawResponse::Blob(ref b) if b == b"OK" => {
+            return Ok(None);
+        }
+        RawResponse::Blob(ref b) => {
+            if b.is_empty() {
+                return Ok(None);
+            }
+            return serde_json::from_slice(b)
+                .map(Some)
+                .map_err(Error::Serialization);
+        }
+        RawResponse::Null => return Ok(None),
+        _ => {}
+    };
+
+    Err(bad("json", &rr).into())
+}
+
 pub async fn read_hi<R: AsyncBufReadExt + Unpin>(r: R) -> Result<Hi, Error> {
     let rr = read(r).await?;
     if let RawResponse::String(ref s) = rr {
@@ -27,8 +62,6 @@ pub async fn read_hi<R: AsyncBufReadExt + Unpin>(r: R) -> Result<Hi, Error> {
     Err(bad("server hi", &rr).into())
 }
 
-// This is a shameless copy (adjusted for asynchrony) of the implementation
-// of the Redis RESP protocol located in `faktory::proto::single::resp`.
 async fn read<R>(mut r: R) -> Result<RawResponse, Error>
 where
     R: AsyncReadExt + AsyncBufReadExt + Unpin,

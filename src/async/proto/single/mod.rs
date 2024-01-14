@@ -8,7 +8,7 @@ use tokio::io::{AsyncBufRead, AsyncWriteExt};
 
 use crate::Error;
 
-async fn write_command<W: AsyncWriteExt + Unpin + Send, C: FaktoryCommand>(
+pub async fn write_command<W: AsyncWriteExt + Unpin + Send, C: FaktoryCommand>(
     w: &mut W,
     command: &C,
 ) -> Result<(), Error> {

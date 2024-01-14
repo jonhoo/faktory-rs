@@ -103,24 +103,67 @@ where
         opts.password = pwd;
         Client::new(stream, opts).await
     }
+
+    pub(crate) async fn issue<FC: single::FaktoryCommand>(
+        &mut self,
+        c: &FC,
+    ) -> Result<ReadToken<'_, S>, Error> {
+        single::write_command(&mut self.stream, c).await?;
+        Ok(ReadToken(self))
+    }
 }
 
+pub struct ReadToken<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send>(&'a mut Client<S>);
+
+impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> ReadToken<'a, S> {
+    pub(crate) async fn read_ok(self) -> Result<(), Error> {
+        single::read_ok(&mut self.0.stream).await
+    }
+
+    pub(crate) async fn read_json<T>(self) -> Result<Option<T>, Error>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        single::read_json(&mut self.0.stream).await
+    }
+}
 #[cfg(test)]
 mod test {
-    use crate::proto::ClientOptions;
-
-    use super::Client;
+    use super::{single, Client};
+    use crate::proto::{ClientOptions, Hello, Push, EXPECTED_PROTOCOL_VERSION};
+    use crate::JobBuilder;
     use tokio::io::BufStream;
     use tokio::net::TcpStream;
 
-    #[tokio::test]
-    async fn test_client_receives_hi_from_server() {
+    async fn get_connected_client() -> Option<Client<BufStream<TcpStream>>> {
         if std::env::var_os("FAKTORY_URL").is_none() {
-            return;
+            return None;
         }
         let stream = BufStream::new(TcpStream::connect("127.0.0.1:7419").await.unwrap());
         let opts = ClientOptions::default();
-        let mut c = Client { stream, opts };
-        c.init().await.expect("successful handshake with Faktory");
+        Some(Client { stream, opts })
+    }
+
+    #[tokio::test]
+    async fn test_client_runs_handshake_with_server_after_connect() {
+        if let Some(mut c) = get_connected_client().await {
+            let hi = single::read_hi(&mut c.stream).await.unwrap();
+            assert_eq!(hi.version, EXPECTED_PROTOCOL_VERSION);
+            let hello = Hello::default();
+            single::write_command_and_await_ok(&mut c.stream, &hello)
+                .await
+                .expect("OK from server");
+        };
+    }
+
+    #[tokio::test]
+    async fn test_client_receives_ok_from_server_after_job_push() {
+        if let Some(mut c) = get_connected_client().await {
+            c.init().await.unwrap();
+            let j = JobBuilder::new("order").build();
+            single::write_command_and_await_ok(&mut c.stream, &Push::from(j))
+                .await
+                .unwrap();
+        };
     }
 }
