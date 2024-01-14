@@ -7,7 +7,7 @@ use fnv::FnvHashMap;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
-use super::Client;
+use super::{Client, Reconnect};
 use crate::{
     consumer::WorkerState,
     proto::{get_env_url, host_from_url, url_parse, ClientOptions},
@@ -54,6 +54,23 @@ pub struct AsyncConsumer<S: AsyncBufReadExt + AsyncWriteExt + Send, E> {
     worker_states: Arc<WorkerStatesRegistry>,
     callbacks: Arc<CallbacksRegistry<E>>,
     terminated: bool,
+}
+
+impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> AsyncConsumer<S, E> {
+    async fn new(c: Client<S>, workers_count: usize, callbacks: CallbacksRegistry<E>) -> Self {
+        AsyncConsumer {
+            c,
+            callbacks: Arc::new(callbacks),
+            worker_states: Arc::new(WorkerStatesRegistry::new(workers_count)),
+            terminated: false,
+        }
+    }
+}
+
+impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin + Reconnect, E> AsyncConsumer<S, E> {
+    async fn reconnect(&mut self) -> Result<(), Error> {
+        self.c.reconnect().await
+    }
 }
 
 /// Convenience wrapper for building a Faktory worker.
@@ -166,16 +183,5 @@ impl<E> AsyncConsumerBuilder<E> {
         let buffered = BufStream::new(stream);
         let client = Client::new(buffered, self.opts).await?;
         Ok(AsyncConsumer::new(client, self.workers_count, self.callbacks).await)
-    }
-}
-
-impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> AsyncConsumer<S, E> {
-    async fn new(c: Client<S>, workers_count: usize, callbacks: CallbacksRegistry<E>) -> Self {
-        AsyncConsumer {
-            c,
-            callbacks: Arc::new(callbacks),
-            worker_states: Arc::new(WorkerStatesRegistry::new(workers_count)),
-            terminated: false,
-        }
     }
 }

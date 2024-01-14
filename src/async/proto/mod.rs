@@ -1,6 +1,6 @@
 use crate::proto::{ClientOptions, Hello, EXPECTED_PROTOCOL_VERSION};
 use crate::{error, Error};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, Result as TokioIOResult};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tokio::net::TcpStream as TokioStream;
 
 mod single;
@@ -14,13 +14,13 @@ pub struct Client<S: AsyncBufReadExt + AsyncWriteExt + Send> {
 #[async_trait::async_trait]
 pub trait Reconnect: Sized {
     /// Re-establish the stream.
-    async fn reconnect(&self) -> TokioIOResult<Self>;
+    async fn reconnect(&self) -> Result<Self, Error>;
 }
 
 #[async_trait::async_trait]
 impl Reconnect for TokioStream {
-    async fn reconnect(&self) -> TokioIOResult<Self> {
-        TokioStream::connect(self.peer_addr().expect("socket address")).await
+    async fn reconnect(&self) -> Result<Self, Error> {
+        Ok(TokioStream::connect(self.peer_addr().expect("socket address")).await?)
     }
 }
 
