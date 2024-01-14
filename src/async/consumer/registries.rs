@@ -1,6 +1,6 @@
-use std::{future::Future, sync::Mutex};
 use crate::{consumer::WorkerState, Job};
 use fnv::FnvHashMap;
+use std::{future::Future, sync::Mutex};
 
 /// A convenience wrapper type for a [`Job`] handler.
 pub struct AsyncJobRunner<E>(Box<dyn Fn(Job) -> Box<dyn Future<Output = Result<(), E>>>>);

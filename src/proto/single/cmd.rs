@@ -132,7 +132,7 @@ pub struct Fetch<'a, S>
 where
     S: AsRef<str>,
 {
-    queues: &'a [S],
+    pub(crate) queues: &'a [S],
 }
 
 impl<'a, S> FaktoryCommand for Fetch<'a, S>

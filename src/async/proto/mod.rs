@@ -1,5 +1,5 @@
-use crate::proto::{ClientOptions, Hello, EXPECTED_PROTOCOL_VERSION};
-use crate::{error, Error};
+use crate::proto::{ClientOptions, Fetch, Hello, EXPECTED_PROTOCOL_VERSION};
+use crate::{error, Error, Job};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tokio::net::TcpStream as TokioStream;
 
@@ -111,6 +111,13 @@ where
         single::write_command(&mut self.stream, c).await?;
         Ok(ReadToken(self))
     }
+
+    pub(crate) async fn fetch<Q>(&mut self, queues: &[Q]) -> Result<Option<Job>, Error>
+    where
+        Q: AsRef<str> + Sync,
+    {
+        self.issue(&Fetch::from(queues)).await?.read_json().await
+    }
 }
 
 pub struct ReadToken<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send>(&'a mut Client<S>);
@@ -164,6 +171,38 @@ mod test {
             single::write_command_and_await_ok(&mut c.stream, &Push::from(j))
                 .await
                 .unwrap();
+        };
+    }
+
+    #[tokio::test]
+    async fn test_client_can_fetch_a_job_from_server() {
+        if let Some(mut c) = get_connected_client().await {
+            c.init().await.unwrap();
+            let jid = String::from("x-job-id-0123456789");
+            let j = JobBuilder::new("order")
+                .jid(&jid)
+                .args(vec!["ISBN-13:9781718501850"])
+                .queue("test_client_can_fetch_a_job_from_server")
+                .build();
+            single::write_command_and_await_ok(&mut c.stream, &Push::from(j))
+                .await
+                .unwrap();
+
+            let j = c
+                .fetch(&["test_client_can_fetch_a_job_from_server"])
+                .await
+                .unwrap()
+                .expect("there is one single job in this test's queue");
+
+            assert_eq!(j.kind(), "order");
+            assert_eq!(j.id(), jid);
+            assert_eq!(j.args()[0], "ISBN-13:9781718501850");
+
+            assert!(c
+                .fetch(&["test_client_can_fetch_a_job_from_server"])
+                .await
+                .unwrap()
+                .is_none()); // drained
         };
     }
 }

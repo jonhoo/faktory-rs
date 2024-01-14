@@ -12,8 +12,8 @@ mod single;
 
 // commands that users can issue
 pub use self::single::{
-    bad, Ack, Fail, Heartbeat, Hello, Info, Job, JobBuilder, Push, QueueAction, QueueControl,
-    RawResponse,
+    bad, Ack, Fail, Fetch, Heartbeat, Hello, Info, Job, JobBuilder, Push, QueueAction,
+    QueueControl, RawResponse,
 };
 
 // responses that users can see
