@@ -1,6 +1,9 @@
 use tokio::io::AsyncWriteExt;
 
-use crate::{proto::{Hello, Push}, Error};
+use crate::{
+    proto::{Hello, Push},
+    Error,
+};
 
 #[async_trait::async_trait]
 pub trait FaktoryCommand {
