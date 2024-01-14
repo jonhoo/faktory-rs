@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::pin::Pin;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufStream};
 use tokio::net::TcpStream as TokioStream;
@@ -30,7 +31,7 @@ impl<E> Default for AsyncConsumerBuilder<E> {
     }
 }
 
-impl<E> AsyncConsumerBuilder<E> {
+impl<E: 'static> AsyncConsumerBuilder<E> {
     /// Set the hostname to use for this worker.
     ///
     /// Defaults to the machine's hostname as reported by the operating system.
@@ -70,10 +71,10 @@ impl<E> AsyncConsumerBuilder<E> {
     pub fn register<K, H>(&mut self, kind: K, handler: H) -> &mut Self
     where
         K: Into<String>,
-        H: Fn(Job) -> Box<dyn Future<Output = Result<(), E>>> + 'static,
+        H: Fn(Job) -> Pin<Box<dyn Future<Output = Result<(), E>>>> + 'static,
     {
         let runner = AsyncJobRunner::new(handler);
-        self.callbacks.register(kind.into(), runner);
+        self.callbacks.insert(kind.into(), runner);
         self
     }
 
@@ -86,7 +87,7 @@ impl<E> AsyncConsumerBuilder<E> {
         kind: impl Into<String>,
         runner: AsyncJobRunner<E>,
     ) -> &mut Self {
-        self.callbacks.register(kind.into(), runner);
+        self.callbacks.insert(kind.into(), runner);
         self
     }
 

@@ -119,8 +119,8 @@ where
 
 #[derive(Default)]
 pub struct WorkerState {
-    last_job_result: Option<Result<String, Fail>>,
-    running_job: Option<String>,
+    pub(crate) last_job_result: Option<Result<String, Fail>>,
+    pub(crate) running_job: Option<String>,
 }
 
 /// Convenience wrapper for building a Faktory worker.
@@ -236,7 +236,7 @@ impl<E> ConsumerBuilder<E> {
     }
 }
 
-enum Failed<E: StdError> {
+pub(crate) enum Failed<E: StdError> {
     Application(E),
     BadJobType(String),
 }
