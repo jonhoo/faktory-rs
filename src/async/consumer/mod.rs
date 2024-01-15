@@ -1,8 +1,7 @@
 use super::{Client, Reconnect};
 use crate::{consumer::Failed, Error, Job};
-use std::pin::Pin;
+use std::error::Error as StdError;
 use std::sync::Arc;
-use std::{error::Error as StdError, future::Future};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
 mod builder;
@@ -10,9 +9,6 @@ mod registries;
 
 pub use builder::AsyncConsumerBuilder;
 use registries::{CallbacksRegistry, StatesRegistry};
-
-pub(crate) type BoxAsyncJobRunner<E> =
-    Box<dyn Fn(Job) -> Pin<Box<dyn Future<Output = Result<(), E>>>>>;
 
 /// Asynchronous version of the [`Consumer`](struct.Consumer.html).
 pub struct AsyncConsumer<S: AsyncBufReadExt + AsyncWriteExt + Send, E> {
@@ -39,13 +35,18 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> AsyncConsumer<S, E> {
     }
 }
 
-impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static> AsyncConsumer<S, E> {
+impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + Send>
+    AsyncConsumer<S, E>
+{
     async fn run_job(&mut self, job: Job) -> Result<(), Failed<E>> {
         let handler = self
             .callbacks
             .get(job.kind())
             .ok_or(Failed::BadJobType(job.kind().to_string()))?;
-        handler(job).await.map_err(Failed::Application)
+        tokio::spawn(handler(job))
+            .await
+            .expect("joined ok")
+            .map_err(Failed::Application)
     }
 
     /// Asynchronously fetch and run a single job on the current thread, and then return.

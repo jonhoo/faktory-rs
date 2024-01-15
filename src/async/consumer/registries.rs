@@ -1,10 +1,35 @@
-use super::BoxAsyncJobRunner;
-use crate::consumer::WorkerState;
+use crate::{consumer::WorkerState, Job};
 use fnv::FnvHashMap;
 use std::{
+    future::Future,
     ops::{Deref, DerefMut},
+    pin::Pin,
     sync::Mutex,
 };
+
+type AsyncJobRunner<E> = dyn Fn(Job) -> Pin<Box<dyn Future<Output = Result<(), E>> + Send>>;
+type BoxedAsyncJobRunner<E> = Box<AsyncJobRunner<E>>;
+
+pub(crate) struct CallbacksRegistry<E>(FnvHashMap<String, BoxedAsyncJobRunner<E>>);
+
+impl<E> Deref for CallbacksRegistry<E> {
+    type Target = FnvHashMap<String, BoxedAsyncJobRunner<E>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<E> DerefMut for CallbacksRegistry<E> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<E> Default for CallbacksRegistry<E> {
+    fn default() -> CallbacksRegistry<E> {
+        Self(FnvHashMap::default())
+    }
+}
 
 pub(crate) struct StatesRegistry(Vec<Mutex<WorkerState>>);
 
@@ -28,26 +53,5 @@ impl StatesRegistry {
         let mut state = self[worker].lock().expect("lock acquired");
         state.last_job_result = None;
         state.running_job = None;
-    }
-}
-
-pub(crate) struct CallbacksRegistry<E>(FnvHashMap<String, BoxAsyncJobRunner<E>>);
-
-impl<E> Deref for CallbacksRegistry<E> {
-    type Target = FnvHashMap<String, BoxAsyncJobRunner<E>>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<E> DerefMut for CallbacksRegistry<E> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl<E> Default for CallbacksRegistry<E> {
-    fn default() -> CallbacksRegistry<E> {
-        Self(FnvHashMap::default())
     }
 }

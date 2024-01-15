@@ -71,7 +71,7 @@ impl<E: 'static> AsyncConsumerBuilder<E> {
     pub fn register<K, H>(&mut self, kind: K, handler: H) -> &mut Self
     where
         K: Into<String>,
-        H: Fn(Job) -> Pin<Box<dyn Future<Output = Result<(), E>>>> + 'static,
+        H: Fn(Job) -> Pin<Box<dyn Future<Output = Result<(), E>> + Send>> + 'static,
     {
         self.callbacks.insert(kind.into(), Box::new(handler));
         self
