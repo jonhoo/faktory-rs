@@ -8,7 +8,7 @@ use crate::{
     Error,
 };
 
-use super::{Client, Reconnect};
+use super::proto::{AsyncReconnect, Client};
 
 /// `Producer` is used to enqueue new jobs that will in turn be processed by Faktory workers.
 pub struct AsyncProducer<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> {
@@ -31,7 +31,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> AsyncProducer<S> {
     }
 }
 
-impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin + Reconnect> AsyncProducer<S> {
+impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin + AsyncReconnect> AsyncProducer<S> {
     async fn reconnect(&mut self) -> Result<(), Error> {
         self.c.reconnect().await
     }

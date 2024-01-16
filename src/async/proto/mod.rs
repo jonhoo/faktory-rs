@@ -1,4 +1,6 @@
-use crate::proto::{ClientOptions, Fetch, Hello, EXPECTED_PROTOCOL_VERSION};
+use crate::proto::{
+    ClientOptions, Fetch, Heartbeat, HeartbeatStatus, Hello, EXPECTED_PROTOCOL_VERSION,
+};
 use crate::{error, Error, Job};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tokio::net::TcpStream as TokioStream;
@@ -12,13 +14,13 @@ pub struct Client<S: AsyncBufReadExt + AsyncWriteExt + Send> {
 
 /// A stream that can be re-established after failing.
 #[async_trait::async_trait]
-pub trait Reconnect: Sized {
+pub trait AsyncReconnect: Sized {
     /// Re-establish the stream.
     async fn reconnect(&self) -> Result<Self, Error>;
 }
 
 #[async_trait::async_trait]
-impl Reconnect for TokioStream {
+impl AsyncReconnect for TokioStream {
     async fn reconnect(&self) -> Result<Self, Error> {
         Ok(TokioStream::connect(self.peer_addr().expect("socket address")).await?)
     }
@@ -26,7 +28,7 @@ impl Reconnect for TokioStream {
 
 impl<S> Client<S>
 where
-    S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send + Reconnect,
+    S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send + AsyncReconnect,
 {
     pub(crate) async fn connect_again(&mut self) -> Result<Self, Error> {
         let s = self.stream.reconnect().await?;
@@ -104,7 +106,7 @@ where
         Client::new(stream, opts).await
     }
 
-    pub(crate) async fn issue<FC: single::FaktoryCommand>(
+    pub(crate) async fn issue<FC: single::AsyncFaktoryCommand>(
         &mut self,
         c: &FC,
     ) -> Result<ReadToken<'_, S>, Error> {
@@ -117,6 +119,31 @@ where
         Q: AsRef<str> + Sync,
     {
         self.issue(&Fetch::from(queues)).await?.read_json().await
+    }
+
+    pub(crate) async fn heartbeat(&mut self) -> Result<HeartbeatStatus, Error> {
+        single::write_command(
+            &mut self.stream,
+            &Heartbeat::new(&**self.opts.wid.as_ref().unwrap()),
+        )
+        .await?;
+
+        match single::read_json::<_, serde_json::Value>(&mut self.stream).await? {
+            None => Ok(HeartbeatStatus::Ok),
+            Some(s) => match s
+                .as_object()
+                .and_then(|m| m.get("state"))
+                .and_then(|s| s.as_str())
+            {
+                Some("terminate") => Ok(HeartbeatStatus::Terminate),
+                Some("quiet") => Ok(HeartbeatStatus::Quiet),
+                _ => Err(error::Protocol::BadType {
+                    expected: "heartbeat response",
+                    received: format!("{}", s),
+                }
+                .into()),
+            },
+        }
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::{error::Error, Job};
-
+use std::error::Error as StdError;
 use std::io::prelude::*;
 
 pub trait FaktoryCommand {
@@ -111,8 +111,28 @@ impl Fail {
         }
     }
 
+    // "unknown" is the errtype used by the go library too
+    pub fn generic<S1: Into<String>, S2: Into<String>>(job_id: S1, message: S2) -> Self {
+        Fail::new(job_id, "unknown", message)
+    }
+
     pub fn set_backtrace(&mut self, lines: Vec<String>) {
         self.backtrace = lines;
+    }
+
+    pub fn generic_with_backtrace<E>(jid: String, e: E) -> Self
+    where
+        E: StdError,
+    {
+        let mut f = Fail::generic(jid, format!("{}", e));
+        let mut root = e.source();
+        let mut lines = Vec::new();
+        while let Some(r) = root.take() {
+            lines.push(format!("{}", r));
+            root = r.source();
+        }
+        f.set_backtrace(lines);
+        f
     }
 }
 

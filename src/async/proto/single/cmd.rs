@@ -1,27 +1,17 @@
 use tokio::io::AsyncWriteExt;
 
 use crate::{
-    proto::{Fetch, Hello, Push},
+    proto::{Ack, Fail, Fetch, Heartbeat, Hello, Push},
     Error,
 };
 
 #[async_trait::async_trait]
-pub trait FaktoryCommand {
+pub trait AsyncFaktoryCommand {
     async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error>;
 }
 
 #[async_trait::async_trait]
-impl FaktoryCommand for Hello {
-    async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
-        w.write_all(b"HELLO ").await?;
-        let r = serde_json::to_vec(self).map_err(Error::Serialization)?;
-        w.write(&r).await?;
-        Ok(w.write_all(b"\r\n").await?)
-    }
-}
-
-#[async_trait::async_trait]
-impl FaktoryCommand for Push {
+impl AsyncFaktoryCommand for Push {
     async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
         w.write_all(b"PUSH ").await?;
         let r = serde_json::to_vec(&**self).map_err(Error::Serialization)?;
@@ -31,7 +21,7 @@ impl FaktoryCommand for Push {
 }
 
 #[async_trait::async_trait]
-impl<'a, Q> FaktoryCommand for Fetch<'a, Q>
+impl<'a, Q> AsyncFaktoryCommand for Fetch<'a, Q>
 where
     Q: AsRef<str> + Sync,
 {
@@ -44,3 +34,23 @@ where
         Ok(w.write_all(b"\r\n").await?)
     }
 }
+
+macro_rules! self_to_cmd {
+    ($struct:ident) => {
+        #[async_trait::async_trait]
+        impl AsyncFaktoryCommand for $struct {
+            async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+                let c = format!("{} ", stringify!($struct).to_uppercase());
+                w.write_all(c.as_bytes()).await?;
+                let r = serde_json::to_vec(self).map_err(Error::Serialization)?;
+                w.write(&r).await?;
+                Ok(w.write_all(b"\r\n").await?)
+            }
+        }
+    };
+}
+
+self_to_cmd!(Hello);
+self_to_cmd!(Ack);
+self_to_cmd!(Fail);
+self_to_cmd!(Heartbeat);

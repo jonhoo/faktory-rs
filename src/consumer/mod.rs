@@ -8,9 +8,9 @@ use std::sync::{atomic, Arc, Mutex};
 
 use crate::proto::{Ack, Fail, Job};
 
-const STATUS_RUNNING: usize = 0;
-const STATUS_QUIET: usize = 1;
-const STATUS_TERMINATING: usize = 2;
+pub(crate) const STATUS_RUNNING: usize = 0;
+pub(crate) const STATUS_QUIET: usize = 1;
+pub(crate) const STATUS_TERMINATING: usize = 2;
 
 type JobRunner<E> = dyn Fn(Job) -> Result<(), E> + Send + Sync;
 type BoxedJobRunner<E> = Box<JobRunner<E>>;
