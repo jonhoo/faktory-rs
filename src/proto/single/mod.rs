@@ -8,12 +8,13 @@ mod resp;
 mod utils;
 
 #[cfg(feature = "ent")]
-mod ent;
+pub mod ent;
 
 use crate::error::Error;
 
 pub use self::cmd::*;
 pub use self::resp::*;
+pub use self::utils::{gen_random_jid, gen_random_wid};
 
 const JOB_DEFAULT_QUEUE: &str = "default";
 const JOB_DEFAULT_RESERVED_FOR_SECS: usize = 600;
@@ -56,7 +57,7 @@ const JOB_DEFAULT_BACKTRACE: usize = 0;
 /// ```
 ///
 /// See also the [Faktory wiki](https://github.com/contribsys/faktory/wiki/The-Job-Payload).
-#[derive(Serialize, Deserialize, Debug, Builder)]
+#[derive(Serialize, Deserialize, Debug, Clone, Builder)]
 #[builder(
     custom_constructor,
     setter(into),
@@ -180,6 +181,24 @@ impl JobBuilder {
     pub fn build(&self) -> Job {
         self.try_build()
             .expect("All required fields have been set.")
+    }
+
+    /// Builds a new _trackable_ `Job``.
+    ///
+    /// Progress update can be sent and received only for the jobs that have
+    /// been explicitly marked as trackable via `"track":1` in the job's
+    /// custom hash.
+    /// ```
+    /// use faktory::JobBuilder;
+    ///
+    /// let _job = JobBuilder::new("order")
+    ///     .args(vec!["ISBN-13:9781718501850"])
+    ///     .build_trackable();
+    /// ```
+    #[cfg(feature = "ent")]
+    pub fn build_trackable(&mut self) -> Job {
+        self.add_to_custom_data("track", 1);
+        self.build()
     }
 }
 

@@ -12,11 +12,22 @@ mod single;
 
 // commands that users can issue
 pub use self::single::{
-    Ack, Fail, Heartbeat, Info, Job, JobBuilder, Push, QueueAction, QueueControl,
+    gen_random_wid, Ack, Fail, Heartbeat, Info, Job, JobBuilder, Push, QueueAction, QueueControl,
 };
 
 // responses that users can see
 pub use self::single::Hi;
+
+pub use self::single::gen_random_jid;
+
+#[cfg(feature = "ent")]
+mod batch;
+#[cfg(feature = "ent")]
+pub use self::single::ent::{Progress, ProgressUpdate, ProgressUpdateBuilder, Track};
+#[cfg(feature = "ent")]
+pub use batch::{
+    Batch, BatchBuilder, BatchHandle, BatchStatus, CommitBatch, GetBatchStatus, OpenBatch,
+};
 
 pub(crate) fn get_env_url() -> String {
     use std::env;
@@ -42,6 +53,21 @@ pub(crate) fn url_parse(url: &str) -> Result<Url, Error> {
     }
 
     Ok(url)
+}
+
+pub(crate) fn parse_provided_or_from_env(url: Option<&str>) -> Result<Url, Error> {
+    url_parse(url.unwrap_or(&get_env_url()))
+}
+
+fn check_protocols_match(ver: usize) -> Result<(), Error> {
+    if ver != EXPECTED_PROTOCOL_VERSION {
+        return Err(error::Connect::VersionMismatch {
+            ours: EXPECTED_PROTOCOL_VERSION,
+            theirs: ver,
+        }
+        .into());
+    }
+    Ok(())
 }
 
 /// A stream that can be re-established after failing.
@@ -133,22 +159,40 @@ impl<S: Read + Write> Client<S> {
         };
         Self::new(stream, opts)
     }
+
+    #[cfg(feature = "ent")]
+    pub(crate) fn new_tracker(stream: S, pwd: Option<String>) -> Result<Client<S>, Error> {
+        let opts = ClientOptions {
+            password: pwd,
+            ..Default::default()
+        };
+        let mut c = Client {
+            stream: BufStream::new(stream),
+            opts,
+        };
+        c.init_tracker()?;
+        Ok(c)
+    }
 }
 
 impl<S: Read + Write> Client<S> {
     fn init(&mut self) -> Result<(), Error> {
         let hi = single::read_hi(&mut self.stream)?;
 
-        if hi.version != EXPECTED_PROTOCOL_VERSION {
-            return Err(error::Connect::VersionMismatch {
-                ours: EXPECTED_PROTOCOL_VERSION,
-                theirs: hi.version,
+        check_protocols_match(hi.version)?;
+
+        let mut hello = single::Hello::default();
+
+        // prepare password hash, if one expected by 'Faktory'
+        if hi.salt.is_some() {
+            if let Some(ref pwd) = self.opts.password {
+                hello.set_password(&hi, pwd);
+            } else {
+                return Err(error::Connect::AuthenticationNeeded.into());
             }
-            .into());
         }
 
         // fill in any missing options, and remember them for re-connect
-        let mut hello = single::Hello::default();
         if !self.opts.is_producer {
             let hostname = self
                 .opts
@@ -162,14 +206,7 @@ impl<S: Read + Write> Client<S> {
                 .pid
                 .unwrap_or_else(|| unsafe { getpid() } as usize);
             self.opts.pid = Some(pid);
-            let wid = self.opts.wid.clone().unwrap_or_else(|| {
-                use rand::{thread_rng, Rng};
-                thread_rng()
-                    .sample_iter(&rand::distributions::Alphanumeric)
-                    .map(char::from)
-                    .take(32)
-                    .collect()
-            });
+            let wid = self.opts.wid.clone().unwrap_or_else(gen_random_wid);
             self.opts.wid = Some(wid);
 
             hello.hostname = Some(self.opts.hostname.clone().unwrap());
@@ -178,6 +215,18 @@ impl<S: Read + Write> Client<S> {
             hello.labels = self.opts.labels.clone();
         }
 
+        single::write_command_and_await_ok(&mut self.stream, &hello)
+    }
+
+    #[cfg(feature = "ent")]
+    fn init_tracker(&mut self) -> Result<(), Error> {
+        let hi = single::read_hi(&mut self.stream)?;
+
+        check_protocols_match(hi.version)?;
+
+        let mut hello = single::Hello::default();
+
+        // prepare password hash, if one expected by 'Faktory'
         if hi.salt.is_some() {
             if let Some(ref pwd) = self.opts.password {
                 hello.set_password(&hi, pwd);
@@ -255,6 +304,11 @@ impl<'a, S: Read + Write> ReadToken<'a, S> {
         T: serde::de::DeserializeOwned,
     {
         single::read_json(&mut self.0.stream)
+    }
+
+    #[cfg(feature = "ent")]
+    pub(crate) fn read_bid(self) -> Result<String, Error> {
+        single::read_bid(&mut self.0.stream)
     }
 }
 

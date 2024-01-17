@@ -1,5 +1,14 @@
 use crate::error::Error;
-use crate::proto::{self, Client, Info, Job, Push, QueueAction, QueueControl};
+use crate::proto::{
+    self, parse_provided_or_from_env, Client, Info, Job,  Push,
+    QueueAction, QueueControl,
+};
+
+#[cfg(feature = "ent")]
+use crate::proto::{BatchHandle, CommitBatch, OpenBatch};
+#[cfg(feature = "ent")]
+use crate::Batch;
+
 use std::io::prelude::*;
 use std::net::TcpStream;
 
@@ -82,10 +91,7 @@ impl Producer<TcpStream> {
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
     pub fn connect(url: Option<&str>) -> Result<Self, Error> {
-        let url = match url {
-            Some(url) => proto::url_parse(url),
-            None => proto::url_parse(&proto::get_env_url()),
-        }?;
+        let url = parse_provided_or_from_env(url)?;
         let stream = TcpStream::connect(proto::host_from_url(&url))?;
         Self::connect_with(stream, url.password().map(|p| p.to_string()))
     }
@@ -128,6 +134,25 @@ impl<S: Read + Write> Producer<S> {
         self.c
             .issue(&QueueControl::new(QueueAction::Resume, queues))?
             .await_ok()
+    }
+
+    /// Initiate a new batch of jobs.
+    #[cfg(feature = "ent")]
+    pub fn start_batch(&mut self, batch: Batch) -> Result<BatchHandle<'_, S>, Error> {
+        let bid = self.c.issue(&batch)?.read_bid()?;
+        Ok(BatchHandle::new(bid, self))
+    }
+
+    /// Open an already existing batch of jobs.
+    #[cfg(feature = "ent")]
+    pub fn open_batch(&mut self, bid: String) -> Result<BatchHandle<'_, S>, Error> {
+        let bid = self.c.issue(&OpenBatch::from(bid))?.read_bid()?;
+        Ok(BatchHandle::new(bid, self))
+    }
+
+    #[cfg(feature = "ent")]
+    pub(crate) fn commit_batch(&mut self, bid: String) -> Result<(), Error> {
+        self.c.issue(&CommitBatch::from(bid))?.await_ok()
     }
 }
 
