@@ -22,7 +22,7 @@ impl AsyncFaktoryCommand for Push {
     async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
         w.write_all(b"PUSH ").await?;
         let r = serde_json::to_vec(&**self).map_err(Error::Serialization)?;
-        w.write(&r).await?;
+        w.write_all(&r).await?;
         Ok(w.write_all(b"\r\n").await?)
     }
 }
@@ -69,7 +69,7 @@ macro_rules! self_to_cmd {
                 let c = format!("{} ", stringify!($struct).to_uppercase());
                 w.write_all(c.as_bytes()).await?;
                 let r = serde_json::to_vec(self).map_err(Error::Serialization)?;
-                w.write(&r).await?;
+                w.write_all(&r).await?;
                 Ok(w.write_all(b"\r\n").await?)
             }
         }

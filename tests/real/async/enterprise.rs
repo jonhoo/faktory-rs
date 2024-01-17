@@ -24,7 +24,9 @@ async fn print_job(j: Job) -> io::Result<()> {
 #[tokio::test]
 async fn async_ent_expiring_job() {
     skip_if_not_enterprise!();
+
     let url = learn_faktory_url();
+    let local = "async_ent_expiring_job";
 
     // prepare a producer ("client" in Faktory terms) and consumer ("worker"):
     let mut producer = AsyncProducer::connect(Some(&url)).await.unwrap();
@@ -38,28 +40,30 @@ async fn async_ent_expiring_job() {
     let ttl = chrono::Duration::seconds(job_ttl_secs as i64);
     let job1 = JobBuilder::new("AnExpiringJob")
         .args(vec!["ISBN-13:9781718501850"])
+        .queue(local)
         .expires_at(chrono::Utc::now() + ttl)
         .build();
 
     // enqueue and fetch immediately job1:
     producer.enqueue(job1).await.unwrap();
-    let had_job = consumer.run_one(0, &["default"]).await.unwrap();
+    let had_job = consumer.run_one(0, &[local]).await.unwrap();
     assert!(had_job);
 
     // check that the queue is drained:
-    let had_job = consumer.run_one(0, &["default"]).await.unwrap();
+    let had_job = consumer.run_one(0, &[local]).await.unwrap();
     assert!(!had_job);
 
     // prepare another one:
     let job2 = JobBuilder::new("AnExpiringJob")
         .args(vec!["ISBN-13:9781718501850"])
+        .queue(local)
         .expires_at(chrono::Utc::now() + ttl)
         .build();
 
     // enqueue and then fetch job2, but after ttl:
     producer.enqueue(job2).await.unwrap();
     tokio::time::sleep(time::Duration::from_secs(job_ttl_secs * 2)).await;
-    let had_job = consumer.run_one(0, &["default"]).await.unwrap();
+    let had_job = consumer.run_one(0, &[local]).await.unwrap();
 
     // For the non-enterprise edition of Faktory, this assertion will
     // fail, which should be taken into account when running the test suite on CI.

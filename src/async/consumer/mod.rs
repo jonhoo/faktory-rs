@@ -108,7 +108,8 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
     async fn force_fail_all_workers(&mut self) -> usize {
         let mut running = 0;
         for wstate in self.worker_states.iter() {
-            if let Some(jid) = wstate.lock().unwrap().running_job.take() {
+            let may_be_jid = wstate.lock().unwrap().running_job.take();
+            if let Some(jid) = may_be_jid {
                 running += 1;
                 let f = Fail::new(&*jid, "unknown", "terminated");
                 let _ = match self.c.issue(&f).await {
@@ -209,9 +210,9 @@ impl<
             .collect();
 
         let mut workers = Vec::with_capacity(workers_count);
-        for i in 0..workers_count {
+        for (worker, status) in statuses.iter().enumerate().take(workers_count) {
             let handle = self
-                .spawn_worker(Arc::clone(&statuses[i]), i, queues)
+                .spawn_worker(Arc::clone(status), worker, queues)
                 .await?;
             workers.push(handle)
         }
