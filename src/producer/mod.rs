@@ -1,7 +1,6 @@
 use crate::error::Error;
 use crate::proto::{
-    self, parse_provided_or_from_env, Client, Info, Job,  Push,
-    QueueAction, QueueControl,
+    self, parse_provided_or_from_env, Client, Info, Job, Push, QueueAction, QueueControl,
 };
 
 #[cfg(feature = "ent")]
