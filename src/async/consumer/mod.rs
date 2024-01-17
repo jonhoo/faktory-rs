@@ -101,6 +101,26 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
         Ok(())
     }
 
+    // FAIL currently running jobs even though they're still running.
+    // Returns the number of workers that may still be processing jobs.
+    // We are ignoring any FAIL command issue errors, since this is already
+    // an "emergency" case.
+    async fn force_fail_all_workers(&mut self) -> usize {
+        let mut running = 0;
+        for wstate in self.worker_states.iter() {
+            if let Some(jid) = wstate.lock().unwrap().running_job.take() {
+                running += 1;
+                let f = Fail::new(&*jid, "unknown", "terminated");
+                let _ = match self.c.issue(&f).await {
+                    Ok(r) => r.read_ok().await,
+                    Err(_) => continue,
+                }
+                .is_ok();
+            }
+        }
+        running
+    }
+
     /// Asynchronously fetch and run a single job, and then return.
     pub async fn run_one<Q>(&mut self, worker: usize, queues: &[Q]) -> Result<bool, Error>
     where
@@ -174,29 +194,56 @@ impl<
     }
 
     /// Async version of [`run`](struct.Consumer.html#structmethod.run).
-    pub async fn run<Q>(&mut self, queues: &[Q]) -> Result<(), Error>
+    pub async fn run<Q>(&mut self, queues: &[Q]) -> Result<usize, Error>
     where
         Q: AsRef<str>,
     {
         assert!(!self.terminated, "do not re-run a terminated worker");
         self.report_on_all_workers().await?;
 
+        let workers_count = self.worker_states.len();
+
         // keep track of the current status of each worker
-        let statuses: Vec<_> = (0..self.worker_states.len())
+        let statuses: Vec<_> = (0..workers_count)
             .map(|_| Arc::new(atomic::AtomicUsize::new(STATUS_RUNNING)))
             .collect();
 
-        let mut spawned_workers = Vec::with_capacity(self.worker_states.len());
-        for i in 0..self.worker_states.len() {
+        let mut workers = Vec::with_capacity(workers_count);
+        for i in 0..workers_count {
             let handle = self
                 .spawn_worker(Arc::clone(&statuses[i]), i, queues)
                 .await?;
-            spawned_workers.push(handle)
+            workers.push(handle)
         }
 
-        let _exit = self.listen_for_heartbeats(&statuses).await;
+        let exit = self.listen_for_heartbeats(&statuses).await;
 
-        Ok(())
+        // there are a couple of cases here:
+        //
+        //  - we got TERMINATE, so we should just return, even if a worker is still running
+        //  - we got TERMINATE and all workers has exited
+        //  - we got an error from heartbeat()
+        //
+        self.terminated = exit.is_ok();
+
+        if let Ok(true) = exit {
+            let running = self.force_fail_all_workers().await;
+            if running != 0 {
+                return Ok(running);
+            }
+        }
+
+        // we want to expose worker errors, or otherwise the heartbeat error
+        let mut results = Vec::with_capacity(workers_count);
+        for w in workers {
+            results.push(w.await.expect("joined ok"));
+        }
+        let result = results.into_iter().collect::<Result<Vec<_>, _>>();
+
+        match exit {
+            Ok(_) => result.map(|_| 0),
+            Err(e) => result.and(Err(e)),
+        }
     }
 
     /// Async version of [`run_to_completion`](struct.Consumer.html#structmethod.run_to_completion).
