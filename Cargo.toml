@@ -26,14 +26,24 @@ sha2 = "0.10.0"
 hostname = "0.3"
 libc = "0.2"
 rand = "0.8"
-chrono = { version = "0.4", features = ["serde", "clock"], default-features = false }
+chrono = { version = "0.4", features = [
+    "serde",
+    "clock",
+], default-features = false }
 url = "2"
 fnv = "1.0.5"
 native-tls = { version = "0.2", optional = true }
 clap = { version = "4.4.10", optional = true }
 thiserror = "1.0.30"
 derive_builder = "0.12.0"
-tokio = { version = "1.35.1", features = ["io-util", "net", "time"] }
+tokio = { version = "1.35.1", features = [
+    "io-util",
+    "net",
+    "rt",
+    "time",
+    "macros",
+    "rt-multi-thread",
+] }
 async-trait = "0.1.77"
 
 [dev-dependencies]
@@ -47,4 +57,9 @@ openssl = { version = "0.10.60", optional = true }
 [[bin]]
 name = "loadtest"
 path = "src/bin/loadtest.rs"
+required-features = ["binaries"]
+
+[[bin]]
+name = "async_loadtest"
+path = "src/bin/async_loadtest.rs"
 required-features = ["binaries"]
