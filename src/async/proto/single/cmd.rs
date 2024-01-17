@@ -1,13 +1,20 @@
 use tokio::io::AsyncWriteExt;
 
 use crate::{
-    proto::{Ack, Fail, Fetch, Heartbeat, Hello, Push},
+    proto::{Ack, Fail, Fetch, Heartbeat, Hello, Push, QueueAction, QueueControl, Info},
     Error,
 };
 
 #[async_trait::async_trait]
 pub trait AsyncFaktoryCommand {
     async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error>;
+}
+
+#[async_trait::async_trait]
+impl AsyncFaktoryCommand for Info {
+    async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+        Ok(w.write_all(b"INFO\r\n").await?)
+    }
 }
 
 #[async_trait::async_trait]
@@ -27,6 +34,25 @@ where
 {
     async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
         w.write_all(b"FETCH").await?;
+        for q in self.queues {
+            w.write_all(b" ").await?;
+            w.write_all(q.as_ref().as_bytes()).await?;
+        }
+        Ok(w.write_all(b"\r\n").await?)
+    }
+}
+
+#[async_trait::async_trait]
+impl<Q> AsyncFaktoryCommand for QueueControl<'_, Q>
+where
+    Q: AsRef<str> + Sync,
+{
+    async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+        let command = match self.action {
+            QueueAction::Pause => b"QUEUE PAUSE".as_ref(),
+            QueueAction::Resume => b"QUEUE RESUME".as_ref(),
+        };
+        w.write_all(command).await?;
         for q in self.queues {
             w.write_all(b" ").await?;
             w.write_all(q.as_ref().as_bytes()).await?;

@@ -1,14 +1,14 @@
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
-use crate::proto::Push;
+use crate::proto::{Info, Push, QueueAction, QueueControl};
 use crate::Job;
 use crate::{
     proto::{get_env_url, host_from_url, url_parse},
     Error,
 };
 
-use super::proto::{AsyncReconnect, Client};
+use super::proto::Client;
 
 /// `Producer` is used to enqueue new jobs that will in turn be processed by Faktory workers.
 pub struct AsyncProducer<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> {
@@ -29,11 +29,41 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> AsyncProducer<S> {
     pub async fn enqueue(&mut self, job: Job) -> Result<(), Error> {
         self.c.issue(&Push::from(job)).await?.read_ok().await
     }
-}
 
-impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin + AsyncReconnect> AsyncProducer<S> {
-    async fn reconnect(&mut self) -> Result<(), Error> {
-        self.c.reconnect().await
+    /// Retrieve information about the running server.
+    ///
+    /// The returned value is the result of running the `INFO` command on the server.
+    pub async fn info(&mut self) -> Result<serde_json::Value, Error> {
+        self.c
+            .issue(&Info)
+            .await?
+            .read_json()
+            .await
+            .map(|v| v.expect("info command cannot give empty response"))
+    }
+
+    /// Pause the given queues.
+    pub async fn queue_pause<Q>(&mut self, queues: &[Q]) -> Result<(), Error>
+    where
+        Q: AsRef<str> + Sync,
+    {
+        self.c
+            .issue(&QueueControl::new(QueueAction::Pause, queues))
+            .await?
+            .read_ok()
+            .await
+    }
+
+    /// Resume the given queues.
+    pub async fn queue_resume<Q: AsRef<str>>(&mut self, queues: &[Q]) -> Result<(), Error>
+    where
+        Q: AsRef<str> + Sync,
+    {
+        self.c
+            .issue(&QueueControl::new(QueueAction::Resume, queues))
+            .await?
+            .read_ok()
+            .await
     }
 }
 
