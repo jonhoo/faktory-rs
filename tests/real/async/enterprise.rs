@@ -9,7 +9,7 @@ use crate::utils::learn_faktory_url;
 async fn async_enqueue_expiring_job() {
     skip_if_not_enterprise!();
     let url = learn_faktory_url();
-    let mut p = AsyncProducer::connect(None).await.unwrap();
+    let mut p = AsyncProducer::connect(Some(&url)).await.unwrap();
     p.enqueue(
         JobBuilder::new("order")
             .expires_at(chrono::Utc::now() + chrono::Duration::seconds(3))
