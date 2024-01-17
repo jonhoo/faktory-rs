@@ -1,7 +1,7 @@
 use tokio::io::AsyncWriteExt;
 
 use crate::{
-    proto::{Ack, Fail, Fetch, Heartbeat, Hello, Push, QueueAction, QueueControl, Info},
+    proto::{Ack, Fail, Fetch, Heartbeat, Hello, Info, Push, QueueAction, QueueControl},
     Error,
 };
 

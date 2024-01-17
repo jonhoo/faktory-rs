@@ -1,7 +1,7 @@
 //! This modle contains a port of the test suite from
 //! the `tests/real/community.rs` module.
-//! 
-//! Diff:
+//!
+//! Main diff:
 //! - tests are marked this `async_` prefix;
 //! - AsyncConsumerBuilder used instead of ConsumerBuilder;
 //! - AsyncProducer used instead of Producer;
