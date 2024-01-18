@@ -180,7 +180,10 @@ impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> ReadToken<'a, S> {
 #[cfg(test)]
 mod test {
     use super::{single, AsyncClient};
-    use crate::proto::{ClientOptions, Hello, Push, EXPECTED_PROTOCOL_VERSION};
+    use crate::proto::{
+        get_env_url, host_from_url, url_parse, ClientOptions, Hello, Push,
+        EXPECTED_PROTOCOL_VERSION,
+    };
     use crate::JobBuilder;
     use tokio::io::BufStream;
     use tokio::net::TcpStream;
@@ -189,7 +192,9 @@ mod test {
         if std::env::var_os("FAKTORY_URL").is_none() {
             return None;
         }
-        let stream = BufStream::new(TcpStream::connect("127.0.0.1:7419").await.unwrap());
+        let url = url_parse(&get_env_url()).unwrap();
+        let host = host_from_url(&url);
+        let stream = BufStream::new(TcpStream::connect(host).await.unwrap());
         let opts = ClientOptions::default();
         Some(AsyncClient { stream, opts })
     }
