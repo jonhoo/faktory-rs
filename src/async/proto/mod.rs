@@ -1,5 +1,5 @@
 use crate::proto::{
-    ClientOptions, Fetch, Heartbeat, HeartbeatStatus, Hello, EXPECTED_PROTOCOL_VERSION,
+    ClientOptions, End, Fetch, Heartbeat, HeartbeatStatus, Hello, EXPECTED_PROTOCOL_VERSION,
 };
 use crate::{error, Error, Job};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
@@ -7,7 +7,7 @@ use tokio::net::TcpStream as TokioStream;
 
 mod single;
 
-pub struct Client<S: AsyncBufReadExt + AsyncWriteExt + Send> {
+pub struct AsyncClient<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> {
     stream: S,
     opts: ClientOptions,
 }
@@ -26,13 +26,13 @@ impl AsyncReconnect for TokioStream {
     }
 }
 
-impl<S> Client<S>
+impl<S> AsyncClient<S>
 where
     S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send + AsyncReconnect,
 {
     pub(crate) async fn connect_again(&mut self) -> Result<Self, Error> {
         let s = self.stream.reconnect().await?;
-        Client::new(s, self.opts.clone()).await
+        AsyncClient::new(s, self.opts.clone()).await
     }
 
     pub(crate) async fn reconnect(&mut self) -> Result<(), Error> {
@@ -41,7 +41,20 @@ where
     }
 }
 
-impl<S> Client<S>
+impl<S> Drop for AsyncClient<S>
+where
+    S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send,
+{
+    fn drop(&mut self) {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                single::write_command(&mut self.stream, &End).await.unwrap();
+            })
+        });
+    }
+}
+
+impl<S> AsyncClient<S>
 where
     S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send,
 {
@@ -94,16 +107,19 @@ where
         Ok(())
     }
 
-    pub(crate) async fn new(stream: S, opts: ClientOptions) -> Result<Client<S>, Error> {
-        let mut c = Client { stream, opts };
+    pub(crate) async fn new(stream: S, opts: ClientOptions) -> Result<AsyncClient<S>, Error> {
+        let mut c = AsyncClient { stream, opts };
         c.init().await?;
         Ok(c)
     }
 
-    pub(crate) async fn new_producer(stream: S, pwd: Option<String>) -> Result<Client<S>, Error> {
+    pub(crate) async fn new_producer(
+        stream: S,
+        pwd: Option<String>,
+    ) -> Result<AsyncClient<S>, Error> {
         let mut opts = ClientOptions::default_for_producer();
         opts.password = pwd;
-        Client::new(stream, opts).await
+        AsyncClient::new(stream, opts).await
     }
 
     pub(crate) async fn issue<FC: single::AsyncFaktoryCommand>(
@@ -147,7 +163,7 @@ where
     }
 }
 
-pub struct ReadToken<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send>(&'a mut Client<S>);
+pub struct ReadToken<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send>(&'a mut AsyncClient<S>);
 
 impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> ReadToken<'a, S> {
     pub(crate) async fn read_ok(self) -> Result<(), Error> {
@@ -163,22 +179,22 @@ impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> ReadToken<'a, S> {
 }
 #[cfg(test)]
 mod test {
-    use super::{single, Client};
+    use super::{single, AsyncClient};
     use crate::proto::{ClientOptions, Hello, Push, EXPECTED_PROTOCOL_VERSION};
     use crate::JobBuilder;
     use tokio::io::BufStream;
     use tokio::net::TcpStream;
 
-    async fn get_connected_client() -> Option<Client<BufStream<TcpStream>>> {
+    async fn get_connected_client() -> Option<AsyncClient<BufStream<TcpStream>>> {
         if std::env::var_os("FAKTORY_URL").is_none() {
             return None;
         }
         let stream = BufStream::new(TcpStream::connect("127.0.0.1:7419").await.unwrap());
         let opts = ClientOptions::default();
-        Some(Client { stream, opts })
+        Some(AsyncClient { stream, opts })
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_client_runs_handshake_with_server_after_connect() {
         if let Some(mut c) = get_connected_client().await {
             let hi = single::read_hi(&mut c.stream).await.unwrap();
@@ -190,7 +206,7 @@ mod test {
         };
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_client_receives_ok_from_server_after_job_push() {
         if let Some(mut c) = get_connected_client().await {
             c.init().await.unwrap();

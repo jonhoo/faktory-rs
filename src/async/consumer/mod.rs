@@ -17,11 +17,11 @@ mod registries;
 pub use builder::AsyncConsumerBuilder;
 use registries::{CallbacksRegistry, StatesRegistry};
 
-use super::proto::{AsyncReconnect, Client};
+use super::proto::{AsyncClient, AsyncReconnect};
 
 /// Asynchronous version of the [`Consumer`](struct.Consumer.html).
-pub struct AsyncConsumer<S: AsyncBufReadExt + AsyncWriteExt + Send, E> {
-    c: Client<S>,
+pub struct AsyncConsumer<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> {
+    c: AsyncClient<S>,
     worker_states: Arc<StatesRegistry>,
     callbacks: Arc<CallbacksRegistry<E>>,
     terminated: bool,
@@ -34,7 +34,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin + AsyncReconnect, E> Asyn
 }
 
 impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> AsyncConsumer<S, E> {
-    async fn new(c: Client<S>, workers_count: usize, callbacks: CallbacksRegistry<E>) -> Self {
+    async fn new(c: AsyncClient<S>, workers_count: usize, callbacks: CallbacksRegistry<E>) -> Self {
         AsyncConsumer {
             c,
             callbacks: Arc::new(callbacks),

@@ -9,7 +9,7 @@ use crate::{
     Error, Job,
 };
 
-use super::{AsyncConsumer, CallbacksRegistry, Client};
+use super::{AsyncClient, AsyncConsumer, CallbacksRegistry};
 
 /// Convenience wrapper for building a Faktory worker.
 ///
@@ -85,7 +85,7 @@ impl<E: 'static> AsyncConsumerBuilder<E> {
     ) -> Result<AsyncConsumer<S, E>, Error> {
         self.opts.password = pwd;
         Ok(AsyncConsumer::new(
-            Client::new(stream, self.opts).await?,
+            AsyncClient::new(stream, self.opts).await?,
             self.workers_count,
             self.callbacks,
         )
@@ -105,7 +105,7 @@ impl<E: 'static> AsyncConsumerBuilder<E> {
         }?;
         let stream = TokioStream::connect(host_from_url(&url)).await?;
         let buffered = BufStream::new(stream);
-        let client = Client::new(buffered, self.opts).await?;
+        let client = AsyncClient::new(buffered, self.opts).await?;
         Ok(AsyncConsumer::new(client, self.workers_count, self.callbacks).await)
     }
 }

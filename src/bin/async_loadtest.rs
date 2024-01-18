@@ -37,7 +37,9 @@ async fn main() {
         jobs, threads
     );
 
-    // ensure that we can actually connect to the server
+    // ensure that we can actually connect to the server;
+    // will create a client, run a handshake with Faktory,
+    // and drop the cliet immediately afterwards;
     if let Err(e) = AsyncProducer::connect(None).await {
         println!("{}", e);
         process::exit(1);

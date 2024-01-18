@@ -8,18 +8,18 @@ use crate::{
     Error,
 };
 
-use super::proto::Client;
+use super::proto::AsyncClient;
 
 /// `Producer` is used to enqueue new jobs that will in turn be processed by Faktory workers.
 pub struct AsyncProducer<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> {
-    c: Client<S>,
+    c: AsyncClient<S>,
 }
 
 impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> AsyncProducer<S> {
     /// Connect to a Faktory server with a non-standard stream.
     pub async fn connect_with(stream: S, pwd: Option<String>) -> Result<AsyncProducer<S>, Error> {
         Ok(AsyncProducer {
-            c: Client::new_producer(stream, pwd).await?,
+            c: AsyncClient::new_producer(stream, pwd).await?,
         })
     }
 

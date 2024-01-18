@@ -12,7 +12,7 @@ mod single;
 
 // commands that users can issue
 pub use self::single::{
-    bad, Ack, Fail, Fetch, Heartbeat, Hello, Info, Job, JobBuilder, Push, QueueAction,
+    bad, Ack, End, Fail, Fetch, Heartbeat, Hello, Info, Job, JobBuilder, Push, QueueAction,
     QueueControl, RawResponse,
 };
 

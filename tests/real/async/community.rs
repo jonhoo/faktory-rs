@@ -3,6 +3,7 @@
 //!
 //! Main diff:
 //! - tests are marked this `async_` prefix;
+//! - tokio multi-threaded rt used;
 //! - AsyncConsumerBuilder used instead of ConsumerBuilder;
 //! - AsyncProducer used instead of Producer;
 //! - await used where needed;
@@ -16,14 +17,14 @@ use serde_json::Value;
 
 use crate::skip_check;
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn async_hello_p() {
     skip_check!();
     let p = AsyncProducer::connect(None).await.unwrap();
     drop(p);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn async_enqueue_job() {
     skip_check!();
     let mut p = AsyncProducer::connect(None).await.unwrap();
@@ -36,7 +37,7 @@ async fn process_order(j: Job) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn async_roundtrip() {
     skip_check!();
     let jid = String::from("x-job-id-0123456782");
@@ -67,7 +68,7 @@ async fn async_roundtrip() {
     assert!(drained);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn async_multi() {
     skip_check!();
     let local = "multi_async";
@@ -108,7 +109,7 @@ async fn async_multi() {
     assert_eq!(job.args(), &[Value::from(2), Value::from("bar")]);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn async_fail() {
     skip_check!();
     let local = "fail_async";
@@ -147,7 +148,7 @@ async fn async_fail() {
     // Faktory Enterprise allows tracking the jobs status.
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn async_queue() {
     skip_check!();
     let local = "pause";
@@ -192,7 +193,7 @@ async fn assert_args_not_empty(j: Job) -> io::Result<()> {
     Ok(eprintln!("{:?}", j))
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn async_test_jobs_created_with_builder() {
     skip_check!();
 

@@ -3,6 +3,7 @@
 //!
 //! Main diff:
 //! - tests are marked this `async_` prefix;
+//! - tokio multi-threaded rt used;
 //! - AsyncConsumerBuilder used instead of ConsumerBuilder;
 //! - AsyncProducer used instead of Producer;
 //! - await used where needed;
@@ -21,7 +22,7 @@ async fn print_job(j: Job) -> io::Result<()> {
     Ok(eprintln!("{:?}", j))
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn async_ent_expiring_job() {
     skip_if_not_enterprise!();
 

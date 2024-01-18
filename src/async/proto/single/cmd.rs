@@ -1,7 +1,7 @@
 use tokio::io::AsyncWriteExt;
 
 use crate::{
-    proto::{Ack, Fail, Fetch, Heartbeat, Hello, Info, Push, QueueAction, QueueControl},
+    proto::{Ack, End, Fail, Fetch, Heartbeat, Hello, Info, Push, QueueAction, QueueControl},
     Error,
 };
 
@@ -62,11 +62,11 @@ where
 }
 
 macro_rules! self_to_cmd {
-    ($struct:ident) => {
+    ($struct:ident, $cmd:expr) => {
         #[async_trait::async_trait]
         impl AsyncFaktoryCommand for $struct {
             async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
-                let c = format!("{} ", stringify!($struct).to_uppercase());
+                let c = format!("{} ", $cmd);
                 w.write_all(c.as_bytes()).await?;
                 let r = serde_json::to_vec(self).map_err(Error::Serialization)?;
                 w.write_all(&r).await?;
@@ -76,7 +76,14 @@ macro_rules! self_to_cmd {
     };
 }
 
-self_to_cmd!(Hello);
-self_to_cmd!(Ack);
-self_to_cmd!(Fail);
-self_to_cmd!(Heartbeat);
+self_to_cmd!(Hello, "HELLO");
+self_to_cmd!(Ack, "ACK");
+self_to_cmd!(Fail, "FAIL");
+self_to_cmd!(Heartbeat, "BEAT");
+
+#[async_trait::async_trait]
+impl AsyncFaktoryCommand for End {
+    async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+        Ok(w.write_all(b"END\r\n").await?)
+    }
+}
