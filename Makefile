@@ -1,3 +1,5 @@
+.PHONY: check doc faktory faktory/* test test/*
+
 FAKTORY_HOST=127.0.0.1
 FAKTORY_PORT=7419
 FAKTORY_PORT_UI=7420
@@ -22,9 +24,6 @@ faktory:
 faktory/kill:
 	docker stop faktory
 
-fmt: 
-	cargo fmt
-
 README.md: README.tpl src/lib.rs
 	cargo readme > README.md
 
@@ -38,4 +37,13 @@ test/e2e:
 	FAKTORY_URL=tcp://${FAKTORY_HOST}:${FAKTORY_PORT} cargo test --locked --all-features --all-targets
 
 test/load:
-	 cargo run --features binaries
+	cargo run --release --features binaries
+
+test/perf:
+	cargo build --release --features binaries
+	perf record -o perf_loadtest.data --call-graph dwarf target/release/loadtest
+	perf script -i perf_loadtest.data | inferno-collapse-perf > perf_loadtest_stacks.folded
+	cat perf_loadtest_stacks.folded | inferno-flamegraph > perf_loadtest.svg
+
+test/perf/clean:
+	rm perf_loadtest*
