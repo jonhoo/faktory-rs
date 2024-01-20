@@ -16,9 +16,10 @@ pub use self::single::{
 };
 
 #[cfg(feature = "ent")]
-mod batch;
-#[cfg(feature = "ent")]
 pub use self::single::ent::{Progress, ProgressUpdate, ProgressUpdateBuilder, Track};
+
+#[cfg(feature = "ent")]
+mod batch;
 #[cfg(feature = "ent")]
 pub use batch::{
     Batch, BatchBuilder, BatchHandle, BatchStatus, CommitBatch, GetBatchStatus, OpenBatch,
