@@ -15,11 +15,6 @@ pub use self::single::{
     gen_random_wid, Ack, Fail, Heartbeat, Info, Job, JobBuilder, Push, QueueAction, QueueControl,
 };
 
-// responses that users can see
-pub use self::single::Hi;
-
-pub use self::single::gen_random_jid;
-
 #[cfg(feature = "ent")]
 mod batch;
 #[cfg(feature = "ent")]

@@ -351,9 +351,9 @@ fn ent_unique_job_bypass_unique_lock() {
     let url = learn_faktory_url();
 
     let mut producer = Producer::connect(Some(&url)).unwrap();
-
+    let queue_name = "ent_unique_job_bypass_unique_lock";
     let job1 = Job::builder("order")
-        .queue("ent_unique_job_bypass_unique_lock")
+        .queue(queue_name)
         .unique_for(60)
         .build();
 
@@ -361,7 +361,7 @@ fn ent_unique_job_bypass_unique_lock() {
     // the uniqueness lock will be bypassed on the server. This special case is mentioned in the docs:
     // https://github.com/contribsys/faktory/wiki/Ent-Unique-Jobs#bypassing-uniqueness
     let job2 = Job::builder("order") // same jobtype and args (args are just not set)
-        .queue("ent_unique_job_bypass_unique_lock") // same queue
+        .queue(queue_name) // same queue
         .build(); // NB: `unique_for` not set
 
     producer.enqueue(job1).unwrap();
@@ -369,7 +369,7 @@ fn ent_unique_job_bypass_unique_lock() {
 
     // This _is_ a 'duplicate'.
     let job3 = Job::builder("order")
-        .queue("ent_unique_job_bypass_unique_lock")
+        .queue(queue_name)
         .unique_for(60) // NB
         .build();
 
@@ -380,6 +380,16 @@ fn ent_unique_job_bypass_unique_lock() {
     } else {
         panic!("Expected protocol error.")
     }
+
+    // let's consume three times from the queue to verify that the first two jobs
+    // have been enqueued for real, while the last one has not.
+    let mut c = ConsumerBuilder::default();
+    c.register("order", |j| -> io::Result<_> { Ok(eprintln!("{:?}", j)) });
+    let mut c = c.connect(Some(&url)).unwrap();
+
+    assert!(c.run_one(0, &[queue_name]).unwrap());
+    assert!(c.run_one(0, &[queue_name]).unwrap());
+    assert!(!c.run_one(0, &[queue_name]).unwrap()); // empty;
 }
 
 #[test]

@@ -8,7 +8,8 @@ mod resp;
 mod utils;
 
 #[cfg(feature = "ent")]
-pub mod ent;
+#[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
+mod ent;
 
 use crate::error::Error;
 

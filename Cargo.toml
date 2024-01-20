@@ -1,6 +1,6 @@
 [package]
 name = "faktory"
-version = "0.12.3"
+version = "0.12.4"
 authors = ["Jon Gjengset <jon@thesquareplanet.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -45,3 +45,7 @@ openssl = { version = "0.10.60", optional = true }
 name = "loadtest"
 path = "src/bin/loadtest.rs"
 required-features = ["binaries"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
