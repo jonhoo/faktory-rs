@@ -1,9 +1,9 @@
 //! Enumerates all errors that this crate may return.
 //!
-//! [`Error`] is the top level error enum.
+//! [`enum@Error`] is the top level error enum.
 //! Most consumers should only need to interact with this type.
 //! This is also where more generic errors such as I/O errors are placed,
-//! whereas the more specific errors ([`Connection`] and [`Protocol`]) are
+//! whereas the more specific errors ([`Connect`] and [`Protocol`]) are
 //! related to logic.
 //!
 //! [`Connect`] describes errors specific to the connection logic, for example
@@ -44,6 +44,7 @@ pub enum Error {
 
     /// Indicates an error in the underlying TLS stream.
     #[cfg(feature = "tls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
     #[error("underlying tls stream")]
     TlsStream(#[source] native_tls::Error),
 }
@@ -95,6 +96,7 @@ pub enum Protocol {
 
     /// The server reported a unique constraint violation.
     #[cfg(feature = "ent")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
     #[error("server reported unique constraint violation: {msg}")]
     UniqueConstraintViolation {
         /// The error message given by the server.
