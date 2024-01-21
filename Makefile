@@ -40,10 +40,7 @@ test/load:
 	cargo run --release --features binaries
 
 test/perf:
-	cargo build --release --features binaries
-	perf record -o perf_loadtest.data --call-graph dwarf target/release/loadtest
-	perf script -i perf_loadtest.data | inferno-collapse-perf > perf_loadtest_stacks.folded
-	cat perf_loadtest_stacks.folded | inferno-flamegraph > perf_loadtest.svg
+	CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph -o perf.flamegraph.svg -f binaries -b loadtest
 
 test/perf/clean:
-	rm perf_loadtest*
+	rm perf.*
