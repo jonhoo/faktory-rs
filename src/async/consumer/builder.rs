@@ -4,6 +4,7 @@ use std::pin::Pin;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
+use crate::ConsumerBuilder;
 use crate::{
     proto::{get_env_url, host_from_url, url_parse, ClientOptions},
     Error, Job,
@@ -20,7 +21,16 @@ pub struct AsyncConsumerBuilder<E> {
     callbacks: CallbacksRegistry<E>,
 }
 
+impl<E> ConsumerBuilder<E> {
+    /// Create a builder for asynchronous version of `Consumer`.
+    pub fn default_async() -> AsyncConsumerBuilder<E> {
+        AsyncConsumerBuilder::default()
+    }
+}
+
 impl<E> Default for AsyncConsumerBuilder<E> {
+    /// Create a builder for asynchronous version of `Consumer`.
+    ///
     /// See [`ConsumerBuilder`](struct.ConsumerBuilder.html)
     fn default() -> Self {
         AsyncConsumerBuilder {

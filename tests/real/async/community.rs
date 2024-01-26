@@ -12,7 +12,7 @@ extern crate faktory;
 
 use std::{io, sync};
 
-use faktory::{AsyncConsumerBuilder, AsyncProducer, Job, JobBuilder};
+use faktory::{AsyncConsumerBuilder, AsyncProducer, ConsumerBuilder, Job, JobBuilder};
 use serde_json::Value;
 
 use crate::skip_check;
@@ -75,7 +75,7 @@ async fn async_multi() {
 
     let (tx, rx) = sync::mpsc::channel();
     let tx = sync::Arc::new(sync::Mutex::new(tx));
-    let mut c = AsyncConsumerBuilder::default();
+    let mut c = ConsumerBuilder::default_async();
     c.hostname("tester".to_string()).wid(local.to_string());
 
     c.register(local, move |j| {
