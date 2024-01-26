@@ -143,9 +143,6 @@ async fn async_fail() {
     c.run_one(0, &[local]).await.unwrap();
     drop(c);
     assert_eq!(rx.into_iter().take(2).count(), 2);
-
-    // TODO: check that jobs *actually* failed!
-    // Faktory Enterprise allows tracking the jobs status.
 }
 
 #[tokio::test(flavor = "multi_thread")]

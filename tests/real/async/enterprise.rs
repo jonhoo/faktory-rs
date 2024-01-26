@@ -70,3 +70,102 @@ async fn async_ent_expiring_job() {
     // fail, which should be taken into account when running the test suite on CI.
     assert!(!had_job);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn async_ent_unique_job() {
+    use faktory::error;
+    use serde_json::Value;
+
+    skip_if_not_enterprise!();
+
+    let url = learn_faktory_url();
+
+    let job_type = "order";
+
+    // prepare producer and consumer:
+    let mut producer = AsyncProducer::connect(Some(&url)).await.unwrap();
+    let mut consumer = AsyncConsumerBuilder::default();
+    consumer.register(job_type, |j| Box::pin(print_job(j)));
+    let mut consumer = consumer.connect(Some(&url)).await.unwrap();
+
+    // Reminder. Jobs are considered unique for kind + args + queue.
+    // So the following two jobs, will be accepted by Faktory, since we
+    // are not setting 'unique_for' when creating those jobs:
+    let queue_name = "ent_unique_job";
+    let args = vec![Value::from("ISBN-13:9781718501850"), Value::from(100)];
+    let job1 = JobBuilder::new(job_type)
+        .args(args.clone())
+        .queue(queue_name)
+        .build();
+    producer.enqueue(job1).await.unwrap();
+    let job2 = JobBuilder::new(job_type)
+        .args(args.clone())
+        .queue(queue_name)
+        .build();
+    producer.enqueue(job2).await.unwrap();
+
+    let had_job = consumer.run_one(0, &[queue_name]).await.unwrap();
+    assert!(had_job);
+    let had_another_one = consumer.run_one(0, &[queue_name]).await.unwrap();
+    assert!(had_another_one);
+    let and_that_is_it_for_now = !consumer.run_one(0, &[queue_name]).await.unwrap();
+    assert!(and_that_is_it_for_now);
+
+    // let's now create a unique job and followed by a job with
+    // the same args and kind (jobtype in Faktory terms) and pushed
+    // to the same queue:
+    let unique_for_secs = 3;
+    let job1 = Job::builder(job_type)
+        .args(args.clone())
+        .queue(queue_name)
+        .unique_for(unique_for_secs)
+        .build();
+    producer.enqueue(job1).await.unwrap();
+    // this one is a 'duplicate' ...
+    let job2 = Job::builder(job_type)
+        .args(args.clone())
+        .queue(queue_name)
+        .unique_for(unique_for_secs)
+        .build();
+    // ... so the server will respond accordingly:
+    let res = producer.enqueue(job2).await.unwrap_err();
+    if let error::Error::Protocol(error::Protocol::UniqueConstraintViolation { msg }) = res {
+        assert_eq!(msg, "Job not unique");
+    } else {
+        panic!("Expected protocol error.")
+    }
+
+    // Let's now consume the job which is 'holding' a unique lock:
+    let had_job = consumer.run_one(0, &[queue_name]).await.unwrap();
+    assert!(had_job);
+
+    // And check that the queue is really empty (`job2` from above
+    // has not been queued indeed):
+    let queue_is_empty = !consumer.run_one(0, &[queue_name]).await.unwrap();
+    assert!(queue_is_empty);
+
+    // Now let's repeat the latter case, but providing different args to job2:
+    let job1 = JobBuilder::new(job_type)
+        .args(args.clone())
+        .queue(queue_name)
+        .unique_for(unique_for_secs)
+        .build();
+    producer.enqueue(job1).await.unwrap();
+    // this one is *NOT* a 'duplicate' ...
+    let job2 = JobBuilder::new(job_type)
+        .args(vec![Value::from("ISBN-13:9781718501850"), Value::from(101)])
+        .queue(queue_name)
+        .unique_for(unique_for_secs)
+        .build();
+    // ... so the server will accept it:
+    producer.enqueue(job2).await.unwrap();
+
+    let had_job = consumer.run_one(0, &[queue_name]).await.unwrap();
+    assert!(had_job);
+    let had_another_one = consumer.run_one(0, &[queue_name]).await.unwrap();
+    assert!(had_another_one);
+
+    // and the queue is empty again:
+    let had_job = consumer.run_one(0, &[queue_name]).await.unwrap();
+    assert!(!had_job);
+}
