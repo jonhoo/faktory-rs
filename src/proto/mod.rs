@@ -16,9 +16,6 @@ pub use self::single::{
     QueueControl, RawResponse,
 };
 
-// responses that users can see
-pub use self::single::Hi;
-
 pub(crate) fn get_env_url() -> String {
     use std::env;
     let var = env::var("FAKTORY_PROVIDER").unwrap_or_else(|_| "FAKTORY_URL".to_string());
