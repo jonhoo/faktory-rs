@@ -52,7 +52,8 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
             .callbacks
             .get(job.kind())
             .ok_or(Failed::BadJobType(job.kind().to_string()))?;
-        handler(job).await.map_err(Failed::Application)
+        let exe_result = tokio::spawn(handler(job)).await.expect("joined ok");
+        exe_result.map_err(Failed::Application)
     }
 
     async fn report_failure_to_server(&mut self, f: &Fail) -> Result<(), Error> {
