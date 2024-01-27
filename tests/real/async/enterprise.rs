@@ -91,7 +91,7 @@ async fn async_ent_unique_job() {
     // Reminder. Jobs are considered unique for kind + args + queue.
     // So the following two jobs, will be accepted by Faktory, since we
     // are not setting 'unique_for' when creating those jobs:
-    let queue_name = "ent_unique_job";
+    let queue_name = "async_ent_unique_job";
     let args = vec![Value::from("ISBN-13:9781718501850"), Value::from(100)];
     let job1 = JobBuilder::new(job_type)
         .args(args.clone())
@@ -180,7 +180,7 @@ async fn async_ent_unique_job_until_success() {
 
     let url = learn_faktory_url();
 
-    let queue_name = "ent_unique_job_until_success";
+    let queue_name = "async_ent_unique_job_until_success";
     let job_type = "order";
 
     // the job will be being executed for at least 3 seconds,
@@ -269,7 +269,7 @@ async fn async_ent_unique_job_until_start() {
 
     let url = learn_faktory_url();
 
-    let queue_name = "ent_unique_job_until_start";
+    let queue_name = "async_ent_unique_job_until_start";
     let job_type = "order";
     let difficulty_level = 3;
     let unique_for = 4;
@@ -337,7 +337,7 @@ async fn async_ent_unique_job_bypass_unique_lock() {
 
     let url = learn_faktory_url();
     let mut producer = AsyncProducer::connect(Some(&url)).await.unwrap();
-    let queue_name = "ent_unique_job_bypass_unique_lock";
+    let queue_name = "async_ent_unique_job_bypass_unique_lock";
     let job1 = Job::builder("order")
         .queue(queue_name)
         .unique_for(60)
