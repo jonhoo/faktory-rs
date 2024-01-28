@@ -1,4 +1,3 @@
-// use super::{Client, AsynReconnect};
 use crate::{
     consumer::{Failed, STATUS_RUNNING, STATUS_TERMINATING},
     proto::{Ack, Fail},
@@ -52,8 +51,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
             .callbacks
             .get(job.kind())
             .ok_or(Failed::BadJobType(job.kind().to_string()))?;
-        let exe_result = tokio::spawn(handler(job)).await.expect("joined ok");
-        exe_result.map_err(Failed::Application)
+        handler(job).await.map_err(Failed::Application)
     }
 
     async fn report_failure_to_server(&mut self, f: &Fail) -> Result<(), Error> {
