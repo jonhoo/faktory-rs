@@ -1,7 +1,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufStream};
+use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
 use crate::ConsumerBuilder;
@@ -88,18 +88,15 @@ impl<E: 'static> AsyncConsumerBuilder<E> {
     }
 
     /// Asynchronously connect to a Faktory server with a non-standard stream.
-    pub async fn connect_with<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin>(
+    pub async fn connect_with<S: AsyncRead + AsyncWrite + Send + Unpin>(
         mut self,
         stream: S,
         pwd: Option<String>,
-    ) -> Result<AsyncConsumer<S, E>, Error> {
+    ) -> Result<AsyncConsumer<BufStream<S>, E>, Error> {
         self.opts.password = pwd;
-        Ok(AsyncConsumer::new(
-            AsyncClient::new(stream, self.opts).await?,
-            self.workers_count,
-            self.callbacks,
-        )
-        .await)
+        let buffered = BufStream::new(stream);
+        let client = AsyncClient::new(buffered, self.opts).await?;
+        Ok(AsyncConsumer::new(client, self.workers_count, self.callbacks).await)
     }
 
     /// Asynchronously connect to a Faktory server.

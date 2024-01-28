@@ -1,4 +1,4 @@
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufStream};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
 use crate::proto::{Info, Push, QueueAction, QueueControl};
@@ -16,13 +16,6 @@ pub struct AsyncProducer<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> {
 }
 
 impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> AsyncProducer<S> {
-    /// Connect to a Faktory server with a non-standard stream.
-    pub async fn connect_with(stream: S, pwd: Option<String>) -> Result<AsyncProducer<S>, Error> {
-        Ok(AsyncProducer {
-            c: AsyncClient::new_producer(stream, pwd).await?,
-        })
-    }
-
     /// Asynchronously enqueue the given job on the Faktory server.
     ///
     /// Returns `Ok` if the job was successfully queued by the Faktory server.
@@ -67,6 +60,18 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> AsyncProducer<S> {
     }
 }
 
+impl<S: AsyncRead + AsyncWrite + Send + Unpin> AsyncProducer<BufStream<S>> {
+    /// Connect to a Faktory server with a non-standard stream.
+    pub async fn connect_with(
+        stream: S,
+        pwd: Option<String>,
+    ) -> Result<AsyncProducer<BufStream<S>>, Error> {
+        let buffered = BufStream::new(stream);
+        let c = AsyncClient::new_producer(buffered, pwd).await?;
+        Ok(AsyncProducer { c })
+    }
+}
+
 impl AsyncProducer<BufStream<TokioStream>> {
     /// Create a producer and asynchronously connect to a Faktory server.
     ///
@@ -87,7 +92,7 @@ impl AsyncProducer<BufStream<TokioStream>> {
             None => url_parse(&get_env_url()),
         }?;
         let stream = TokioStream::connect(host_from_url(&url)).await?;
-        let buffered = BufStream::new(stream);
-        Self::connect_with(buffered, url.password().map(|p| p.to_string())).await
+        // let buffered = BufStream::new(stream);
+        Self::connect_with(stream, url.password().map(|p| p.to_string())).await
     }
 }
