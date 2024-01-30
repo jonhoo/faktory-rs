@@ -62,12 +62,6 @@ pub fn read_json<R: BufRead, T: serde::de::DeserializeOwned>(r: R) -> Result<Opt
 #[cfg(feature = "ent")]
 pub fn read_bid<R: BufRead>(r: R) -> Result<String, Error> {
     match read(r)? {
-        RawResponse::String(ref s) if s.is_empty() => Err(error::Protocol::BadType {
-            expected: "non-empty string representation of batch id",
-            received: "empty string".into(),
-        }
-        .into()),
-        RawResponse::String(ref s) => Ok(s.to_string()),
         RawResponse::Blob(ref b) if b.is_empty() => Err(error::Protocol::BadType {
             expected: "non-empty blob representation of batch id",
             received: "empty blob".into(),

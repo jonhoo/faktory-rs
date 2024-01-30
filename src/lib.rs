@@ -76,9 +76,7 @@ pub use tls::TlsStream;
 pub use crate::consumer::{Consumer, ConsumerBuilder};
 pub use crate::error::Error;
 pub use crate::producer::Producer;
-pub use crate::proto::Reconnect;
-
-pub use crate::proto::{Job, JobBuilder};
+pub use crate::proto::{Job, JobBuilder, Reconnect};
 
 #[cfg(feature = "ent")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]

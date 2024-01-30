@@ -2,12 +2,8 @@ use crate::error::Error;
 use crate::proto::{
     self, parse_provided_or_from_env, Client, Info, Job, Push, QueueAction, QueueControl,
 };
-
 #[cfg(feature = "ent")]
-use crate::proto::{BatchHandle, CommitBatch, OpenBatch};
-#[cfg(feature = "ent")]
-use crate::Batch;
-
+use crate::proto::{Batch, BatchHandle, CommitBatch, OpenBatch};
 use std::io::prelude::*;
 use std::net::TcpStream;
 
@@ -143,10 +139,16 @@ impl<S: Read + Write> Producer<S> {
     }
 
     /// Open an already existing batch of jobs.
+    ///
+    /// This will not error if a batch with the provided `bid` does not exist,
+    /// rather `Ok(None)` will be returned.
     #[cfg(feature = "ent")]
-    pub fn open_batch(&mut self, bid: String) -> Result<BatchHandle<'_, S>, Error> {
-        let bid = self.c.issue(&OpenBatch::from(bid))?.read_bid()?;
-        Ok(BatchHandle::new(bid, self))
+    pub fn open_batch(&mut self, bid: String) -> Result<Option<BatchHandle<'_, S>>, Error> {
+        let bid = self.c.issue(&OpenBatch::from(bid))?.maybe_bid()?;
+        match bid {
+            Some(bid) => Ok(Some(BatchHandle::new(bid, self))),
+            None => Ok(None),
+        }
     }
 
     #[cfg(feature = "ent")]
