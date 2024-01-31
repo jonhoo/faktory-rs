@@ -118,7 +118,7 @@ pub struct Batch {
 
     /// Batch description for Faktory WEB UI.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[builder(setter(custom))]
+    #[builder(setter(custom), default = "None")]
     pub description: Option<String>,
 
     /// On success callback.
