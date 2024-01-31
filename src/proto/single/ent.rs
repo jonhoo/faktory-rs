@@ -122,7 +122,7 @@ pub struct Progress {
 /// Info on job execution progress (sent).
 ///
 /// In Enterprise Faktory, a client executing a job can report on the execution
-/// progress, provided the job is trackable. A trackable job is the one with "track":1
+/// progress, provided the job is trackable. A trackable job is one with "track":1
 /// specified in the custom data hash.
 #[derive(Debug, Clone, Serialize, Builder)]
 #[builder(
