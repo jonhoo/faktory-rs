@@ -540,7 +540,7 @@ fn test_batch_of_jobs_can_be_initiated() {
         .build();
 
     let batch = Batch::builder()
-        .description("Image resizing workload".to_string())
+        .description("Image resizing workload")
         .with_complete_callback(cb_job);
 
     let time_just_before_batch_init = Utc::now();
@@ -679,14 +679,14 @@ fn test_batches_can_be_nested() {
 
     // batches start
     let parent_batch = Batch::builder()
-        .description("Parent batch".to_string())
+        .description("Parent batch")
         .with_success_callback(parent_cb_job);
     let mut parent_batch = p.start_batch(parent_batch).unwrap();
     let parent_batch_id = parent_batch.id().to_owned();
     parent_batch.add(parent_job1).unwrap();
 
     let child_batch = Batch::builder()
-        .description("Child batch".to_string())
+        .description("Child batch")
         .with_success_callback(child_cb_job);
     let mut child_batch = parent_batch.start_batch(child_batch).unwrap();
     let child_batch_id = child_batch.id().to_owned();
@@ -694,7 +694,7 @@ fn test_batches_can_be_nested() {
     child_batch.add(child_job_2).unwrap();
 
     let grandchild_batch = Batch::builder()
-        .description("Grandchild batch".to_string())
+        .description("Grandchild batch")
         .with_success_callback(grandchild_cb_job);
     let mut grandchild_batch = child_batch.start_batch(grandchild_batch).unwrap();
     let grandchild_batch_id = grandchild_batch.id().to_owned();
@@ -755,7 +755,7 @@ fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
     let mut b = p
         .start_batch(
             Batch::builder()
-                .description("Orders processing workload".to_string())
+                .description("Orders processing workload")
                 .with_success_callback(callbacks.next().unwrap()),
         )
         .unwrap();
@@ -831,7 +831,7 @@ fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
     let b = p
         .start_batch(
             Batch::builder()
-                .description("Orders processing workload".to_string())
+                .description("Orders processing workload")
                 .with_callbacks(callbacks.next().unwrap(), callbacks.next().unwrap()),
         )
         .unwrap();
@@ -888,7 +888,7 @@ fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
     );
 
     let b = Batch::builder()
-        .description("Orders processing workload".to_string())
+        .description("Orders processing workload")
         .with_success_callback(callbacks.next().unwrap());
 
     let mut b = p.start_batch(b).unwrap();
@@ -955,7 +955,7 @@ fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
         2,
     );
     let nested_batch_declaration = Batch::builder()
-        .description("Orders processing workload. Nested stage".to_string())
+        .description("Orders processing workload. Nested stage")
         .with_callbacks(
             nested_callbacks.next().unwrap(),
             nested_callbacks.next().unwrap(),

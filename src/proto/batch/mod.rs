@@ -33,7 +33,7 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// let job_cb = Job::builder("callback_job_type").build();
 ///
 /// let batch = Batch::builder()
-///     .description("Batch description".to_string())
+///     .description("Batch description")
 ///     .with_complete_callback(job_cb);
 ///
 /// let mut batch = prod.start_batch(batch)?;
@@ -57,10 +57,10 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// let child_cb = Job::builder("callback_job_type").build();
 ///
 /// let parent_batch = Batch::builder()
-///     .description("Batch description".to_string())
+///     .description("Batch description")
 ///     .with_complete_callback(parent_cb);
 /// let child_batch = Batch::builder()
-///     .description("Child batch description".to_string())
+///     .description("Child batch description")
 ///     .with_success_callback(child_cb);
 ///
 /// let mut parent = prod.start_batch(parent_batch)?;
@@ -87,7 +87,9 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// let mut prod = Producer::connect(None)?;
 /// let job = Job::builder("job_type").build();
 /// let cb_job = Job::builder("callback_job_type").build();
-/// let b = Batch::builder().description("Batch description".to_string()).with_complete_callback(cb_job);
+/// let b = Batch::builder()
+///     .description("Batch description")
+///     .with_complete_callback(cb_job);
 ///
 /// let mut b = prod.start_batch(b)?;
 /// let bid = b.id().to_string();
@@ -116,6 +118,7 @@ pub struct Batch {
 
     /// Batch description for Faktory WEB UI.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[builder(setter(custom))]
     pub description: Option<String>,
 
     /// On success callback.
@@ -123,7 +126,7 @@ pub struct Batch {
     /// This job will be queued by the Faktory server provided
     /// all the jobs belonging to this batch have been executed successfully.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[builder(setter(custom))]
+    #[builder(setter(skip))]
     pub(crate) success: Option<Job>,
 
     /// On complete callback.
@@ -132,7 +135,7 @@ pub struct Batch {
     /// belonging to this batch have been executed, even if one/some/all
     /// of the workers have failed.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[builder(setter(custom))]
+    #[builder(setter(skip))]
     pub(crate) complete: Option<Job>,
 }
 
@@ -153,35 +156,32 @@ impl BatchBuilder {
         Self::create_empty()
     }
 
-    fn success(&mut self, success_cb: impl Into<Option<Job>>) -> &mut Self {
-        self.success = Some(success_cb.into());
-        self
-    }
-
-    fn complete(&mut self, complete_cb: impl Into<Option<Job>>) -> &mut Self {
-        self.complete = Some(complete_cb.into());
+    /// Batch description for Faktory WEB UI.
+    pub fn description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(Some(description.into()));
         self
     }
 
     /// Create a `Batch` with only `success` callback specified.
-    pub fn with_success_callback(mut self, success_cb: Job) -> Batch {
-        self.success(success_cb);
-        self.complete(None);
-        self.build()
+    pub fn with_success_callback(self, success_cb: Job) -> Batch {
+        let mut b = self.build();
+        b.success = Some(success_cb);
+        b
     }
 
     /// Create a `Batch` with only `complete` callback specified.
-    pub fn with_complete_callback(mut self, complete_cb: Job) -> Batch {
-        self.complete(complete_cb);
-        self.success(None);
-        self.build()
+    pub fn with_complete_callback(self, complete_cb: Job) -> Batch {
+        let mut b = self.build();
+        b.complete = Some(complete_cb);
+        b
     }
 
     /// Create a `Batch` with both `success` and `complete` callbacks specified.
-    pub fn with_callbacks(mut self, success_cb: Job, complete_cb: Job) -> Batch {
-        self.success(success_cb);
-        self.complete(complete_cb);
-        self.build()
+    pub fn with_callbacks(self, success_cb: Job, complete_cb: Job) -> Batch {
+        let mut b = self.build();
+        b.success = Some(success_cb);
+        b.complete = Some(complete_cb);
+        b
     }
 }
 
@@ -286,7 +286,7 @@ mod test {
     #[test]
     fn test_batch_creation() {
         let b = BatchBuilder::new()
-            .description("Image processing batch".to_string())
+            .description("Image processing batch")
             .with_success_callback(Job::builder("thumbnail").build());
 
         assert!(b.complete.is_none());
@@ -295,7 +295,7 @@ mod test {
         assert_eq!(b.description, Some("Image processing batch".into()));
 
         let b = BatchBuilder::new()
-            .description("Image processing batch".to_string())
+            .description("Image processing batch")
             .with_complete_callback(Job::builder("thumbnail").build());
         assert!(b.complete.is_some());
         assert!(b.success.is_none());
@@ -308,7 +308,7 @@ mod test {
         assert!(b.complete.is_some());
         assert!(b.success.is_some());
 
-        let b = BatchBuilder::new().description("Batch description".to_string());
+        let b = BatchBuilder::new().description("Batch description");
         let _batch_with_complete_cb = b.clone().with_complete_callback(Job::builder("jt").build());
         let _batch_with_success_cb = b.with_success_callback(Job::builder("jt").build());
     }
@@ -328,7 +328,7 @@ mod test {
         // with description and on success callback:
         let got = serde_json::to_string(
             &BatchBuilder::new()
-                .description("Image processing workload".to_string())
+                .description("Image processing workload")
                 .with_success_callback(prepare_test_job("thumbnail_clean_up".into())),
         )
         .unwrap();
@@ -346,7 +346,7 @@ mod test {
         // with description and both callbacks:
         let got = serde_json::to_string(
             &BatchBuilder::new()
-                .description("Image processing workload".to_string())
+                .description("Image processing workload")
                 .with_callbacks(
                     prepare_test_job("thumbnail_clean_up".into()),
                     prepare_test_job("thumbnail_info".into()),
