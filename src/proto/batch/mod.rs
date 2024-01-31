@@ -145,7 +145,7 @@ impl Batch {
 impl BatchBuilder {
     fn build(&mut self) -> Batch {
         self.try_build()
-            .expect("All required fields have been set.")
+            .expect("There are no required fields.")
     }
 
     /// Create a new `BatchBuilder` with optional description of the batch.
