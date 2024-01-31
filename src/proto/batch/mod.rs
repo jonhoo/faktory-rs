@@ -196,6 +196,7 @@ impl Clone for BatchBuilder {
     }
 }
 
+/// Represents a newly started or re-opened batch of jobs.
 pub struct BatchHandle<'a, S: Read + Write> {
     bid: String,
     prod: &'a mut Producer<S>,
@@ -264,13 +265,13 @@ pub struct BatchStatus {
 
     /// State of the `complete` callback.
     ///
-    /// See [complete](Batch::complete).
+    /// See [with_complete_callback](struct.BatchBuilder.html#method.with_complete_callback).
     #[serde(rename = "complete_st")]
     pub complete_callback_state: String,
 
     /// State of the `success` callback.
     ///
-    /// See [success](struct.Batch.html#structfield.success).
+    /// See [with_success_callback](struct.BatchBuilder.html#method.with_success_callback).
     #[serde(rename = "success_st")]
     pub success_callback_state: String,
 }

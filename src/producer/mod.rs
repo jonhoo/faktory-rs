@@ -133,6 +133,7 @@ impl<S: Read + Write> Producer<S> {
 
     /// Initiate a new batch of jobs.
     #[cfg(feature = "ent")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
     pub fn start_batch(&mut self, batch: Batch) -> Result<BatchHandle<'_, S>, Error> {
         let bid = self.c.issue(&batch)?.read_bid()?;
         Ok(BatchHandle::new(bid, self))
@@ -143,6 +144,7 @@ impl<S: Read + Write> Producer<S> {
     /// This will not error if a batch with the provided `bid` does not exist,
     /// rather `Ok(None)` will be returned.
     #[cfg(feature = "ent")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
     pub fn open_batch(&mut self, bid: String) -> Result<Option<BatchHandle<'_, S>>, Error> {
         let bid = self.c.issue(&OpenBatch::from(bid))?.maybe_bid()?;
         match bid {
