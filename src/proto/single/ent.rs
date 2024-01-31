@@ -7,7 +7,7 @@ use serde::{
 
 use crate::{Error, JobBuilder};
 
-// Used to parse responses from Faktory that look like this:
+// Used to parse responses from Faktory where a datetime field is set to an empty string, e.g:
 // '{"jid":"f7APFzrS2RZi9eaA","state":"unknown","updated_at":""}'
 fn parse_datetime<'de, D>(value: D) -> Result<Option<DateTime<Utc>>, D::Error>
 where
