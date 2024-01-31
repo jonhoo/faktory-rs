@@ -28,11 +28,11 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// use faktory::{Producer, Job, Batch};
 ///
 /// let mut prod = Producer::connect(None)?;
-/// let job1 = Job::builder("image").build();
-/// let job2 = Job::builder("image").build();
-/// let job_cb = Job::builder("clean_up").build();
+/// let job1 = Job::builder("job_type").build();
+/// let job2 = Job::builder("job_type").build();
+/// let job_cb = Job::builder("callback_job_type").build();
 ///
-/// let batch = Batch::builder("Image resizing workload".to_string()).with_complete_callback(job_cb);
+/// let batch = Batch::builder("Batch description".to_string()).with_complete_callback(job_cb);
 ///
 /// let mut batch = prod.start_batch(batch)?;
 /// batch.add(job1)?;
@@ -46,16 +46,16 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// ```no_run
 /// # use faktory::{Producer, Job, Batch, Error};
 /// # let mut prod = Producer::connect(None)?;
-/// let parent_job1 = Job::builder("stats_build").build();
-/// let parent_job2 = Job::builder("entries_update").build();
-/// let parent_cb = Job::builder("clean_up").build();
+/// let parent_job1 = Job::builder("job_type").build();
+/// let parent_job2 = Job::builder("another_job_type").build();
+/// let parent_cb = Job::builder("callback_job_type").build();
 ///
-/// let child_job1 = Job::builder("image_recognition").build();
-/// let child_job2 = Job::builder("image_recognition").build();
-/// let child_cb = Job::builder("clean_up").build();
+/// let child_job1 = Job::builder("job_type").build();
+/// let child_job2 = Job::builder("yet_another_job_type").build();
+/// let child_cb = Job::builder("callback_job_type").build();
 ///
-/// let parent_batch = Batch::builder("Image recognition and analysis workload".to_string()).with_complete_callback(parent_cb);
-/// let child_batch = Batch::builder("Image recognition workload".to_string()).with_success_callback(child_cb);
+/// let parent_batch = Batch::builder("Parent batch description".to_string()).with_complete_callback(parent_cb);
+/// let child_batch = Batch::builder("Child batch description".to_string()).with_success_callback(child_cb);
 ///
 /// let mut parent = prod.start_batch(parent_batch)?;
 /// parent.add(parent_job1)?;
@@ -79,9 +79,9 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// # use faktory::Error;
 /// # use faktory::{Producer, Job, Batch, Tracker};
 /// let mut prod = Producer::connect(None)?;
-/// let job = Job::builder("image").build();
-/// let cb_job = Job::builder("clean_up").build();
-/// let b = Batch::builder("Description...".to_string()).with_complete_callback(cb_job);
+/// let job = Job::builder("job_type").build();
+/// let cb_job = Job::builder("callback_job_type").build();
+/// let b = Batch::builder("Batch description".to_string()).with_complete_callback(cb_job);
 ///
 /// let mut b = prod.start_batch(b)?;
 /// let bid = b.id().to_string();
@@ -92,7 +92,7 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// let s = t.get_batch_status(bid).unwrap().unwrap();
 /// assert_eq!(s.total, 1);
 /// assert_eq!(s.pending, 1);
-/// assert_eq!(s.description, Some("Description...".into()));
+/// assert_eq!(s.description, Some("Batch description".into()));
 /// assert_eq!(s.complete_callback_state, ""); // has not been queued;
 /// # Ok::<(), Error>(())
 /// ```
