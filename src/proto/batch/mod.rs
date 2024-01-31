@@ -264,7 +264,7 @@ pub struct BatchStatus {
 
     /// State of the `complete` callback.
     ///
-    /// See [complete](struct.Batch.html#structfield.complete).
+    /// See [complete](Batch::complete).
     #[serde(rename = "complete_st")]
     pub complete_callback_state: String,
 
