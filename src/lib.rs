@@ -42,10 +42,10 @@
 //! If you want to **accept** jobs from Faktory, use `Consumer`.
 //!
 //! ```no_run
-//! use faktory::ConsumerBuilder;
+//! use faktory::{ConsumerBuilder, Job};
 //! use std::io;
 //! let mut c = ConsumerBuilder::default();
-//! c.register("foobar", |job| -> io::Result<()> {
+//! c.register("foobar", |job: Job| -> io::Result<()> {
 //!     println!("{:?}", job);
 //!     Ok(())
 //! });
@@ -73,7 +73,7 @@ mod tls;
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use tls::TlsStream;
 
-pub use crate::consumer::{Consumer, ConsumerBuilder};
+pub use crate::consumer::{Consumer, ConsumerBuilder, JobRunner};
 pub use crate::error::Error;
 pub use crate::producer::Producer;
 pub use crate::proto::Reconnect;

@@ -31,7 +31,7 @@ fn ent_expiring_job() {
     // prepare a producer ("client" in Faktory terms) and consumer ("worker"):
     let mut producer = Producer::connect(Some(&url)).unwrap();
     let mut consumer = ConsumerBuilder::default();
-    consumer.register("AnExpiringJob", move |job| -> io::Result<_> {
+    consumer.register("AnExpiringJob", move |job: Job| -> io::Result<_> {
         Ok(eprintln!("{:?}", job))
     });
     let mut consumer = consumer.connect(Some(&url)).unwrap();
@@ -84,7 +84,7 @@ fn ent_unique_job() {
     // prepare producer and consumer:
     let mut producer = Producer::connect(Some(&url)).unwrap();
     let mut consumer = ConsumerBuilder::default();
-    consumer.register(job_type, |job| -> io::Result<_> {
+    consumer.register(job_type, |job: Job| -> io::Result<_> {
         Ok(eprintln!("{:?}", job))
     });
     let mut consumer = consumer.connect(Some(&url)).unwrap();
@@ -197,7 +197,7 @@ fn ent_unique_job_until_success() {
         // to work hard:
         let mut producer_a = Producer::connect(Some(&url1)).unwrap();
         let mut consumer_a = ConsumerBuilder::default();
-        consumer_a.register(job_type, |job| -> io::Result<_> {
+        consumer_a.register(job_type, |job: Job| -> io::Result<_> {
             let args = job.args().to_owned();
             let mut args = args.iter();
             let diffuculty_level = args
@@ -276,7 +276,7 @@ fn ent_unique_job_until_start() {
     let handle = thread::spawn(move || {
         let mut producer_a = Producer::connect(Some(&url1)).unwrap();
         let mut consumer_a = ConsumerBuilder::default();
-        consumer_a.register(job_type, |job| -> io::Result<_> {
+        consumer_a.register(job_type, |job: Job| -> io::Result<_> {
             let args = job.args().to_owned();
             let mut args = args.iter();
             let diffuculty_level = args

@@ -12,8 +12,53 @@ const STATUS_RUNNING: usize = 0;
 const STATUS_QUIET: usize = 1;
 const STATUS_TERMINATING: usize = 2;
 
-type JobRunner<E> = dyn Fn(Job) -> Result<(), E> + Send + Sync;
-type BoxedJobRunner<E> = Box<JobRunner<E>>;
+/// Implementors of this trait can be registered to run jobs in a `Consumer`.
+///
+/// # Example
+///
+/// Create a worker with all default options, register a single handler (for the `foo` job
+/// type), connect to the Faktory server, and start accepting jobs.
+/// The handler is a struct that implements `JobRunner`.
+///
+/// ```no_run
+/// use faktory::{ConsumerBuilder, JobRunner, Job};
+/// use std::io;
+///
+/// struct MyHandler {
+///     config: String,
+/// }
+/// impl JobRunner<io::Error> for MyHandler {
+///    fn run(&self, job: Job) -> Result<(), io::Error> {
+///       println!("config: {}", self.config);
+///       println!("job: {:?}", job);
+///       Ok(())
+///   }
+/// }
+///
+/// let mut c = ConsumerBuilder::default();
+/// let handler = MyHandler {
+///    config: "bar".to_string(),
+/// };
+/// c.register("foo", handler);
+/// let mut c = c.connect(None).unwrap();
+/// if let Err(e) = c.run(&["default"]) {
+///     println!("worker failed: {}", e);
+/// }
+/// ```
+pub trait JobRunner<E>: Send + Sync {
+    /// A handler function that runs a job.
+    fn run(&self, job: Job) -> Result<(), E>;
+}
+// Implements JobRunner for a closure that takes a Job and returns a Result<(), E>
+impl<E, F> JobRunner<E> for F
+where
+    F: Fn(Job) -> Result<(), E> + Send + Sync,
+{
+    fn run(&self, job: Job) -> Result<(), E> {
+        self(job)
+    }
+}
+type BoxedJobRunner<E> = Box<dyn JobRunner<E>>;
 
 /// `Consumer` is used to run a worker that processes jobs provided by Faktory.
 ///
@@ -95,10 +140,10 @@ type BoxedJobRunner<E> = Box<JobRunner<E>>;
 /// type), connect to the Faktory server, and start accepting jobs.
 ///
 /// ```no_run
-/// use faktory::ConsumerBuilder;
+/// use faktory::{ConsumerBuilder, Job};
 /// use std::io;
 /// let mut c = ConsumerBuilder::default();
-/// c.register("foobar", |job| -> io::Result<()> {
+/// c.register("foobar", |job: Job| -> io::Result<()> {
 ///     println!("{:?}", job);
 ///     Ok(())
 /// });
@@ -185,15 +230,16 @@ impl<E> ConsumerBuilder<E> {
         self
     }
 
-    /// Register a handler function for the given job type (`kind`).
+    /// Register a handler type for the given job type (`kind`).
     ///
     /// Whenever a job whose type matches `kind` is fetched from the Faktory, the given handler
-    /// function is called with that job as its argument.
+    /// is called with that job as its argument.
+    ///
+    /// Often you will want to use a closure as the handler.
     pub fn register<K, H>(&mut self, kind: K, handler: H) -> &mut Self
     where
         K: Into<String>,
-        // Annoyingly, can't just use the JobRunner<E> type alias here.
-        H: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
+        H: JobRunner<E> + 'static,
     {
         self.callbacks.insert(kind.into(), Box::new(handler));
         self
@@ -265,7 +311,7 @@ where
 {
     fn run_job(&mut self, job: Job) -> Result<(), Failed<E>> {
         match self.callbacks.get(&job.kind) {
-            Some(callback) => callback(job).map_err(Failed::Application),
+            Some(callback) => callback.run(job).map_err(Failed::Application),
             None => {
                 // cannot execute job, since no handler exists
                 Err(Failed::BadJobType(job.kind))
