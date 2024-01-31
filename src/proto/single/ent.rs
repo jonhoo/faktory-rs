@@ -95,7 +95,7 @@ impl JobBuilder {
 ///
 /// The tracker is guaranteed to get the following details: the job's id (though
 /// they should know it beforehand in order to be ably to track the job), its last
-/// know state (e.g., "enqueued", "working", "success", "unknown"), and the date and time
+/// known state (e.g., "enqueued", "working", "success", "unknown"), and the date and time
 /// the job was last updated. Additionally, information on what's going on with the job
 /// ([desc](struct.ProgressUpdate.html#structfield.desc)) and completion percentage
 /// ([percent](struct.ProgressUpdate.html#structfield.percent)) may be available,
