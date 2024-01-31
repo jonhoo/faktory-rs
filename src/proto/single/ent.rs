@@ -145,9 +145,10 @@ pub struct ProgressUpdate {
     #[builder(default = "None")]
     pub desc: Option<String>,
 
-    /// Allows to extend the job's reservation, if more time needed to execute it.
+    /// Allows to extend the job's reservation, if more time is needed to execute it.
     ///
-    /// Note that you cannot decrease the initial [reservation](struct.Job.html#structfield.reserve_for).
+    /// Note that you cannot shorten the initial [reservation](struct.Job.html#structfield.reserve_for) via
+    /// specifying an instant that is sooner than the job's initial reservation deadline.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[builder(default = "None")]
     pub reserve_until: Option<DateTime<Utc>>,
