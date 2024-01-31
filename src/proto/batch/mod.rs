@@ -102,9 +102,10 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// assert_eq!(s.complete_callback_state, ""); // has not been queued;
 /// # Ok::<(), Error>(())
 /// ```
-#[derive(Serialize, Debug, Builder)]
+#[derive(Builder, Debug, Serialize)]
 #[builder(
     custom_constructor,
+    pattern = "owned",
     setter(into),
     build_fn(name = "try_build", private)
 )]
@@ -143,9 +144,8 @@ impl Batch {
 }
 
 impl BatchBuilder {
-    fn build(&mut self) -> Batch {
-        self.try_build()
-            .expect("There are no required fields.")
+    fn build(self) -> Batch {
+        self.try_build().expect("There are no required fields.")
     }
 
     /// Create a new `BatchBuilder` with optional description of the batch.
@@ -164,24 +164,35 @@ impl BatchBuilder {
     }
 
     /// Create a `Batch` with only `success` callback specified.
-    pub fn with_success_callback(&mut self, success_cb: Job) -> Batch {
+    pub fn with_success_callback(mut self, success_cb: Job) -> Batch {
         self.success(success_cb);
         self.complete(None);
         self.build()
     }
 
     /// Create a `Batch` with only `complete` callback specified.
-    pub fn with_complete_callback(&mut self, complete_cb: Job) -> Batch {
+    pub fn with_complete_callback(mut self, complete_cb: Job) -> Batch {
         self.complete(complete_cb);
         self.success(None);
         self.build()
     }
 
     /// Create a `Batch` with both `success` and `complete` callbacks specified.
-    pub fn with_callbacks(&mut self, success_cb: Job, complete_cb: Job) -> Batch {
+    pub fn with_callbacks(mut self, success_cb: Job, complete_cb: Job) -> Batch {
         self.success(success_cb);
         self.complete(complete_cb);
         self.build()
+    }
+}
+
+impl Clone for BatchBuilder {
+    fn clone(&self) -> Self {
+        BatchBuilder {
+            parent_bid: self.parent_bid.clone(),
+            description: self.description.clone(),
+            success: self.success.clone(),
+            complete: self.complete.clone(),
+        }
     }
 }
 
@@ -277,6 +288,7 @@ mod test {
         let b = BatchBuilder::new()
             .description("Image processing batch".to_string())
             .with_success_callback(Job::builder("thumbnail").build());
+
         assert!(b.complete.is_none());
         assert!(b.parent_bid.is_none());
         assert!(b.success.is_some());
@@ -295,6 +307,10 @@ mod test {
         assert!(b.description.is_none());
         assert!(b.complete.is_some());
         assert!(b.success.is_some());
+
+        let b = BatchBuilder::new().description("Batch description".to_string());
+        let _batch_with_complete_cb = b.clone().with_complete_callback(Job::builder("jt").build());
+        let _batch_with_success_cb = b.with_success_callback(Job::builder("jt").build());
     }
 
     #[test]
