@@ -32,7 +32,9 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// let job2 = Job::builder("job_type").build();
 /// let job_cb = Job::builder("callback_job_type").build();
 ///
-/// let batch = Batch::builder("Batch description".to_string()).with_complete_callback(job_cb);
+/// let batch = Batch::builder()
+///     .description("Batch description".to_string())
+///     .with_complete_callback(job_cb);
 ///
 /// let mut batch = prod.start_batch(batch)?;
 /// batch.add(job1)?;
@@ -54,8 +56,12 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// let child_job2 = Job::builder("yet_another_job_type").build();
 /// let child_cb = Job::builder("callback_job_type").build();
 ///
-/// let parent_batch = Batch::builder("Parent batch description".to_string()).with_complete_callback(parent_cb);
-/// let child_batch = Batch::builder("Child batch description".to_string()).with_success_callback(child_cb);
+/// let parent_batch = Batch::builder()
+///     .description("Batch description".to_string())
+///     .with_complete_callback(parent_cb);
+/// let child_batch = Batch::builder()
+///     .description("Child batch description".to_string())
+///     .with_success_callback(child_cb);
 ///
 /// let mut parent = prod.start_batch(parent_batch)?;
 /// parent.add(parent_job1)?;
@@ -81,7 +87,7 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// let mut prod = Producer::connect(None)?;
 /// let job = Job::builder("job_type").build();
 /// let cb_job = Job::builder("callback_job_type").build();
-/// let b = Batch::builder("Batch description".to_string()).with_complete_callback(cb_job);
+/// let b = Batch::builder().description("Batch description".to_string()).with_complete_callback(cb_job);
 ///
 /// let mut b = prod.start_batch(b)?;
 /// let bid = b.id().to_string();
@@ -131,8 +137,8 @@ pub struct Batch {
 
 impl Batch {
     /// Create a new `BatchBuilder`.
-    pub fn builder(description: impl Into<Option<String>>) -> BatchBuilder {
-        BatchBuilder::new(description)
+    pub fn builder() -> BatchBuilder {
+        BatchBuilder::new()
     }
 }
 
@@ -143,11 +149,8 @@ impl BatchBuilder {
     }
 
     /// Create a new `BatchBuilder` with optional description of the batch.
-    pub fn new(description: impl Into<Option<String>>) -> BatchBuilder {
-        BatchBuilder {
-            description: Some(description.into()),
-            ..Self::create_empty()
-        }
+    pub fn new() -> BatchBuilder {
+        Self::create_empty()
     }
 
     fn success(&mut self, success_cb: impl Into<Option<Job>>) -> &mut Self {
@@ -271,19 +274,21 @@ mod test {
 
     #[test]
     fn test_batch_creation() {
-        let b = BatchBuilder::new("Image processing batch".to_string())
+        let b = BatchBuilder::new()
+            .description("Image processing batch".to_string())
             .with_success_callback(Job::builder("thumbnail").build());
         assert!(b.complete.is_none());
         assert!(b.parent_bid.is_none());
         assert!(b.success.is_some());
         assert_eq!(b.description, Some("Image processing batch".into()));
 
-        let b = BatchBuilder::new("Image processing batch".to_string())
+        let b = BatchBuilder::new()
+            .description("Image processing batch".to_string())
             .with_complete_callback(Job::builder("thumbnail").build());
         assert!(b.complete.is_some());
         assert!(b.success.is_none());
 
-        let b = BatchBuilder::new(None).with_callbacks(
+        let b = BatchBuilder::new().with_callbacks(
             Job::builder("thumbnail").build(),
             Job::builder("thumbnail").build(),
         );
@@ -306,7 +311,8 @@ mod test {
 
         // with description and on success callback:
         let got = serde_json::to_string(
-            &BatchBuilder::new("Image processing workload".to_string())
+            &BatchBuilder::new()
+                .description("Image processing workload".to_string())
                 .with_success_callback(prepare_test_job("thumbnail_clean_up".into())),
         )
         .unwrap();
@@ -315,8 +321,7 @@ mod test {
 
         // without description and with on complete callback:
         let got = serde_json::to_string(
-            &BatchBuilder::new(None)
-                .with_complete_callback(prepare_test_job("thumbnail_info".into())),
+            &BatchBuilder::new().with_complete_callback(prepare_test_job("thumbnail_info".into())),
         )
         .unwrap();
         let expected = r#"{"complete":{"jid":"LFluKy1Baak83p54","queue":"default","jobtype":"thumbnail_info","args":[],"created_at":"2023-12-22T07:00:52.546258624Z","reserve_for":600,"retry":25,"priority":5,"backtrace":0}}"#;
@@ -324,10 +329,12 @@ mod test {
 
         // with description and both callbacks:
         let got = serde_json::to_string(
-            &BatchBuilder::new("Image processing workload".to_string()).with_callbacks(
-                prepare_test_job("thumbnail_clean_up".into()),
-                prepare_test_job("thumbnail_info".into()),
-            ),
+            &BatchBuilder::new()
+                .description("Image processing workload".to_string())
+                .with_callbacks(
+                    prepare_test_job("thumbnail_clean_up".into()),
+                    prepare_test_job("thumbnail_info".into()),
+                ),
         )
         .unwrap();
         let expected = r#"{"description":"Image processing workload","success":{"jid":"LFluKy1Baak83p54","queue":"default","jobtype":"thumbnail_clean_up","args":[],"created_at":"2023-12-22T07:00:52.546258624Z","reserve_for":600,"retry":25,"priority":5,"backtrace":0},"complete":{"jid":"LFluKy1Baak83p54","queue":"default","jobtype":"thumbnail_info","args":[],"created_at":"2023-12-22T07:00:52.546258624Z","reserve_for":600,"retry":25,"priority":5,"backtrace":0}}"#;
