@@ -91,6 +91,49 @@ impl JobBuilder {
     }
 }
 
+// Ref: https://github.com/contribsys/faktory/wiki/Ent-Tracking#notes
+/// Job's state as last known by the Faktory server.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum JobState {
+    /// The server can't tell a job's state.
+    ///
+    /// This happens when a job with the specified ID has never been enqueued, or the job has
+    /// not been marked as trackable via "track":1 in its custom hash, or the tracking info on this
+    /// job has simply expired on the server (normally, after 30 min).
+    Unknown,
+
+    /// The job has been enqueued.
+    Enqueued,
+
+    /// The job has been consumed by a worker and is now being executed.
+    Working,
+
+    /// The job has been executed with success.
+    Success,
+
+    /// The job has finished with an error.
+    Failed,
+
+    /// The jobs has been consumed but its status has never been updated.
+    Dead,
+}
+
+impl Display for JobState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use JobState::*;
+        let s = match self {
+            Unknown => "unknown",
+            Enqueued => "enqueued",
+            Working => "working",
+            Success => "success",
+            Failed => "failed",
+            Dead => "dead",
+        };
+        write!(f, "{}", s)
+    }
+}
+
 /// Info on job execution progress (retrieved).
 ///
 /// The tracker is guaranteed to get the following details: the job's id (though
@@ -106,7 +149,7 @@ pub struct Progress {
     pub jid: String,
 
     /// Job's state.
-    pub state: String,
+    pub state: JobState,
 
     /// When this job was last updated.
     #[serde(deserialize_with = "parse_datetime")]
@@ -194,7 +237,10 @@ impl ProgressUpdateBuilder {
 // ----------------------------------------------
 
 use super::FaktoryCommand;
-use std::{fmt::Debug, io::Write};
+use std::{
+    fmt::{Debug, Display},
+    io::Write,
+};
 
 #[derive(Debug, Clone)]
 pub enum Track {

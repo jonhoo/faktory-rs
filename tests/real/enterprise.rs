@@ -452,7 +452,10 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
         assert!(result.is_some());
         let result = result.unwrap();
         assert_eq!(result.jid, job_id_captured.clone());
-        assert_eq!(result.state, "working");
+        match result.state {
+            JobState::Working => {}
+            _ => panic!("expected job's state to be 'working'"),
+        }
         assert!(result.updated_at.is_some());
         assert_eq!(result.desc, Some("Still processing...".to_owned()));
         assert_eq!(result.percent, Some(32));
@@ -479,7 +482,7 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
 
     // But it actually knows the job's real status, since the consumer (worker)
     // informed it immediately after finishing with the job:
-    assert_eq!(result.state, "success");
+    assert_eq!(result.state.to_string(), "success");
 
     // What about 'ordinary' job ?
     let job_id = job_ordinary.id().to_owned().clone();
@@ -504,7 +507,7 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
     assert_eq!(progress.jid, job_id);
 
     // Returned from Faktory: '{"jid":"f7APFzrS2RZi9eaA","state":"unknown","updated_at":""}'
-    assert_eq!(progress.state, "unknown");
+    assert_eq!(progress.state.to_string(), "unknown");
     assert!(progress.updated_at.is_none());
     assert!(progress.percent.is_none());
     assert!(progress.desc.is_none());

@@ -10,14 +10,20 @@ use crate::{BatchStatus, Error, Progress, ProgressUpdate};
 ///
 /// Fetching a job's execution progress:
 /// ```no_run
-/// use faktory::Tracker;
+/// use faktory::{Tracker, JobState};
 /// let job_id = String::from("W8qyVle9vXzUWQOf");
 /// let mut tracker = Tracker::connect(None)?;
 /// if let Some(progress) = tracker.get_progress(job_id)? {
-///     if progress.state == "success" {
-///       # /*
+///     match progress.state {
+///         JobState::Success => {
+///         # /*
+///             ...
+///         # */
+///         },
+///         # /*
 ///         ...
-///       # */
+///         # */
+///         # _ => {},
 ///     }
 /// }
 /// # Ok::<(), faktory::Error>(())
