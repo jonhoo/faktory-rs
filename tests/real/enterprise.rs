@@ -903,6 +903,9 @@ fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
     // ############################## SUBTEST 0 ##########################################
     // Let's try to open/reopen a batch we have never declared:
     let b = p.open_batch(String::from("non-existent-batch-id")).unwrap();
+    // The server will error back on this, with "No such batch <provided batch id>", but
+    // we are handling this case for the end-user and returning `Ok(None)` instead, indicating
+    // this way that there is not such batch.
     assert!(b.is_none());
     // ########################## END OF SUBTEST 0 #######################################
 
