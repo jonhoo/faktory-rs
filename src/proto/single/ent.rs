@@ -165,7 +165,10 @@ impl Progress {
     ///
     /// This will copy the [`desc`](Progress::desc) from the `Progress` (retrieved) over to `ProgressUpdate` (to be sent).
     pub fn update_percent(&self, percent: u8) -> ProgressUpdate {
-        set_progress(&self.jid, percent)
+        ProgressUpdate::builder(&self.jid)
+            .desc(self.desc.clone())
+            .percent(percent)
+            .build()
     }
 
     /// Create an instance of `ProgressUpdateBuilder` for the job.
