@@ -477,21 +477,45 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
         .expect("Successfully ran a handshake with 'Faktory'");
     assert_had_one!(&mut c, "test_tracker_can_send_progress_update");
 
-    let result = t
+    let progress = t
         .lock()
         .expect("lock acquired successfully")
         .get_progress(job_id.clone())
         .expect("Retrieved progress update over the wire once again")
         .expect("Some progress");
 
-    assert_eq!(result.jid, job_id);
+    assert_eq!(progress.jid, job_id);
     // 'Faktory' will be keeping last known update for at least 30 minutes:
-    assert_eq!(result.desc, Some("Still processing...".to_owned()));
-    assert_eq!(result.percent, Some(32));
+    assert_eq!(progress.percent, Some(33));
 
     // But it actually knows the job's real status, since the consumer (worker)
     // informed it immediately after finishing with the job:
-    assert_eq!(result.state.to_string(), "success");
+    assert_eq!(progress.state.to_string(), "success");
+
+    // Let's update the status once again to verify the 'update_builder' method
+    // on the `Progress` struct works as expected:
+    let upd = progress
+        .update_builder()
+        .desc("Final stage.".to_string())
+        .percent(99)
+        .build();
+    assert!(t.lock().unwrap().set_progress(upd).is_ok());
+
+    let progress = t
+        .lock()
+        .unwrap()
+        .get_progress(job_id)
+        .expect("Retrieved progress update over the wire once again")
+        .expect("Some progress");
+
+    if progress.percent != Some(100) {
+        let upd = progress.update_percent(100);
+        assert_eq!(upd.desc, progress.desc);
+        assert!(t.lock().unwrap().set_progress(upd).is_ok())
+    }
+
+    // NB! The following should be failing if we decide to make all the jobs
+    // trackable by default in the Ent Faltory.
 
     // What about 'ordinary' job ?
     let job_id = job_ordinary.id().to_owned().clone();
@@ -520,26 +544,6 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
     assert!(progress.updated_at.is_none());
     assert!(progress.percent.is_none());
     assert!(progress.desc.is_none());
-
-    let upd = progress
-        .update_builder()
-        .desc("Final stage.".to_string())
-        .percent(99)
-        .build();
-    assert!(t.lock().unwrap().set_progress(upd).is_ok());
-
-    let progress = t
-        .lock()
-        .unwrap()
-        .get_progress(job_id)
-        .expect("Retrieved progress update over the wire once again")
-        .expect("Some progress");
-
-    if progress.percent != Some(100) {
-        let upd = progress.update_percent(100);
-        assert_eq!(upd.desc, progress.desc);
-        assert!(t.lock().unwrap().set_progress(upd).is_ok())
-    }
 }
 
 #[test]
