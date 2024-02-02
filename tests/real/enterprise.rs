@@ -522,8 +522,22 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
     assert!(progress.percent.is_none());
     assert!(progress.desc.is_none());
 
+    let upd = progress
+        .update_builder()
+        .desc("Final stage.".to_string())
+        .percent(99)
+        .build();
+    assert!(t.lock().unwrap().set_progress(upd).is_ok());
+
+    let progress = t
+        .lock()
+        .unwrap()
+        .get_progress(job_id)
+        .expect("Retrieved progress update over the wire once again")
+        .expect("Some progress");
+
     if progress.percent != Some(100) {
-        let upd = progress.update(100);
+        let upd = progress.update_percent(100);
         assert!(t.lock().unwrap().set_progress(upd).is_ok())
     }
 }

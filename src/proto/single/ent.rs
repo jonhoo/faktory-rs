@@ -162,8 +162,15 @@ pub struct Progress {
 
 impl Progress {
     /// Create an instance of `ProgressUpdate` for the job updating its completion percentage.
-    pub fn update(&self, percent: u8) -> ProgressUpdate {
+    ///
+    /// This will copy the [`desc`](Progress::desc) from the `Progress` (retrieved) over to `ProgressUpdate` (to be sent).
+    pub fn update_percent(&self, percent: u8) -> ProgressUpdate {
         set_progress(&self.jid, percent)
+    }
+
+    /// Create an instance of `ProgressUpdateBuilder` for the job.
+    pub fn update_builder(&self) -> ProgressUpdateBuilder {
+        ProgressUpdateBuilder::new(&self.jid)
     }
 }
 
