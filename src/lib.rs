@@ -74,6 +74,8 @@ mod tls;
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use tls::TlsStream;
 
+pub use crate::r#async::tls::AsyncTlsStream;
+
 pub use crate::consumer::{Consumer, ConsumerBuilder};
 pub use crate::error::Error;
 pub use crate::producer::Producer;

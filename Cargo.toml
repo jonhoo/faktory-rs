@@ -45,10 +45,12 @@ tokio = { version = "1.35.1", features = [
     "rt-multi-thread",
 ] }
 async-trait = "0.1.77"
+tokio-rustls = "0.25.0"
 
 [dev-dependencies]
 mockstream = "0.0.3"
 tokio = { version = "1.35.1", features = ["rt", "macros"] }
+tokio-test = "0.4.3"
 
 # to make -Zminimal-versions work
 [target.'cfg(any())'.dependencies]
