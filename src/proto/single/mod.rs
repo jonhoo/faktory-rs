@@ -295,7 +295,14 @@ mod test {
         assert_eq!(job.priority, Some(JOB_DEFAULT_PRIORITY));
         assert_eq!(job.backtrace, Some(JOB_DEFAULT_BACKTRACE));
         assert!(job.failure.is_none());
-        assert_eq!(job.custom, HashMap::default());
+
+        if cfg!(feature = "ent") {
+            let mut custom = HashMap::new();
+            custom.insert("track".into(), 1.into());
+            assert_eq!(job.custom, custom)
+        } else {
+            assert_eq!(job.custom, HashMap::default());
+        }
 
         let job = JobBuilder::new(job_kind).build();
         assert!(job.args.is_empty());
