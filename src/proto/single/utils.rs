@@ -11,11 +11,11 @@ fn gen_random_id(length: usize) -> String {
         .collect()
 }
 
-pub fn gen_random_jid() -> String {
+pub(crate) fn gen_random_jid() -> String {
     gen_random_id(JOB_ID_LENGTH)
 }
 
-pub fn gen_random_wid() -> String {
+pub(crate) fn gen_random_wid() -> String {
     gen_random_id(WORKER_ID_LENGTH)
 }
 

@@ -12,7 +12,7 @@ mod single;
 
 // commands that users can issue
 pub use self::single::{
-    gen_random_wid, Ack, Fail, Heartbeat, Info, Job, JobBuilder, Push, QueueAction, QueueControl,
+    Ack, Fail, Heartbeat, Info, Job, JobBuilder, Push, QueueAction, QueueControl,
 };
 
 #[cfg(feature = "ent")]
@@ -204,7 +204,7 @@ impl<S: Read + Write> Client<S> {
                 .pid
                 .unwrap_or_else(|| unsafe { getpid() } as usize);
             self.opts.pid = Some(pid);
-            let wid = self.opts.wid.clone().unwrap_or_else(gen_random_wid);
+            let wid = self.opts.wid.clone().unwrap_or_else(single::gen_random_wid);
             self.opts.wid = Some(wid);
 
             hello.hostname = Some(self.opts.hostname.clone().unwrap());
