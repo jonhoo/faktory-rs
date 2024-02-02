@@ -432,13 +432,23 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
     c.register("order", move |job| -> io::Result<_> {
         // trying to set progress on a community edition of Faktory will give:
         // 'an internal server error occurred: tracking subsystem is only available in Faktory Enterprise'
-        let result = t_captured.lock().expect("lock acquired").set_progress(
-            ProgressUpdateBuilder::new(&job_id_captured)
-                .desc("Still processing...".to_owned())
-                .percent(32)
-                .build(),
-        );
-        assert!(result.is_ok());
+        assert!(t_captured
+            .lock()
+            .expect("lock acquired")
+            .set_progress(
+                ProgressUpdate::builder(&job_id_captured)
+                    .desc("Still processing...".to_owned())
+                    .percent(32)
+                    .build(),
+            )
+            .is_ok());
+        // Let's update the progress once again, to check the 'set_progress' shortcut:
+        assert!(t_captured
+            .lock()
+            .unwrap()
+            .set_progress(set_progress(&job_id_captured, 33))
+            .is_ok());
+
         // let's sleep for a while ...
         thread::sleep(time::Duration::from_secs(2));
 
@@ -511,6 +521,11 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
     assert!(progress.updated_at.is_none());
     assert!(progress.percent.is_none());
     assert!(progress.desc.is_none());
+
+    if progress.percent != Some(100) {
+        let upd = progress.update(100);
+        assert!(t.lock().unwrap().set_progress(upd).is_ok())
+    }
 }
 
 #[test]

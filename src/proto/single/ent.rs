@@ -43,7 +43,7 @@ impl JobBuilder {
     ///
     /// Under the hood, the method will call `Utc::now` and add the provided `ttl` duration.
     /// You can use this setter when you have a duration rather than some exact date and time,
-    /// expected by [`expires_at`](struct.JobBuilder.html#method.expires_at) setter.
+    /// expected by [`expires_at`](JobBuilder::expires_at) setter.
     /// Example usage:
     /// ```
     /// # use faktory::JobBuilder;
@@ -74,7 +74,7 @@ impl JobBuilder {
     /// Remove unique lock for this job right before the job starts executing.
     ///
     /// Another job with the same kind-args-queue combination will be accepted by the Faktory server
-    /// after the period specified in [`unique_for`](struct.JobBuilder.html#method.unique_for) has finished
+    /// after the period specified in [`unique_for`](JobBuilder::unique_for) has finished
     /// _or_ after this job has been been consumed (i.e. its execution has ***started***).
     pub fn unique_until_start(&mut self) -> &mut Self {
         self.add_to_custom_data("unique_until", "start")
@@ -84,7 +84,7 @@ impl JobBuilder {
     ///
     /// Sets `unique_until` on the Job's custom hash to `success`, which is Faktory's default.
     /// Another job with the same kind-args-queue combination will be accepted by the Faktory server
-    /// after the period specified in [`unique_for`](struct.JobBuilder.html#method.unique_for) has finished
+    /// after the period specified in [`unique_for`](JobBuilder::unique_for) has finished
     /// _or_ after this job has been been ***successfully*** processed.
     pub fn unique_until_success(&mut self) -> &mut Self {
         self.add_to_custom_data("unique_until", "success")
@@ -136,13 +136,11 @@ impl Display for JobState {
 
 /// Info on job execution progress (retrieved).
 ///
-/// The tracker is guaranteed to get the following details: the job's id (though
-/// they should know it beforehand in order to be ably to track the job), its last
-/// known state (e.g., "enqueued", "working", "success", "unknown"), and the date and time
-/// the job was last updated. Additionally, information on what's going on with the job
-/// ([desc](struct.ProgressUpdate.html#structfield.desc)) and completion percentage
-/// ([percent](struct.ProgressUpdate.html#structfield.percent)) may be available,
-/// if the worker provided those details.
+/// The tracker is guaranteed to get the following details: the job's id (though they should
+/// know it beforehand in order to be ably to track the job), its last known [`state`](JobState), and
+/// the date and time the job was last updated. Additionally, arbitrary information on what's going
+/// on with the job ([`desc`](ProgressUpdate::desc)) and the job's completion percentage
+/// ([`percent`](ProgressUpdate::percent)) may be available, if the worker has provided those details.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Progress {
     /// Id of the tracked job.
@@ -160,6 +158,13 @@ pub struct Progress {
 
     /// Arbitrary description that may be useful to whoever is tracking the job's progress.
     pub desc: Option<String>,
+}
+
+impl Progress {
+    /// Create an instance of `ProgressUpdate` for the job updating its completion percentage.
+    pub fn update(&self, percent: u8) -> ProgressUpdate {
+        set_progress(&self.jid, percent)
+    }
 }
 
 /// Info on job execution progress (sent).
@@ -203,18 +208,7 @@ impl ProgressUpdate {
     /// Equivalent to creating a [new](struct.ProgressUpdateBuilder.html#method.new)
     /// `ProgressUpdateBuilder`.
     pub fn builder(jid: impl Into<String>) -> ProgressUpdateBuilder {
-        ProgressUpdateBuilder {
-            jid: Some(jid.into()),
-            ..ProgressUpdateBuilder::create_empty()
-        }
-    }
-
-    /// Create a new instance of `ProgressUpdate`.
-    ///
-    /// While job ID is specified at `ProgressUpdate`'s creation time,
-    /// the rest of the [fields](struct.ProgressUpdate.html) are defaulted to _None_.
-    pub fn new(jid: impl Into<String>) -> ProgressUpdate {
-        ProgressUpdateBuilder::new(jid).build()
+        ProgressUpdateBuilder::new(jid)
     }
 }
 
@@ -225,13 +219,18 @@ impl ProgressUpdateBuilder {
             .expect("All required fields have been set.")
     }
 
-    /// Create a new instance of 'JobBuilder'
+    /// Create a new instance of `JobBuilder`
     pub fn new(jid: impl Into<String>) -> ProgressUpdateBuilder {
         ProgressUpdateBuilder {
             jid: Some(jid.into()),
             ..ProgressUpdateBuilder::create_empty()
         }
     }
+}
+
+/// Create an instance of `ProgressUpdate` for the job specifying its completion percentage.
+pub fn set_progress(jid: impl Into<String>, percent: u8) -> ProgressUpdate {
+    ProgressUpdate::builder(jid).percent(percent).build()
 }
 
 // ----------------------------------------------

@@ -81,8 +81,8 @@ pub use crate::proto::{Job, JobBuilder, Reconnect};
 #[cfg(feature = "ent")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
 pub use crate::proto::{
-    Batch, BatchBuilder, BatchHandle, BatchStatus, JobState, Progress, ProgressUpdate,
-    ProgressUpdateBuilder,
+    set_progress, Batch, BatchBuilder, BatchHandle, BatchStatus, JobState, Progress,
+    ProgressUpdate, ProgressUpdateBuilder,
 };
 #[cfg(feature = "ent")]
 mod tracker;
