@@ -180,27 +180,18 @@ impl JobBuilder {
     }
 
     /// Builds a new [`Job`] from the parameters of this builder.
-    pub fn build(&self) -> Job {
+    ///
+    /// For Enterprise edition of Faktory builds a new _trackable_ `Job`.
+    /// In Enterprise Faktory, a progress update can be sent and received only for the jobs
+    /// that have been explicitly marked as trackable via `"track":1` in the job's custom hash.
+    /// In case you have a reason to opt out of tracking, either unset (remove) the "track" on
+    /// the resulted job's [`custom`](Job::custom) hash or set to 0.
+    pub fn build(&mut self) -> Job {
+        if cfg!(feature = "ent") {
+            self.add_to_custom_data("track", 1);
+        }
         self.try_build()
             .expect("All required fields have been set.")
-    }
-
-    /// Builds a new _trackable_ `Job``.
-    ///
-    /// Progress update can be sent and received only for the jobs that have
-    /// been explicitly marked as trackable via `"track":1` in the job's
-    /// custom hash.
-    /// ```
-    /// use faktory::JobBuilder;
-    ///
-    /// let _job = JobBuilder::new("order")
-    ///     .args(vec!["ISBN-13:9781718501850"])
-    ///     .build_trackable();
-    /// ```
-    #[cfg(feature = "ent")]
-    pub fn build_trackable(&mut self) -> Job {
-        self.add_to_custom_data("track", 1);
-        self.build()
     }
 }
 

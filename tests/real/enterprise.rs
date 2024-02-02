@@ -415,12 +415,14 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
     let job_tackable = JobBuilder::new("order")
         .args(vec![Value::from("ISBN-13:9781718501850")])
         .queue("test_tracker_can_send_progress_update")
-        .build_trackable();
+        .build();
 
-    let job_ordinary = JobBuilder::new("order")
+    let mut job_ordinary = JobBuilder::new("order")
         .args(vec![Value::from("ISBN-13:9781718501850")])
         .queue("test_tracker_can_send_progress_update")
         .build();
+    // NB! Jobs are trackable by default, so we need to unset the "track" flag.
+    assert_eq!(job_ordinary.custom.remove("track"), Some(Value::from(1)));
 
     // let's remember this job's id:
     let job_id = job_tackable.id().to_owned();
@@ -513,9 +515,6 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
         assert_eq!(upd.desc, progress.desc);
         assert!(t.lock().unwrap().set_progress(upd).is_ok())
     }
-
-    // NB! The following should be failing if we decide to make all the jobs
-    // trackable by default in the Ent Faltory.
 
     // What about 'ordinary' job ?
     let job_id = job_ordinary.id().to_owned().clone();
