@@ -19,3 +19,7 @@ After that run the tests:
 FAKTORY_URL=tcp://127.0.0.1:7419 cargo test --all-features --locked --all-targets
 ```
 Please note that setting "FAKTORY_URL" environment variable is required for e2e tests to not be skipped.
+
+Provided you have [make](https://www.gnu.org/software/make/#download) installed and `docker` daemon running,
+you can launch a `Faktory` container with `make faktory` command. After that, hit `make test/e2e` to run the end-to-end test suite.
+Remove the container with `make faktory/kill`, if it's no longer needed.
