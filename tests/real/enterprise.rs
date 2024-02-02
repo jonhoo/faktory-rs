@@ -914,7 +914,9 @@ fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
 
     // ############################## SUBTEST 1 ##########################################
     // Let's fist of all try to open the batch we have not committed yet:
-    let mut b = p.open_batch(bid.clone()).unwrap().unwrap();
+    // [We can use `producer::open_batch` specifying a bid OR - even we previously retrived
+    // a status for this batch, we can go with `status::open` providing an exclusive ref to producer]
+    let mut b = status.open(&mut p).unwrap().unwrap();
     b.add(jobs.next().unwrap()).unwrap(); // 3 jobs
 
     b.commit().unwrap(); // committig the batch

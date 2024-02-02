@@ -276,6 +276,20 @@ pub struct BatchStatus {
     pub success_callback_state: String,
 }
 
+#[cfg(feature = "ent")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
+impl<'a> BatchStatus {
+    /// Open the batch for which this `BatchStatus` has been retrieved.
+    ///
+    /// See [`open_batch`](Producer::open_batch).
+    pub fn open<S: Read + Write>(
+        &self,
+        prod: &'a mut Producer<S>,
+    ) -> Result<Option<BatchHandle<'a, S>>, Error> {
+        prod.open_batch(self.bid.clone())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::str::FromStr;
