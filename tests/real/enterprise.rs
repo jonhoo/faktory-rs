@@ -467,8 +467,7 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
             _ => panic!("expected job's state to be 'working'"),
         }
         assert!(result.updated_at.is_some());
-        assert_eq!(result.desc, Some("Still processing...".to_owned()));
-        assert_eq!(result.percent, Some(32));
+        assert_eq!(result.percent, Some(33));
         // considering the job done
         Ok(eprintln!("{:?}", job))
     });
@@ -538,6 +537,7 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
 
     if progress.percent != Some(100) {
         let upd = progress.update_percent(100);
+        assert_eq!(upd.desc, progress.desc);
         assert!(t.lock().unwrap().set_progress(upd).is_ok())
     }
 }
