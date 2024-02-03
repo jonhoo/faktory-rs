@@ -165,7 +165,7 @@ jobs:
         run: cargo llvm-cov --locked --all-features --lcov --output-path lcov.info
         env: # set this explicitly so integration tests will run
           FAKTORY_URL: tcp://127.0.0.1:7419
-      - name: record Rust version
+      - name: Record Rust version
         run: echo "RUST=$(rustc --version)" >> "$GITHUB_ENV"
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v4
