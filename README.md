@@ -78,3 +78,6 @@ Please note that setting "FAKTORY_URL" environment variable is required for e2e 
 Provided you have [make](https://www.gnu.org/software/make/#download) installed and `docker` daemon running,
 you can launch a `Faktory` container with `make faktory` command. After that, hit `make test/e2e` to run the end-to-end test suite.
 Remove the container with `make faktory/kill`, if it's no longer needed.
+
+To run end-to-end tests for the crate's `tls` feature, ensure you've got the [`compose`](https://docs.docker.com/compose/install/) docker plugin installed.
+Run `make faktory/tls` to spin up `Faktory` behind `NGINX` with ssl termination, then run `make test/e2e/tls`. To remove the containers, hit `make faktory/tls/kill`.
