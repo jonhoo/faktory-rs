@@ -1,3 +1,6 @@
+#[cfg(doc)]
+use crate::Tracker;
+
 use crate::{Error, Job, Producer};
 use chrono::{DateTime, Utc};
 use derive_builder::Builder;
@@ -80,7 +83,7 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// effectively building a pipeline this way, since the Faktory guarantees that callback jobs will not be queued unless
 /// the batch gets committed.
 ///
-/// You can retieve the batch status using a [`Tracker`](struct.Tracker.html):
+/// You can retieve the batch status using a [`Tracker`]:
 /// ```no_run
 /// # use faktory::Error;
 /// # use faktory::{Producer, Job, Batch, Tracker, CallbackState};
