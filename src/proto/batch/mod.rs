@@ -222,12 +222,10 @@ impl<'a, S: Read + Write> BatchHandle<'a, S> {
     /// Add the given job to the batch.
     ///
     /// Should the submitted job - for whatever reason - already have a `bid` key present in its custom hash,
-    /// this value will be overwritten by the ID of the batch this job is being added to with the old value 
+    /// this value will be overwritten by the ID of the batch this job is being added to with the old value
     /// returned as `Some(<old value here>)`.
     pub fn add(&mut self, mut job: Job) -> Result<Option<serde_json::Value>, Error> {
-        let bid = job
-            .custom
-            .insert("bid".into(), self.bid.clone().into());
+        let bid = job.custom.insert("bid".into(), self.bid.clone().into());
         self.prod.enqueue(job).map(|_| bid)
     }
 
