@@ -50,13 +50,12 @@ fn roundtrip() {
             Ok(())
         });
     }
-
     let mut c = c.connect(None).unwrap();
+
     let mut p = Producer::connect(None).unwrap();
     p.enqueue(Job::new(local, vec!["z"]).on_queue(local))
         .unwrap();
     c.run_one(0, &[local]).unwrap();
-
     let job = rx.recv().unwrap();
     assert_eq!(job.queue, local);
     assert_eq!(job.kind(), local);
