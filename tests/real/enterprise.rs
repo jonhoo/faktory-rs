@@ -919,7 +919,10 @@ fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
     let s = t.get_batch_status(bid.clone()).unwrap().unwrap();
     assert_eq!(s.total, 0);
     assert_eq!(s.complete_callback_state.to_string(), "FinishedOk");
-    assert_eq!(s.success_callback_state.to_string(), "FinishedOk");
+    // Still `Enqueued` due to the fact that it was not finished with success.
+    // Had we registered a handler for `success_cb_jobtype` returing Ok(()) rather then Err(),
+    // the state would be `FinishedOk` just like it's the case with the `complete` callback.
+    assert_eq!(s.success_callback_state.to_string(), "Enqueued");
 }
 
 #[test]
