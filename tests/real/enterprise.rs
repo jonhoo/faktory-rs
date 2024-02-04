@@ -588,7 +588,7 @@ fn test_batch_of_jobs_can_be_initiated() {
 
     assert!(b.add(job_1).unwrap().is_none());
     assert!(b.add(job_2).unwrap().is_none());
-    assert_eq!(b.add(job_3).unwrap().unwrap(), "check-check");
+    assert_eq!(b.add(job_3).unwrap().unwrap(), Value::from("check-check"));
     b.commit().unwrap();
 
     // The batch has been committed, let's see its status:
