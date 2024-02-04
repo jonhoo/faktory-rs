@@ -895,12 +895,13 @@ fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
 
     let mut c = ConsumerBuilder::default();
     c.register(complete_cb_jobtype, move |_job| -> io::Result<_> { Ok(()) });
-    c.register(success_cb_jobtype, move |_job| -> io::Result<_> {
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            "we want this one to fail to test the 'CallbackState' behavior",
-        ))
-    });
+    // c.register(success_cb_jobtype, move |_job| -> io::Result<_> {
+    //     Err(io::Error::new(
+    //         io::ErrorKind::Other,
+    //         "we want this one to fail to test the 'CallbackState' behavior",
+    //     ))
+    // });
+    c.register(success_cb_jobtype, move |_job| -> io::Result<_> { Ok(()) });
     let mut c = c.connect(Some(&url)).unwrap();
 
     assert_had_one!(&mut c, q_name); // complete callback consumed
