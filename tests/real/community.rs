@@ -38,6 +38,7 @@ fn hello_c() {
 fn roundtrip() {
     skip_check!();
     let local = "roundtrip";
+    let local_job = || Job::new(local, vec!["z"]).on_queue(local);
 
     let (tx, rx) = sync::mpsc::channel();
     let tx = sync::Arc::new(sync::Mutex::new(tx));
@@ -50,12 +51,48 @@ fn roundtrip() {
             Ok(())
         });
     }
-    let mut c = c.connect(None).unwrap();
 
-    let mut p = Producer::connect(None).unwrap();
-    p.enqueue(Job::new(local, vec!["z"]).on_queue(local))
-        .unwrap();
-    c.run_one(0, &[local]).unwrap();
+    if cfg!(feature = "tls") && std::env::var_os("FAKTORY_URL_SECURE").is_some() {
+        use native_tls::{Certificate, TlsConnector};
+        use std::{env, fs::File, io::Read};
+
+        let mut cert = String::new();
+        let cert_path = env::current_dir()
+            .unwrap()
+            .join("docker")
+            .join("certs")
+            .join("faktory.local.crt");
+        File::open(cert_path)
+            .and_then(|mut f| f.read_to_string(&mut cert))
+            .unwrap();
+        let tls = || {
+            let cert = Certificate::from_pem(cert.as_bytes()).unwrap();
+            let connector = TlsConnector::builder()
+                .add_root_certificate(cert)
+                .build()
+                .unwrap();
+            TlsStream::with_connector(
+                connector,
+                Some(
+                    std::env::var_os("FAKTORY_URL_SECURE")
+                        .unwrap()
+                        .to_str()
+                        .unwrap(),
+                ),
+            )
+            .unwrap()
+        };
+        let mut c = c.connect_with(tls(), None).unwrap();
+        let mut p = Producer::connect_with(tls(), None).unwrap();
+        p.enqueue(local_job()).unwrap();
+        c.run_one(0, &[local]).unwrap();
+    } else {
+        let mut c = c.connect(None).unwrap();
+        let mut p = Producer::connect(None).unwrap();
+        p.enqueue(local_job()).unwrap();
+        c.run_one(0, &[local]).unwrap();
+    }
+
     let job = rx.recv().unwrap();
     assert_eq!(job.queue, local);
     assert_eq!(job.kind(), local);
