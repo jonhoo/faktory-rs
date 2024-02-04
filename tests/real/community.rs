@@ -38,7 +38,6 @@ fn hello_c() {
 fn roundtrip() {
     skip_check!();
     let local = "roundtrip";
-    let local_job = || Job::new(local, vec!["z"]).on_queue(local);
 
     let (tx, rx) = sync::mpsc::channel();
     let tx = sync::Arc::new(sync::Mutex::new(tx));
@@ -52,46 +51,82 @@ fn roundtrip() {
         });
     }
 
-    if cfg!(feature = "tls") && std::env::var_os("FAKTORY_URL_SECURE").is_some() {
-        use native_tls::{Certificate, TlsConnector};
-        use std::{env, fs::File, io::Read};
+    let mut c = c.connect(None).unwrap();
+    let mut p = Producer::connect(None).unwrap();
+    p.enqueue(Job::new(local, vec!["z"]).on_queue(local))
+        .unwrap();
+    c.run_one(0, &[local]).unwrap();
 
-        let mut cert = String::new();
-        let cert_path = env::current_dir()
-            .unwrap()
-            .join("docker")
-            .join("certs")
-            .join("faktory.local.crt");
-        File::open(cert_path)
-            .and_then(|mut f| f.read_to_string(&mut cert))
-            .unwrap();
-        let tls = || {
+    let job = rx.recv().unwrap();
+    assert_eq!(job.queue, local);
+    assert_eq!(job.kind(), local);
+    assert_eq!(job.args(), &[Value::from("z")]);
+}
+
+#[test]
+#[cfg(feature = "tls")]
+fn roundtrip_tls() {
+    use native_tls::{Certificate, TlsConnector};
+    use std::{env, fs::File, io::Read};
+
+    if env::var_os("FAKTORY_URL").is_none() || env::var_os("FAKTORY_URL_SECURE").is_none() {
+        return;
+    }
+    let local = "roundtrip_tls";
+
+    let (tx, rx) = sync::mpsc::channel();
+    let tx = sync::Arc::new(sync::Mutex::new(tx));
+    let mut c = ConsumerBuilder::default();
+    c.hostname("tester".to_string()).wid(local.to_string());
+    {
+        let tx = sync::Arc::clone(&tx);
+        c.register(local, move |j| -> io::Result<()> {
+            tx.lock().unwrap().send(j).unwrap();
+            Ok(())
+        });
+    }
+
+    let mut cert = String::new();
+    let cert_path = env::current_dir()
+        .unwrap()
+        .join("docker")
+        .join("certs")
+        .join("faktory.local.crt");
+    File::open(cert_path)
+        .and_then(|mut f| f.read_to_string(&mut cert))
+        .unwrap();
+    let tls = || {
+        let connector = if cfg!(target_os = "macos") {
+            TlsConnector::builder()
+                // Danger! Only for testing!
+                // On the macos CI runner, the certs are not trusted:
+                // { code: -67843, message: "The certificate was not trusted." }
+                .danger_accept_invalid_certs(true)
+                .build()
+                .unwrap()
+        } else {
             let cert = Certificate::from_pem(cert.as_bytes()).unwrap();
-            let connector = TlsConnector::builder()
+            TlsConnector::builder()
                 .add_root_certificate(cert)
                 .build()
-                .unwrap();
-            TlsStream::with_connector(
-                connector,
-                Some(
-                    std::env::var_os("FAKTORY_URL_SECURE")
-                        .unwrap()
-                        .to_str()
-                        .unwrap(),
-                ),
-            )
-            .unwrap()
+                .unwrap()
         };
-        let mut c = c.connect_with(tls(), None).unwrap();
-        let mut p = Producer::connect_with(tls(), None).unwrap();
-        p.enqueue(local_job()).unwrap();
-        c.run_one(0, &[local]).unwrap();
-    } else {
-        let mut c = c.connect(None).unwrap();
-        let mut p = Producer::connect(None).unwrap();
-        p.enqueue(local_job()).unwrap();
-        c.run_one(0, &[local]).unwrap();
-    }
+        TlsStream::with_connector(
+            connector,
+            Some(
+                std::env::var_os("FAKTORY_URL_SECURE")
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
+            ),
+        )
+        .unwrap()
+    };
+    let mut c = c.connect_with(tls(), None).unwrap();
+    let mut p = Producer::connect_with(tls(), None).unwrap();
+    p.enqueue(Job::new(local, vec!["z"]).on_queue(local))
+        .unwrap();
+    c.run_one(0, &[local]).unwrap();
 
     let job = rx.recv().unwrap();
     assert_eq!(job.queue, local);
