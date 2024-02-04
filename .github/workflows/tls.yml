@@ -13,12 +13,11 @@ concurrency:
 name: tls
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
-    name: ${{ matrix.os }} / ${{ matrix.toolchain }} / tls
+    runs-on: ubuntu-latest
+    name: ubuntu-latest / ${{ matrix.toolchain }} / tls
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
         # run on stable and beta to ensure that tests won't break on the next version 
         # of the rust toolchain
         toolchain: [stable, beta]
@@ -26,19 +25,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      # Unlike 'ubuntu' and 'windows', 'macos' runner image will not have `docker` and `compose` pre-installed,
-      # see: https://github.com/actions/runner-images/blob/main/images/macos/macos-14-arm64-Readme.md#tools.
-      # Installing missing tools as advised in the issue discussion: 
-      # https://github.com/actions/runner-images/issues/17#issuecomment-1537238473
-      - name: Setup docker on macos
-        if: runner.os == 'macos'
-        run: |
-          brew install docker
-          brew install docker-compose
-          mkdir -p ~/.docker/cli-plugins
-          sudo ln -sfn /usr/local/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugins/docker-compose
-          sudo ln -sf $HOME/.colima/default/docker.sock /var/run/docker.sock
-          colima start
       - name: Launch Faktory behind NGINX
         run: docker compose -f docker/compose.yml up -d
       - name: Install ${{ matrix.toolchain }}
