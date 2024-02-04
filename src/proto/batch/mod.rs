@@ -220,9 +220,16 @@ impl<'a, S: Read + Write> BatchHandle<'a, S> {
     }
 
     /// Add the given job to the batch.
-    pub fn add(&mut self, mut job: Job) -> Result<(), Error> {
-        job.custom.insert("bid".into(), self.bid.clone().into());
-        self.prod.enqueue(job)
+    ///
+    /// Should the submitted job - for whatever reason - already have a `bid` (batch ID) specified
+    /// in its custom hash, this value will be overwritten by the ID of the batch this job is being added to
+    /// with the old value returned as `Some(<old value here>)`.
+    pub fn add(&mut self, mut job: Job) -> Result<Option<String>, Error> {
+        let bid = job
+            .custom
+            .insert("bid".into(), self.bid.clone().into())
+            .map(|bid| bid.to_string());
+        self.prod.enqueue(job).map(|_| bid)
     }
 
     /// Initiate a child batch of jobs.

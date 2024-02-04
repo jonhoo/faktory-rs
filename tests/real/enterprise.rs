@@ -568,6 +568,7 @@ fn test_batch_of_jobs_can_be_initiated() {
     let job_3 = Job::builder("thumbnail")
         .args(vec!["path/to/original/image3"])
         .queue("test_batch_of_jobs_can_be_initiated")
+        .add_to_custom_data("bid", "check-check")
         .build();
 
     let cb_job = Job::builder("clean_up")
@@ -585,9 +586,9 @@ fn test_batch_of_jobs_can_be_initiated() {
     // let's remember batch id:
     let bid = b.id().to_string();
 
-    b.add(job_1).unwrap();
-    b.add(job_2).unwrap();
-    b.add(job_3).unwrap();
+    assert!(b.add(job_1).unwrap().is_none());
+    assert!(b.add(job_2).unwrap().is_none());
+    assert_eq!(b.add(job_3).unwrap().unwrap(), "check-check");
     b.commit().unwrap();
 
     // The batch has been committed, let's see its status:
