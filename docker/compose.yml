@@ -1,0 +1,16 @@
+services:
+  faktory:
+    image: contribsys/faktory:latest
+    command: "/faktory -b :7419 -w :7420"
+  nginx:
+    depends_on:
+      - faktory
+    image: nginx:1.25-alpine
+    ports:
+      - "127.0.0.1:7419:7419"
+      - "127.0.0.1:7420:7420"
+      - "127.0.0.1:17419:17419"
+      - "127.0.0.1:17420:17420"
+    volumes:
+      - ./nginx:/etc/nginx:ro
+      - ./certs:/etc/ssl/certs:ro

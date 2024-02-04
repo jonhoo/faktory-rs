@@ -1,5 +1,6 @@
-FAKTORY_HOST=127.0.0.1
+FAKTORY_HOST=localhost
 FAKTORY_PORT=7419
+FAKTORY_PORT_SECURE=17419
 FAKTORY_PORT_UI=7420
 
 .PHONY: check
@@ -26,6 +27,14 @@ faktory:
 faktory/kill:
 	docker stop faktory
 
+.PHONY: faktory/tls
+faktory/tls:
+	docker compose -f docker/compose.yml up -d
+
+.PHONY: faktory/tls/kill
+faktory/tls/kill:
+	docker compose -f docker/compose.yml down
+
 README.md: README.tpl src/lib.rs
 	cargo readme > README.md
 
@@ -40,6 +49,12 @@ test/doc:
 .PHONY: test/e2e
 test/e2e:
 	FAKTORY_URL=tcp://${FAKTORY_HOST}:${FAKTORY_PORT} cargo test --locked --all-features --all-targets
+
+.PHONY: test/e2e/tls
+test/e2e/tls:
+	FAKTORY_URL=tcp://${FAKTORY_HOST}:${FAKTORY_PORT} \
+	FAKTORY_URL_SECURE=tcp://${FAKTORY_HOST}:${FAKTORY_PORT_SECURE} \
+	cargo test --locked --all-features --all-targets
 
 .PHONY: test/load
 test/load:
