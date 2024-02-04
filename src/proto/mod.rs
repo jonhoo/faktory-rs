@@ -24,7 +24,8 @@ pub use self::single::ent::{
 mod batch;
 #[cfg(feature = "ent")]
 pub use batch::{
-    Batch, BatchBuilder, BatchHandle, BatchStatus, CommitBatch, GetBatchStatus, OpenBatch,
+    Batch, BatchBuilder, BatchHandle, BatchStatus, CallbackState, CommitBatch, GetBatchStatus,
+    OpenBatch,
 };
 
 pub(crate) fn get_env_url() -> String {

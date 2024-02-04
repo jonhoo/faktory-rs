@@ -119,7 +119,7 @@ pub enum JobState {
     Dead,
 }
 
-impl Display for JobState {
+impl std::fmt::Display for JobState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use JobState::*;
         let s = match self {
@@ -246,10 +246,7 @@ pub fn set_progress(jid: impl Into<String>, percent: u8) -> ProgressUpdate {
 // ----------------------------------------------
 
 use super::FaktoryCommand;
-use std::{
-    fmt::{Debug, Display},
-    io::Write,
-};
+use std::{fmt::Debug, io::Write};
 
 #[derive(Debug, Clone)]
 pub enum Track {

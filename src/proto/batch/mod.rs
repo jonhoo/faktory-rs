@@ -83,7 +83,7 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// You can retieve the batch status using a [`Tracker`](struct.Tracker.html):
 /// ```no_run
 /// # use faktory::Error;
-/// # use faktory::{Producer, Job, Batch, Tracker};
+/// # use faktory::{Producer, Job, Batch, Tracker, CallbackState};
 /// let mut prod = Producer::connect(None)?;
 /// let job = Job::builder("job_type").build();
 /// let cb_job = Job::builder("callback_job_type").build();
@@ -101,7 +101,11 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// assert_eq!(s.total, 1);
 /// assert_eq!(s.pending, 1);
 /// assert_eq!(s.description, Some("Batch description".into()));
-/// assert_eq!(s.complete_callback_state, ""); // has not been queued;
+///
+/// match s.complete_callback_state {
+///     CallbackState::Pending => {},
+///     _ => panic!("The jobs of this batch have not executed, so the callback job is expected to _not_ have fired"),
+/// }
 /// # Ok::<(), Error>(())
 /// ```
 #[derive(Builder, Debug, Serialize)]
@@ -235,6 +239,34 @@ impl<'a, S: Read + Write> BatchHandle<'a, S> {
     }
 }
 
+// Not documented, but existing de fakto and also mentioned in the official client
+// https://github.com/contribsys/faktory/blob/main/client/batch.go#L17-L19
+/// State of a `callback` job of a [`Batch`].
+#[derive(Debug, Clone, Deserialize)]
+pub enum CallbackState {
+    /// Not enqueued yet.
+    #[serde(rename = "")]
+    Pending,
+    /// Enqueued by the server, because the jobs belonging to this batch have finished executing.
+    #[serde(rename = "1")]
+    Enqueued,
+    /// The enqueued callback job has been consumed.
+    #[serde(rename = "2")]
+    FinishedOk,
+}
+
+impl std::fmt::Display for CallbackState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use CallbackState::*;
+        let s = match self {
+            Pending => "Pending",
+            Enqueued => "Enqueued",
+            FinishedOk => "FinishedOk",
+        };
+        write!(f, "{}", s)
+    }
+}
+
 /// Batch status retrieved from Faktory server.
 #[derive(Deserialize, Debug)]
 pub struct BatchStatus {
@@ -267,13 +299,13 @@ pub struct BatchStatus {
     ///
     /// See [with_complete_callback](struct.BatchBuilder.html#method.with_complete_callback).
     #[serde(rename = "complete_st")]
-    pub complete_callback_state: String,
+    pub complete_callback_state: CallbackState,
 
     /// State of the `success` callback.
     ///
     /// See [with_success_callback](struct.BatchBuilder.html#method.with_success_callback).
     #[serde(rename = "success_st")]
-    pub success_callback_state: String,
+    pub success_callback_state: CallbackState,
 }
 
 #[cfg(feature = "ent")]
