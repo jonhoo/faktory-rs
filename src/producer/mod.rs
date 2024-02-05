@@ -2,10 +2,11 @@ use crate::error::Error;
 use crate::proto::{
     self, parse_provided_or_from_env, Client, Info, Job, Push, QueueAction, QueueControl,
 };
-#[cfg(feature = "ent")]
-use crate::proto::{Batch, BatchHandle, CommitBatch, OpenBatch};
 use std::io::prelude::*;
 use std::net::TcpStream;
+
+#[cfg(feature = "ent")]
+use crate::proto::{Batch, BatchHandle, CommitBatch, OpenBatch};
 
 /// `Producer` is used to enqueue new jobs that will in turn be processed by Faktory workers.
 ///
