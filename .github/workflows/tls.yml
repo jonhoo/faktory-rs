@@ -14,28 +14,19 @@ name: tls
 jobs:
   test:
     runs-on: ubuntu-latest
-    name: ubuntu-latest / ${{ matrix.toolchain }} / tls
-    strategy:
-      fail-fast: false
-      matrix:
-        # run on stable and beta to ensure that tests won't break on the next version 
-        # of the rust toolchain
-        toolchain: [stable, beta]
+    name: ubuntu-latest / stable / tls
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
       - name: Launch Faktory behind NGINX
         run: docker compose -f docker/compose.yml up -d
-      - name: Install ${{ matrix.toolchain }}
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.toolchain }}
+      - name: Install stable
+        uses: dtolnay/rust-toolchain@stable
       - name: cargo generate-lockfile
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
       - name: Run tests
         env:
-          FAKTORY_URL: tcp://localhost:7419
           FAKTORY_URL_SECURE: tcp://localhost:17419
-        run: cargo test --locked --features tls --all-targets
+        run: cargo test --locked --features tls --test tls
