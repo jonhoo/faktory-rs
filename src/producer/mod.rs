@@ -147,10 +147,7 @@ impl<S: Read + Write> Producer<S> {
     #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
     pub fn open_batch(&mut self, bid: String) -> Result<Option<BatchHandle<'_, S>>, Error> {
         let bid = self.c.issue(&OpenBatch::from(bid))?.maybe_bid()?;
-        match bid {
-            Some(bid) => Ok(Some(BatchHandle::new(bid, self))),
-            None => Ok(None),
-        }
+        Ok(bid.map(|bid| BatchHandle::new(bid, self)))
     }
 
     #[cfg(feature = "ent")]
