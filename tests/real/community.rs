@@ -171,11 +171,11 @@ fn test_jobs_created_with_builder() {
     // prepare a producer ("client" in Faktory terms) and consumer ("worker"):
     let mut producer = Producer::connect(None).unwrap();
     let mut consumer = ConsumerBuilder::default();
-    consumer.register("rebuild_index", move |job: Job| -> io::Result<_> {
+    consumer.register("rebuild_index", move |job| -> io::Result<_> {
         assert!(job.args().is_empty());
         Ok(eprintln!("{:?}", job))
     });
-    consumer.register("register_order", move |job: Job| -> io::Result<_> {
+    consumer.register("register_order", move |job| -> io::Result<_> {
         assert!(job.args().len() != 0);
         Ok(eprintln!("{:?}", job))
     });

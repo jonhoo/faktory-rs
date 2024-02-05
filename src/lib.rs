@@ -42,10 +42,10 @@
 //! If you want to **accept** jobs from Faktory, use `Consumer`.
 //!
 //! ```no_run
-//! use faktory::{ConsumerBuilder, Job};
+//! use faktory::ConsumerBuilder;
 //! use std::io;
 //! let mut c = ConsumerBuilder::default();
-//! c.register("foobar", |job: Job| -> io::Result<()> {
+//! c.register("foobar", |job| -> io::Result<()> {
 //!     println!("{:?}", job);
 //!     Ok(())
 //! });
