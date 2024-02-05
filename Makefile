@@ -35,9 +35,6 @@ faktory/tls:
 faktory/tls/kill:
 	docker compose -f docker/compose.yml down
 
-README.md: README.tpl src/lib.rs
-	cargo readme > README.md
-
 .PHONY: test
 test:
 	cargo t --locked --all-features --all-targets
