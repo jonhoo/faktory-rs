@@ -185,7 +185,7 @@ impl JobBuilder {
     /// In Enterprise Faktory, a progress update can be sent and received only for the jobs
     /// that have been explicitly marked as trackable via `"track":1` in the job's custom hash.
     /// In case you have a reason to opt out of tracking, either unset (remove) the "track" on
-    /// the resulted job's [`custom`](Job::custom) hash or set to 0.
+    /// the resulted job's [`custom`](Job::custom) hash or set it to 0.
     pub fn build(&mut self) -> Job {
         if cfg!(feature = "ent") {
             self.add_to_custom_data("track", 1);
