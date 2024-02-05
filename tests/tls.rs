@@ -4,19 +4,17 @@ extern crate url;
 
 use faktory::*;
 use serde_json::Value;
-use std::io;
-use std::sync;
+use std::{env, fs, io, sync};
 
 #[test]
 #[cfg(feature = "tls")]
 fn roundtrip_tls() {
     use native_tls::{Certificate, TlsConnector};
-    use std::{env, fs::File, io::Read};
 
     // We are utilizing the fact that the "FAKTORY_URL_SECURE" environment variable is set
     // as an indicator that the integration test can and should be performed.
     //
-    // In case the variable is not set we are returning early. This will show `test <test name> ... ok` 
+    // In case the variable is not set we are returning early. This will show `test <test name> ... ok`
     // in the test run output, which is admittedly confusing. Ideally, we would like to be able to decorate
     // a test with a macro and to see something like `test <test name> ... skipped due to <reason>`, in case
     // the test has been skipped, but it is currently not "natively" supported.
@@ -40,15 +38,13 @@ fn roundtrip_tls() {
         });
     }
 
-    let mut cert = String::new();
     let cert_path = env::current_dir()
         .unwrap()
         .join("docker")
         .join("certs")
         .join("faktory.local.crt");
-    File::open(cert_path)
-        .and_then(|mut f| f.read_to_string(&mut cert))
-        .unwrap();
+    let cert = fs::read_to_string(cert_path).unwrap();
+
     let tls = || {
         let connector = if cfg!(target_os = "macos") {
             TlsConnector::builder()
@@ -65,16 +61,8 @@ fn roundtrip_tls() {
                 .build()
                 .unwrap()
         };
-        TlsStream::with_connector(
-            connector,
-            Some(
-                std::env::var_os("FAKTORY_URL_SECURE")
-                    .unwrap()
-                    .to_str()
-                    .unwrap(),
-            ),
-        )
-        .unwrap()
+        TlsStream::with_connector(connector, Some(&env::var("FAKTORY_URL_SECURE").unwrap()))
+            .unwrap()
     };
     let mut c = c.connect_with(tls(), None).unwrap();
     let mut p = Producer::connect_with(tls(), None).unwrap();
