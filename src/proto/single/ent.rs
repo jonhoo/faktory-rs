@@ -213,6 +213,11 @@ pub struct ProgressUpdate {
 }
 
 impl ProgressUpdate {
+    /// Create an instance of `ProgressUpdate` for the job with this ID specifying its completion percentage.
+    pub fn set(jid: impl Into<String>, percent: u8) -> ProgressUpdate {
+        ProgressUpdate::builder(jid).percent(percent).build()
+    }
+
     /// Create a new instance of `ProgressUpdateBuilder` with job ID already set.
     ///
     /// Equivalent to creating a [new](struct.ProgressUpdateBuilder.html#method.new)
@@ -236,11 +241,6 @@ impl ProgressUpdateBuilder {
             ..ProgressUpdateBuilder::create_empty()
         }
     }
-}
-
-/// Create an instance of `ProgressUpdate` for the job specifying its completion percentage.
-pub fn set_progress(jid: impl Into<String>, percent: u8) -> ProgressUpdate {
-    ProgressUpdate::builder(jid).percent(percent).build()
 }
 
 // ----------------------------------------------

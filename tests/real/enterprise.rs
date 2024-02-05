@@ -448,7 +448,7 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
         assert!(t_captured
             .lock()
             .unwrap()
-            .set_progress(set_progress(&job_id_captured, 33))
+            .set_progress(ProgressUpdate::set(&job_id_captured, 33))
             .is_ok());
 
         // let's sleep for a while ...

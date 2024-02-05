@@ -16,9 +16,7 @@ pub use self::single::{
 };
 
 #[cfg(feature = "ent")]
-pub use self::single::ent::{
-    set_progress, JobState, Progress, ProgressUpdate, ProgressUpdateBuilder, Track,
-};
+pub use self::single::ent::{JobState, Progress, ProgressUpdate, ProgressUpdateBuilder, Track};
 
 #[cfg(feature = "ent")]
 mod batch;
