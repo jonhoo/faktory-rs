@@ -226,7 +226,7 @@ impl ProgressUpdateBuilder {
     /// Builds an instance of ProgressUpdate.
     pub fn build(&self) -> ProgressUpdate {
         self.try_build()
-            .expect("All required fields have been set.")
+            .expect("Only jid is required, and it is set by all constructors.")
     }
 
     /// Create a new instance of `JobBuilder`
