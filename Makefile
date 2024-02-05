@@ -29,7 +29,7 @@ faktory/kill:
 
 .PHONY: faktory/tls
 faktory/tls:
-	docker compose -f docker/compose.yml up -d
+	docker compose -f docker/compose.yml up -d --build
 
 .PHONY: faktory/tls/kill
 faktory/tls/kill:

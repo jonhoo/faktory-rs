@@ -20,7 +20,7 @@ jobs:
         with:
           submodules: true
       - name: Launch Faktory behind NGINX
-        run: docker compose -f docker/compose.yml up -d
+        run: docker compose -f docker/compose.yml up -d --build
       - name: Install stable
         uses: dtolnay/rust-toolchain@stable
       - name: cargo generate-lockfile
