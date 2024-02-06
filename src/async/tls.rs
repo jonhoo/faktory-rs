@@ -2,7 +2,6 @@ use std::fmt::Debug;
 use std::io;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream as TokioTcpStream;
 use tokio_rustls::client::TlsStream;
@@ -27,9 +26,11 @@ use crate::{proto, AsyncReconnect, Error};
 /// # })
 /// ```
 ///
+#[pin_project::pin_project]
 pub struct AsyncTlsStream<S> {
     connector: TlsConnector,
     hostname: String,
+    #[pin]
     stream: TlsStream<S>,
 }
 
@@ -145,33 +146,33 @@ impl<S> DerefMut for AsyncTlsStream<S> {
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for AsyncTlsStream<S> {
     fn poll_read(
         self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
-        _buf: &mut tokio::io::ReadBuf<'_>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<io::Result<()>> {
-        todo!()
+        self.project().stream.poll_read(cx, buf)
     }
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for AsyncTlsStream<S> {
     fn poll_write(
         self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
-        _buf: &[u8],
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
     ) -> std::task::Poll<Result<usize, io::Error>> {
-        todo!();
+        self.project().stream.poll_write(cx, buf)
     }
 
     fn poll_flush(
         self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
+        cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), io::Error>> {
-        todo!();
+        self.project().stream.poll_flush(cx)
     }
 
     fn poll_shutdown(
         self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
+        cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), io::Error>> {
-        todo!();
+        self.project().stream.poll_shutdown(cx)
     }
 }

@@ -46,6 +46,7 @@ tokio = { version = "1.35.1", features = [
 ] }
 async-trait = "0.1.77"
 tokio-rustls = "0.25.0"
+pin-project = "1.1.4"
 
 [dev-dependencies]
 mockstream = "0.0.3"
