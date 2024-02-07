@@ -7,6 +7,7 @@ check:
 	cargo fmt --check
 	cargo clippy
 	cargo d --no-deps --all-features
+	cargo +nightly fmt -- --config group_imports=one --check
 
 .PHONY: doc
 doc:
