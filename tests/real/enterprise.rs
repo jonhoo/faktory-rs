@@ -1034,6 +1034,11 @@ fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
     // a nested batch INSTEAD OF ERRORING BACK.
     // ############################ END OF SUBTEST 3 #######################################
 
+    // The following subtest assertions should be adjusted once fixes are introduced to
+    // the Faktory as per https://github.com/contribsys/faktory/issues/465
+    // The idea is we should not be able to push to a batch for which the server have already
+    // enqeued a callback.
+    //
     // ############################## SUBTEST 4 ############################################
     // From the docs:
     // """Once a callback has enqueued for a batch, you may not add anything to the batch."""
