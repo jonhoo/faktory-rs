@@ -12,7 +12,7 @@ mod single;
 
 // commands that users can issue
 pub use self::single::{
-    Ack, Fail, Heartbeat, Info, Job, JobBuilder, Push, QueueAction, QueueControl,
+    Ack, Fail, Heartbeat, Info, Job, JobBuilder, Push, PushBulk, QueueAction, QueueControl,
 };
 
 pub(crate) fn get_env_url() -> String {

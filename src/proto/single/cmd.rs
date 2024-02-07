@@ -245,6 +245,31 @@ impl FaktoryCommand for Push {
 
 // ----------------------------------------------
 
+pub struct PushBulk<'a>(&'a [Job]);
+
+impl<'a> Deref for PushBulk<'a> {
+    type Target = &'a [Job];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'a> From<&'a [Job]> for PushBulk<'a> {
+    fn from(jobs: &'a [Job]) -> Self {
+        PushBulk(jobs)
+    }
+}
+
+impl<'a> FaktoryCommand for PushBulk<'a> {
+    fn issue<W: Write>(&self, w: &mut W) -> Result<(), Error> {
+        w.write_all(b"PUSHB ")?;
+        serde_json::to_writer(&mut *w, &**self).map_err(Error::Serialization)?;
+        Ok(w.write_all(b"\r\n")?)
+    }
+}
+
+// ----------------------------------------------
+
 pub enum QueueAction {
     Pause,
     Resume,
