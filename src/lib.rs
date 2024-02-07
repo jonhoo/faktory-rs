@@ -73,12 +73,11 @@ mod proto;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 mod tls;
-#[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
-pub use tls::TlsStream;
-
 pub use crate::consumer::{Consumer, ConsumerBuilder};
 pub use crate::error::Error;
 pub use crate::producer::Producer;
 pub use crate::proto::Reconnect;
 pub use crate::proto::{Job, JobBuilder};
+#[cfg(feature = "tls")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
+pub use tls::TlsStream;

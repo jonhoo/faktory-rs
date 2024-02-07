@@ -1,5 +1,4 @@
 use crate::{error::Error, Job};
-
 use std::io::prelude::*;
 
 pub trait FaktoryCommand {

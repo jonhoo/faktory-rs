@@ -1,6 +1,5 @@
-use chrono::{DateTime, Utc};
-
 use crate::JobBuilder;
+use chrono::{DateTime, Utc};
 
 impl JobBuilder {
     /// When Faktory should expire this job.
@@ -76,9 +75,8 @@ impl JobBuilder {
 
 #[cfg(test)]
 mod test {
-    use chrono::{DateTime, Utc};
-
     use crate::JobBuilder;
+    use chrono::{DateTime, Utc};
 
     fn half_stuff() -> JobBuilder {
         let mut job = JobBuilder::new("order");

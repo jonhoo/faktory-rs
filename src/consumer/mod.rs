@@ -1,12 +1,11 @@
 use crate::error::Error;
 use crate::proto::{self, Client, ClientOptions, HeartbeatStatus, Reconnect};
+use crate::proto::{Ack, Fail, Job};
 use fnv::FnvHashMap;
 use std::error::Error as StdError;
 use std::io::prelude::*;
 use std::net::TcpStream;
 use std::sync::{atomic, Arc, Mutex};
-
-use crate::proto::{Ack, Fail, Job};
 
 const STATUS_RUNNING: usize = 0;
 const STATUS_QUIET: usize = 1;

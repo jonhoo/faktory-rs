@@ -12,9 +12,8 @@ pub fn gen_random_jid() -> String {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashSet;
-
     use super::*;
+    use std::collections::HashSet;
 
     #[test]
     fn test_jid_of_known_size_generated() {

@@ -11,10 +11,9 @@ mod utils;
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
 mod ent;
 
-use crate::error::Error;
-
 pub use self::cmd::*;
 pub use self::resp::*;
+use crate::error::Error;
 
 const JOB_DEFAULT_QUEUE: &str = "default";
 const JOB_DEFAULT_RESERVED_FOR_SECS: usize = 600;
