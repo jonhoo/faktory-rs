@@ -1,4 +1,4 @@
-use crate::{consumer::WorkerState, proto::Fail, Job};
+use crate::{proto::Fail, Job};
 use fnv::FnvHashMap;
 use std::{
     future::Future,
@@ -6,6 +6,8 @@ use std::{
     pin::Pin,
     sync::Mutex,
 };
+
+// --------------- CALLBACKS (Job Handlers) ----------------
 
 type AsyncJobRunner<E> =
     dyn Send + Sync + Fn(Job) -> Pin<Box<dyn Future<Output = Result<(), E>> + Send>>;
@@ -30,6 +32,14 @@ impl<E> Default for CallbacksRegistry<E> {
     fn default() -> CallbacksRegistry<E> {
         Self(FnvHashMap::default())
     }
+}
+
+// -------------------- WORKER STATES ---------------------
+
+#[derive(Default)]
+pub(crate) struct WorkerState {
+    pub(crate) last_job_result: Option<Result<String, Fail>>,
+    pub(crate) running_job: Option<String>,
 }
 
 pub(crate) struct StatesRegistry(Vec<Mutex<WorkerState>>);

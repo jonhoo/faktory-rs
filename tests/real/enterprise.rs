@@ -1,29 +1,27 @@
 extern crate faktory;
-extern crate serde_json;
-extern crate url;
-
-use faktory::*;
-use std::io;
 
 use crate::skip_if_not_enterprise;
 use crate::utils::learn_faktory_url;
+use faktory::{ConsumerBuilder, Job, JobBuilder, Producer};
+use std::io;
+use tokio::time;
 
-#[test]
-fn ent_expiring_job() {
-    use std::{thread, time};
+async fn print_job(j: Job) -> io::Result<()> {
+    Ok(eprintln!("{:?}", j))
+}
 
+#[tokio::test(flavor = "multi_thread")]
+async fn ent_expiring_job() {
     skip_if_not_enterprise!();
 
     let url = learn_faktory_url();
     let local = "ent_expiring_job";
 
     // prepare a producer ("client" in Faktory terms) and consumer ("worker"):
-    let mut producer = Producer::connect(Some(&url)).unwrap();
+    let mut producer = Producer::connect(Some(&url)).await.unwrap();
     let mut consumer = ConsumerBuilder::default();
-    consumer.register("AnExpiringJob", move |job| -> io::Result<_> {
-        Ok(eprintln!("{:?}", job))
-    });
-    let mut consumer = consumer.connect(Some(&url)).unwrap();
+    consumer.register("AnExpiringJob", |j| Box::pin(print_job(j)));
+    let mut consumer = consumer.connect(Some(&url)).await.unwrap();
 
     // prepare an expiring job:
     let job_ttl_secs: u64 = 3;
@@ -36,12 +34,12 @@ fn ent_expiring_job() {
         .build();
 
     // enqueue and fetch immediately job1:
-    producer.enqueue(job1).unwrap();
-    let had_job = consumer.run_one(0, &[local]).unwrap();
+    producer.enqueue(job1).await.unwrap();
+    let had_job = consumer.run_one(0, &[local]).await.unwrap();
     assert!(had_job);
 
     // check that the queue is drained:
-    let had_job = consumer.run_one(0, &[local]).unwrap();
+    let had_job = consumer.run_one(0, &[local]).await.unwrap();
     assert!(!had_job);
 
     // prepare another one:
@@ -52,17 +50,17 @@ fn ent_expiring_job() {
         .build();
 
     // enqueue and then fetch job2, but after ttl:
-    producer.enqueue(job2).unwrap();
-    thread::sleep(time::Duration::from_secs(job_ttl_secs * 2));
-    let had_job = consumer.run_one(0, &[local]).unwrap();
+    producer.enqueue(job2).await.unwrap();
+    tokio::time::sleep(time::Duration::from_secs(job_ttl_secs * 2)).await;
+    let had_job = consumer.run_one(0, &[local]).await.unwrap();
 
     // For the non-enterprise edition of Faktory, this assertion will
     // fail, which should be taken into account when running the test suite on CI.
     assert!(!had_job);
 }
 
-#[test]
-fn ent_unique_job() {
+#[tokio::test(flavor = "multi_thread")]
+async fn ent_unique_job() {
     use faktory::error;
     use serde_json::Value;
 
@@ -73,12 +71,10 @@ fn ent_unique_job() {
     let job_type = "order";
 
     // prepare producer and consumer:
-    let mut producer = Producer::connect(Some(&url)).unwrap();
+    let mut producer = Producer::connect(Some(&url)).await.unwrap();
     let mut consumer = ConsumerBuilder::default();
-    consumer.register(job_type, |job| -> io::Result<_> {
-        Ok(eprintln!("{:?}", job))
-    });
-    let mut consumer = consumer.connect(Some(&url)).unwrap();
+    consumer.register(job_type, |j| Box::pin(print_job(j)));
+    let mut consumer = consumer.connect(Some(&url)).await.unwrap();
 
     // Reminder. Jobs are considered unique for kind + args + queue.
     // So the following two jobs, will be accepted by Faktory, since we
@@ -89,18 +85,18 @@ fn ent_unique_job() {
         .args(args.clone())
         .queue(queue_name)
         .build();
-    producer.enqueue(job1).unwrap();
+    producer.enqueue(job1).await.unwrap();
     let job2 = JobBuilder::new(job_type)
         .args(args.clone())
         .queue(queue_name)
         .build();
-    producer.enqueue(job2).unwrap();
+    producer.enqueue(job2).await.unwrap();
 
-    let had_job = consumer.run_one(0, &[queue_name]).unwrap();
+    let had_job = consumer.run_one(0, &[queue_name]).await.unwrap();
     assert!(had_job);
-    let had_another_one = consumer.run_one(0, &[queue_name]).unwrap();
+    let had_another_one = consumer.run_one(0, &[queue_name]).await.unwrap();
     assert!(had_another_one);
-    let and_that_is_it_for_now = !consumer.run_one(0, &[queue_name]).unwrap();
+    let and_that_is_it_for_now = !consumer.run_one(0, &[queue_name]).await.unwrap();
     assert!(and_that_is_it_for_now);
 
     // let's now create a unique job and followed by a job with
@@ -112,7 +108,7 @@ fn ent_unique_job() {
         .queue(queue_name)
         .unique_for(unique_for_secs)
         .build();
-    producer.enqueue(job1).unwrap();
+    producer.enqueue(job1).await.unwrap();
     // this one is a 'duplicate' ...
     let job2 = Job::builder(job_type)
         .args(args.clone())
@@ -120,7 +116,7 @@ fn ent_unique_job() {
         .unique_for(unique_for_secs)
         .build();
     // ... so the server will respond accordingly:
-    let res = producer.enqueue(job2).unwrap_err();
+    let res = producer.enqueue(job2).await.unwrap_err();
     if let error::Error::Protocol(error::Protocol::UniqueConstraintViolation { msg }) = res {
         assert_eq!(msg, "Job not unique");
     } else {
@@ -128,12 +124,12 @@ fn ent_unique_job() {
     }
 
     // Let's now consume the job which is 'holding' a unique lock:
-    let had_job = consumer.run_one(0, &[queue_name]).unwrap();
+    let had_job = consumer.run_one(0, &[queue_name]).await.unwrap();
     assert!(had_job);
 
     // And check that the queue is really empty (`job2` from above
     // has not been queued indeed):
-    let queue_is_empty = !consumer.run_one(0, &[queue_name]).unwrap();
+    let queue_is_empty = !consumer.run_one(0, &[queue_name]).await.unwrap();
     assert!(queue_is_empty);
 
     // Now let's repeat the latter case, but providing different args to job2:
@@ -142,7 +138,7 @@ fn ent_unique_job() {
         .queue(queue_name)
         .unique_for(unique_for_secs)
         .build();
-    producer.enqueue(job1).unwrap();
+    producer.enqueue(job1).await.unwrap();
     // this one is *NOT* a 'duplicate' ...
     let job2 = JobBuilder::new(job_type)
         .args(vec![Value::from("ISBN-13:9781718501850"), Value::from(101)])
@@ -150,23 +146,23 @@ fn ent_unique_job() {
         .unique_for(unique_for_secs)
         .build();
     // ... so the server will accept it:
-    producer.enqueue(job2).unwrap();
+    producer.enqueue(job2).await.unwrap();
 
-    let had_job = consumer.run_one(0, &[queue_name]).unwrap();
+    let had_job = consumer.run_one(0, &[queue_name]).await.unwrap();
     assert!(had_job);
-    let had_another_one = consumer.run_one(0, &[queue_name]).unwrap();
+    let had_another_one = consumer.run_one(0, &[queue_name]).await.unwrap();
     assert!(had_another_one);
 
     // and the queue is empty again:
-    let had_job = consumer.run_one(0, &[queue_name]).unwrap();
+    let had_job = consumer.run_one(0, &[queue_name]).await.unwrap();
     assert!(!had_job);
 }
 
-#[test]
-fn ent_unique_job_until_success() {
+#[tokio::test(flavor = "multi_thread")]
+async fn ent_unique_job_until_success() {
     use faktory::error;
-    use std::thread;
-    use std::time;
+    use std::io;
+    use tokio::time;
 
     skip_if_not_enterprise!();
 
@@ -181,42 +177,45 @@ fn ent_unique_job_until_success() {
     let unique_for = 4;
 
     let url1 = url.clone();
-    let handle = thread::spawn(move || {
+    let handle = tokio::spawn(async move {
         // prepare producer and consumer, where the former can
         // send a job difficulty level as a job's args and the lattter
         // will sleep for a corresponding period of time, pretending
         // to work hard:
-        let mut producer_a = Producer::connect(Some(&url1)).unwrap();
-        let mut consumer_a = ConsumerBuilder::default();
-        consumer_a.register(job_type, |job| -> io::Result<_> {
-            let args = job.args().to_owned();
-            let mut args = args.iter();
-            let diffuculty_level = args
-                .next()
-                .expect("job difficulty level is there")
-                .to_owned();
-            let sleep_secs =
-                serde_json::from_value::<i64>(diffuculty_level).expect("a valid number");
-            thread::sleep(time::Duration::from_secs(sleep_secs as u64));
-            Ok(eprintln!("{:?}", job))
+        let mut producer_a = Producer::connect(Some(&url1)).await.unwrap();
+        let mut consumer_a = ConsumerBuilder::default_async();
+        consumer_a.register(job_type, |job| {
+            Box::pin(async move {
+                let args = job.args().to_owned();
+                let mut args = args.iter();
+                let diffuculty_level = args
+                    .next()
+                    .expect("job difficulty level is there")
+                    .to_owned();
+                let sleep_secs =
+                    serde_json::from_value::<i64>(diffuculty_level).expect("a valid number");
+                time::sleep(time::Duration::from_secs(sleep_secs as u64)).await;
+                eprintln!("{:?}", job);
+                Ok::<(), io::Error>(())
+            })
         });
-        let mut consumer_a = consumer_a.connect(Some(&url1)).unwrap();
+        let mut consumer_a = consumer_a.connect(Some(&url1)).await.unwrap();
         let job = JobBuilder::new(job_type)
             .args(vec![difficulty_level])
             .queue(queue_name)
             .unique_for(unique_for)
             .unique_until_success() // Faktory's default
             .build();
-        producer_a.enqueue(job).unwrap();
-        let had_job = consumer_a.run_one(0, &[queue_name]).unwrap();
+        producer_a.enqueue(job).await.unwrap();
+        let had_job = consumer_a.run_one(0, &[queue_name]).await.unwrap();
         assert!(had_job);
     });
 
     // let spawned thread gain momentum:
-    thread::sleep(time::Duration::from_secs(1));
+    time::sleep(time::Duration::from_secs(1)).await;
 
     // continue
-    let mut producer_b = Producer::connect(Some(&url)).unwrap();
+    let mut producer_b = Producer::connect(Some(&url)).await.unwrap();
 
     // this one is a 'duplicate' because the job is still
     // being executed in the spawned thread:
@@ -227,14 +226,14 @@ fn ent_unique_job_until_success() {
         .build();
 
     // as a result:
-    let res = producer_b.enqueue(job).unwrap_err();
+    let res = producer_b.enqueue(job).await.unwrap_err();
     if let error::Error::Protocol(error::Protocol::UniqueConstraintViolation { msg }) = res {
         assert_eq!(msg, "Job not unique");
     } else {
         panic!("Expected protocol error.")
     }
 
-    handle.join().expect("should join successfully");
+    handle.await.expect("should join successfully");
 
     // Now that the job submitted in a spawned thread has been successfully executed
     // (with ACK sent to server), the producer 'B' can push another one:
@@ -246,13 +245,13 @@ fn ent_unique_job_until_success() {
                 .unique_for(unique_for)
                 .build(),
         )
+        .await
         .unwrap();
 }
 
-#[test]
-fn ent_unique_job_until_start() {
-    use std::thread;
-    use std::time;
+#[tokio::test(flavor = "multi_thread")]
+async fn ent_unique_job_until_start() {
+    use tokio::time;
 
     skip_if_not_enterprise!();
 
@@ -264,22 +263,25 @@ fn ent_unique_job_until_start() {
     let unique_for = 4;
 
     let url1 = url.clone();
-    let handle = thread::spawn(move || {
-        let mut producer_a = Producer::connect(Some(&url1)).unwrap();
-        let mut consumer_a = ConsumerBuilder::default();
-        consumer_a.register(job_type, |job| -> io::Result<_> {
-            let args = job.args().to_owned();
-            let mut args = args.iter();
-            let diffuculty_level = args
-                .next()
-                .expect("job difficulty level is there")
-                .to_owned();
-            let sleep_secs =
-                serde_json::from_value::<i64>(diffuculty_level).expect("a valid number");
-            thread::sleep(time::Duration::from_secs(sleep_secs as u64));
-            Ok(eprintln!("{:?}", job))
+    let handle = tokio::spawn(async move {
+        let mut producer_a = Producer::connect(Some(&url1)).await.unwrap();
+        let mut consumer_a = ConsumerBuilder::default_async();
+        consumer_a.register(job_type, |job| {
+            Box::pin(async move {
+                let args = job.args().to_owned();
+                let mut args = args.iter();
+                let diffuculty_level = args
+                    .next()
+                    .expect("job difficulty level is there")
+                    .to_owned();
+                let sleep_secs =
+                    serde_json::from_value::<i64>(diffuculty_level).expect("a valid number");
+                time::sleep(time::Duration::from_secs(sleep_secs as u64)).await;
+                eprintln!("{:?}", job);
+                Ok::<(), io::Error>(())
+            })
         });
-        let mut consumer_a = consumer_a.connect(Some(&url1)).unwrap();
+        let mut consumer_a = consumer_a.connect(Some(&url1)).await.unwrap();
         producer_a
             .enqueue(
                 JobBuilder::new(job_type)
@@ -289,17 +291,18 @@ fn ent_unique_job_until_start() {
                     .unique_until_start() // NB!
                     .build(),
             )
+            .await
             .unwrap();
         // as soon as the job is fetched, the unique lock gets released
-        let had_job = consumer_a.run_one(0, &[queue_name]).unwrap();
+        let had_job = consumer_a.run_one(0, &[queue_name]).await.unwrap();
         assert!(had_job);
     });
 
     // let spawned thread gain momentum:
-    thread::sleep(time::Duration::from_secs(1));
+    time::sleep(time::Duration::from_secs(1)).await;
 
     // the unique lock has been released by this time, so the job is enqueued successfully:
-    let mut producer_b = Producer::connect(Some(&url)).unwrap();
+    let mut producer_b = Producer::connect(Some(&url)).await.unwrap();
     producer_b
         .enqueue(
             JobBuilder::new(job_type)
@@ -308,19 +311,20 @@ fn ent_unique_job_until_start() {
                 .unique_for(unique_for)
                 .build(),
         )
+        .await
         .unwrap();
 
-    handle.join().expect("should join successfully");
+    handle.await.expect("should join successfully");
 }
 
-#[test]
-fn ent_unique_job_bypass_unique_lock() {
+#[tokio::test(flavor = "multi_thread")]
+async fn ent_unique_job_bypass_unique_lock() {
     use faktory::error;
 
     skip_if_not_enterprise!();
 
     let url = learn_faktory_url();
-    let mut producer = Producer::connect(Some(&url)).unwrap();
+    let mut producer = Producer::connect(Some(&url)).await.unwrap();
     let queue_name = "ent_unique_job_bypass_unique_lock";
     let job1 = Job::builder("order")
         .queue(queue_name)
@@ -334,8 +338,8 @@ fn ent_unique_job_bypass_unique_lock() {
         .queue(queue_name) // same queue
         .build(); // NB: `unique_for` not set
 
-    producer.enqueue(job1).unwrap();
-    producer.enqueue(job2).unwrap(); // bypassing the lock!
+    producer.enqueue(job1).await.unwrap();
+    producer.enqueue(job2).await.unwrap(); // bypassing the lock!
 
     // This _is_ a 'duplicate'.
     let job3 = Job::builder("order")
@@ -343,7 +347,7 @@ fn ent_unique_job_bypass_unique_lock() {
         .unique_for(60) // NB
         .build();
 
-    let res = producer.enqueue(job3).unwrap_err(); // NOT bypassing the lock!
+    let res = producer.enqueue(job3).await.unwrap_err(); // NOT bypassing the lock!
 
     if let error::Error::Protocol(error::Protocol::UniqueConstraintViolation { msg }) = res {
         assert_eq!(msg, "Job not unique");
@@ -353,11 +357,11 @@ fn ent_unique_job_bypass_unique_lock() {
 
     // let's consume three times from the queue to verify that the first two jobs
     // have been enqueued for real, while the last one has not.
-    let mut c = ConsumerBuilder::default();
-    c.register("order", |j| -> io::Result<_> { Ok(eprintln!("{:?}", j)) });
-    let mut c = c.connect(Some(&url)).unwrap();
+    let mut c = ConsumerBuilder::default_async();
+    c.register("order", |j| Box::pin(print_job(j)));
+    let mut c = c.connect(Some(&url)).await.unwrap();
 
-    assert!(c.run_one(0, &[queue_name]).unwrap());
-    assert!(c.run_one(0, &[queue_name]).unwrap());
-    assert!(!c.run_one(0, &[queue_name]).unwrap()); // empty;
+    assert!(c.run_one(0, &[queue_name]).await.unwrap());
+    assert!(c.run_one(0, &[queue_name]).await.unwrap());
+    assert!(!c.run_one(0, &[queue_name]).await.unwrap()); // empty;
 }

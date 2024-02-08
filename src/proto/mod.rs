@@ -1,58 +1,12 @@
 use crate::error::{self, Error};
-use bufstream::BufStream;
-use libc::getpid;
-use std::io;
-use std::io::prelude::*;
-use std::net::TcpStream;
-use url::Url;
-
-pub(crate) const EXPECTED_PROTOCOL_VERSION: usize = 2;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufStream};
+use tokio::net::TcpStream as TokioStream;
 
 mod single;
+pub use single::{Ack, Fail, Heartbeat, Info, Job, JobBuilder, Push, QueueAction, QueueControl};
+pub(crate) mod utils;
 
-// commands that users can issue
-pub use self::single::{
-    bad, Ack, End, Fail, Fetch, Heartbeat, Hello, Hi, Info, Job, JobBuilder, Push, QueueAction,
-    QueueControl, RawResponse,
-};
-
-pub(crate) fn get_env_url() -> String {
-    use std::env;
-    let var = env::var("FAKTORY_PROVIDER").unwrap_or_else(|_| "FAKTORY_URL".to_string());
-    env::var(var).unwrap_or_else(|_| "tcp://localhost:7419".to_string())
-}
-
-pub(crate) fn host_from_url(url: &Url) -> String {
-    format!("{}:{}", url.host_str().unwrap(), url.port().unwrap_or(7419))
-}
-
-pub(crate) fn url_parse(url: &str) -> Result<Url, Error> {
-    let url = Url::parse(url).map_err(error::Connect::ParseUrl)?;
-    if url.scheme() != "tcp" {
-        return Err(error::Connect::BadScheme {
-            scheme: url.scheme().to_string(),
-        }
-        .into());
-    }
-
-    if url.host_str().is_none() || url.host_str().unwrap().is_empty() {
-        return Err(error::Connect::MissingHostname.into());
-    }
-
-    Ok(url)
-}
-
-/// A stream that can be re-established after failing.
-pub trait Reconnect: Sized {
-    /// Re-establish the stream.
-    fn reconnect(&self) -> io::Result<Self>;
-}
-
-impl Reconnect for TcpStream {
-    fn reconnect(&self) -> io::Result<Self> {
-        TcpStream::connect(self.peer_addr().unwrap())
-    }
-}
+pub(crate) const EXPECTED_PROTOCOL_VERSION: usize = 2;
 
 #[derive(Clone)]
 pub(crate) struct ClientOptions {
@@ -68,7 +22,7 @@ pub(crate) struct ClientOptions {
     /// Defaults to a GUID.
     pub(crate) wid: Option<String>,
 
-    /// Labels to advertise to server.
+    /// Labels to advertise to se/// A stream that can be re-established after failing.rver.
     /// Defaults to ["rust"].
     pub(crate) labels: Vec<String>,
 
@@ -105,51 +59,76 @@ impl ClientOptions {
     }
 }
 
-pub(crate) struct Client<S: Read + Write> {
-    stream: BufStream<S>,
+pub struct Client<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> {
+    stream: S,
     opts: ClientOptions,
+}
+
+/// A stream that can be re-established after failing.
+#[async_trait::async_trait]
+pub trait Reconnect: Sized {
+    /// Re-establish the stream.
+    async fn reconnect(&self) -> Result<Self, Error>;
+}
+
+#[async_trait::async_trait]
+impl Reconnect for TokioStream {
+    async fn reconnect(&self) -> Result<Self, Error> {
+        let addr = &self.peer_addr().expect("socket address");
+        Ok(TokioStream::connect(addr).await?)
+    }
+}
+
+#[async_trait::async_trait]
+impl Reconnect for BufStream<TokioStream> {
+    async fn reconnect(&self) -> Result<Self, Error> {
+        let addr = &self.get_ref().peer_addr().expect("socket address");
+        Ok(Self::new(TokioStream::connect(addr).await?))
+    }
 }
 
 impl<S> Client<S>
 where
-    S: Read + Write + Reconnect,
+    S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send + Reconnect,
 {
-    pub(crate) fn connect_again(&self) -> Result<Self, Error> {
-        let s = self.stream.get_ref().reconnect()?;
-        Client::new(s, self.opts.clone())
+    pub(crate) async fn connect_again(&mut self) -> Result<Self, Error> {
+        let s = self.stream.reconnect().await?;
+        Client::new(s, self.opts.clone()).await
     }
 
-    pub fn reconnect(&mut self) -> Result<(), Error> {
-        let s = self.stream.get_ref().reconnect()?;
-        self.stream = BufStream::new(s);
-        self.init()
-    }
-}
-
-impl<S: Read + Write> Client<S> {
-    pub(crate) fn new(stream: S, opts: ClientOptions) -> Result<Client<S>, Error> {
-        let mut c = Client {
-            stream: BufStream::new(stream),
-            opts,
-        };
-        c.init()?;
-        Ok(c)
-    }
-
-    pub(crate) fn new_producer(stream: S, pwd: Option<String>) -> Result<Client<S>, Error> {
-        let opts = ClientOptions {
-            password: pwd,
-            is_producer: true,
-            ..Default::default()
-        };
-        Self::new(stream, opts)
+    pub(crate) async fn reconnect(&mut self) -> Result<(), Error> {
+        self.stream = self.stream.reconnect().await?;
+        self.init().await
     }
 }
 
-impl<S: Read + Write> Client<S> {
-    fn init(&mut self) -> Result<(), Error> {
-        let hi = single::read_hi(&mut self.stream)?;
+impl<S> Drop for Client<S>
+where
+    S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send,
+{
+    fn drop(&mut self) {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                single::write_command(&mut self.stream, &single::End)
+                    .await
+                    .unwrap();
+            })
+        });
+    }
+}
 
+pub(crate) enum HeartbeatStatus {
+    Ok,
+    Terminate,
+    Quiet,
+}
+
+impl<S> Client<S>
+where
+    S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send,
+{
+    async fn init(&mut self) -> Result<(), Error> {
+        let hi = single::read_hi(&mut self.stream).await?;
         if hi.version != EXPECTED_PROTOCOL_VERSION {
             return Err(error::Connect::VersionMismatch {
                 ours: EXPECTED_PROTOCOL_VERSION,
@@ -157,10 +136,9 @@ impl<S: Read + Write> Client<S> {
             }
             .into());
         }
-
         // fill in any missing options, and remember them for re-connect
         let mut hello = single::Hello::default();
-        if !self.opts.is_producer {
+        if !self.opts.is_producer() {
             let hostname = self
                 .opts
                 .hostname
@@ -168,10 +146,7 @@ impl<S: Read + Write> Client<S> {
                 .or_else(|| hostname::get().ok()?.into_string().ok())
                 .unwrap_or_else(|| "local".to_string());
             self.opts.hostname = Some(hostname);
-            let pid = self
-                .opts
-                .pid
-                .unwrap_or_else(|| unsafe { getpid() } as usize);
+            let pid = self.opts.pid.unwrap_or_else(|| std::process::id() as usize);
             self.opts.pid = Some(pid);
             let wid = self.opts.wid.clone().unwrap_or_else(|| {
                 use rand::{thread_rng, Rng};
@@ -197,40 +172,48 @@ impl<S: Read + Write> Client<S> {
             }
         }
 
-        single::write_command_and_await_ok(&mut self.stream, &hello)
+        single::write_command_and_await_ok(&mut self.stream, &hello).await?;
+        Ok(())
     }
-}
 
-impl<S: Read + Write> Drop for Client<S> {
-    fn drop(&mut self) {
-        single::write_command(&mut self.stream, &single::End).unwrap();
+    pub(crate) async fn new(stream: S, opts: ClientOptions) -> Result<Client<S>, Error> {
+        let mut c = Client { stream, opts };
+        c.init().await?;
+        Ok(c)
     }
-}
 
-pub struct ReadToken<'a, S: Read + Write>(&'a mut Client<S>);
+    pub(crate) async fn new_producer(stream: S, pwd: Option<String>) -> Result<Client<S>, Error> {
+        let mut opts = ClientOptions::default_for_producer();
+        opts.password = pwd;
+        Client::new(stream, opts).await
+    }
 
-pub(crate) enum HeartbeatStatus {
-    Ok,
-    Terminate,
-    Quiet,
-}
-
-impl<S: Read + Write> Client<S> {
-    pub(crate) fn issue<FC: self::single::FaktoryCommand>(
+    pub(crate) async fn issue<FC: single::FaktoryCommand>(
         &mut self,
         c: &FC,
     ) -> Result<ReadToken<'_, S>, Error> {
-        single::write_command(&mut self.stream, c)?;
+        single::write_command(&mut self.stream, c).await?;
         Ok(ReadToken(self))
     }
 
-    pub(crate) fn heartbeat(&mut self) -> Result<HeartbeatStatus, Error> {
+    pub(crate) async fn fetch<Q>(&mut self, queues: &[Q]) -> Result<Option<Job>, Error>
+    where
+        Q: AsRef<str> + Sync,
+    {
+        self.issue(&single::Fetch::from(queues))
+            .await?
+            .read_json()
+            .await
+    }
+
+    pub(crate) async fn heartbeat(&mut self) -> Result<HeartbeatStatus, Error> {
         single::write_command(
             &mut self.stream,
             &Heartbeat::new(&**self.opts.wid.as_ref().unwrap()),
-        )?;
+        )
+        .await?;
 
-        match single::read_json::<_, serde_json::Value>(&mut self.stream)? {
+        match single::read_json::<_, serde_json::Value>(&mut self.stream).await? {
             None => Ok(HeartbeatStatus::Ok),
             Some(s) => match s
                 .as_object()
@@ -247,87 +230,19 @@ impl<S: Read + Write> Client<S> {
             },
         }
     }
-
-    pub(crate) fn fetch<Q>(&mut self, queues: &[Q]) -> Result<Option<Job>, Error>
-    where
-        Q: AsRef<str>,
-    {
-        self.issue(&single::Fetch::from(queues))?.read_json()
-    }
 }
 
-impl<'a, S: Read + Write> ReadToken<'a, S> {
-    pub(crate) fn await_ok(self) -> Result<(), Error> {
-        single::read_ok(&mut self.0.stream)
+pub struct ReadToken<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send>(&'a mut Client<S>);
+
+impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> ReadToken<'a, S> {
+    pub(crate) async fn read_ok(self) -> Result<(), Error> {
+        single::read_ok(&mut self.0.stream).await
     }
 
-    pub(crate) fn read_json<T>(self) -> Result<Option<T>, Error>
+    pub(crate) async fn read_json<T>(self) -> Result<Option<T>, Error>
     where
         T: serde::de::DeserializeOwned,
     {
-        single::read_json(&mut self.0.stream)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    // https://github.com/rust-lang/rust/pull/42219
-    //#[allow_fail]
-    #[ignore]
-    fn it_works() {
-        Client::new(
-            TcpStream::connect("localhost:7419").unwrap(),
-            ClientOptions::default(),
-        )
-        .unwrap();
-    }
-
-    #[test]
-    fn correct_env_parsing() {
-        use std::env;
-
-        if env::var_os("FAKTORY_URL").is_some() {
-            eprintln!("skipping test to avoid messing with user-set FAKTORY_URL");
-            return;
-        }
-
-        assert_eq!(get_env_url(), "tcp://localhost:7419");
-
-        env::set_var("FAKTORY_URL", "tcp://example.com:7500");
-        assert_eq!(get_env_url(), "tcp://example.com:7500");
-
-        env::set_var("FAKTORY_PROVIDER", "URL");
-        env::set_var("URL", "tcp://example.com:7501");
-        assert_eq!(get_env_url(), "tcp://example.com:7501");
-    }
-
-    #[test]
-    fn url_port_default() {
-        use url::Url;
-        let url = Url::parse("tcp://example.com").unwrap();
-        assert_eq!(host_from_url(&url), "example.com:7419");
-    }
-
-    #[test]
-    fn url_requires_tcp() {
-        url_parse("foobar").unwrap_err();
-    }
-
-    #[test]
-    fn url_requires_host() {
-        url_parse("tcp://:7419").unwrap_err();
-    }
-
-    #[test]
-    fn url_doesnt_require_port() {
-        url_parse("tcp://example.com").unwrap();
-    }
-
-    #[test]
-    fn url_can_take_password_and_port() {
-        url_parse("tcp://:foobar@example.com:7419").unwrap();
+        single::read_json(&mut self.0.stream).await
     }
 }

@@ -1,25 +1,21 @@
-use crate::{
-    consumer::{STATUS_QUIET, STATUS_RUNNING, STATUS_TERMINATING},
-    proto::HeartbeatStatus,
-    AsyncConsumer, AsyncReconnect, Error,
-};
-use std::sync::atomic;
-use std::time;
+use super::{Consumer, STATUS_QUIET, STATUS_RUNNING, STATUS_TERMINATING};
+use crate::{proto::HeartbeatStatus, Error, Reconnect};
 use std::{
     error::Error as StdError,
-    sync::{atomic::AtomicUsize, Arc},
+    sync::{atomic, Arc},
+    time,
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tokio::time::sleep as tokio_sleep;
 
 impl<
-        S: AsyncBufReadExt + AsyncWriteExt + AsyncReconnect + Send + Unpin + 'static,
+        S: AsyncBufReadExt + AsyncWriteExt + Reconnect + Send + Unpin + 'static,
         E: StdError + 'static + Send,
-    > AsyncConsumer<S, E>
+    > Consumer<S, E>
 {
     pub(crate) async fn listen_for_heartbeats(
         &mut self,
-        statuses: &Vec<Arc<AtomicUsize>>,
+        statuses: &Vec<Arc<atomic::AtomicUsize>>,
     ) -> Result<bool, Error> {
         let mut target = STATUS_RUNNING;
 

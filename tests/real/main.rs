@@ -1,4 +1,3 @@
-mod r#async;
 mod community;
 mod utils;
 

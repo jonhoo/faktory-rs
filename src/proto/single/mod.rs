@@ -1,7 +1,8 @@
+use crate::Error;
 use chrono::{DateTime, Utc};
 use derive_builder::Builder;
 use std::collections::HashMap;
-use std::io::prelude::*;
+use tokio::io::{AsyncBufRead, AsyncWriteExt};
 
 mod cmd;
 mod resp;
@@ -10,8 +11,6 @@ mod utils;
 #[cfg(feature = "ent")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
 mod ent;
-
-use crate::error::Error;
 
 pub use self::cmd::*;
 pub use self::resp::*;
@@ -245,18 +244,23 @@ impl Job {
         &self.failure
     }
 }
-
-pub fn write_command<W: Write, C: FaktoryCommand>(w: &mut W, command: &C) -> Result<(), Error> {
-    command.issue::<W>(w)?;
-    Ok(w.flush()?)
-}
-
-pub fn write_command_and_await_ok<X: BufRead + Write, C: FaktoryCommand>(
-    x: &mut X,
+pub async fn write_command<W: AsyncWriteExt + Unpin + Send, C: FaktoryCommand>(
+    w: &mut W,
     command: &C,
 ) -> Result<(), Error> {
-    write_command(x, command)?;
-    read_ok(x)
+    command.issue::<W>(w).await?;
+    Ok(w.flush().await?)
+}
+
+pub async fn write_command_and_await_ok<
+    S: AsyncBufRead + AsyncWriteExt + Unpin + Send,
+    C: FaktoryCommand,
+>(
+    stream: &mut S,
+    command: &C,
+) -> Result<(), Error> {
+    write_command(stream, command).await?;
+    read_ok(stream).await
 }
 
 #[cfg(test)]

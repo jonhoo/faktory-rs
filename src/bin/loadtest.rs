@@ -5,15 +5,15 @@ use rand::prelude::*;
 use std::io;
 use std::process;
 use std::sync::{self, atomic};
-use std::thread;
 use std::time;
 
 const QUEUES: &[&str] = &["queue0", "queue1", "queue2", "queue3", "queue4"];
 
-fn main() {
-    let matches = Command::new("My Super Program")
+#[tokio::main]
+async fn main() {
+    let matches = Command::new("My Super Program (Async)")
         .version("0.1")
-        .about("Benchmark the performance of Rust Faktory consumers and producers")
+        .about("Benchmark the performance of Rust Faktory async consumers and producers")
         .arg(
             Arg::new("jobs")
                 .help("Number of jobs to run")
@@ -37,8 +37,10 @@ fn main() {
         jobs, threads
     );
 
-    // ensure that we can actually connect to the server
-    if let Err(e) = Producer::connect(None) {
+    // ensure that we can actually connect to the server;
+    // will create a client, run a handshake with Faktory,
+    // and drop the cliet immediately afterwards;
+    if let Err(e) = Producer::connect(None).await {
         println!("{}", e);
         process::exit(1);
     }
@@ -47,25 +49,27 @@ fn main() {
     let popped = sync::Arc::new(atomic::AtomicUsize::new(0));
 
     let start = time::Instant::now();
-    let threads: Vec<thread::JoinHandle<Result<_, Error>>> = (0..threads)
+    let threads: Vec<tokio::task::JoinHandle<Result<_, Error>>> = (0..threads)
         .map(|_| {
             let pushed = sync::Arc::clone(&pushed);
             let popped = sync::Arc::clone(&popped);
-            thread::spawn(move || {
+            tokio::spawn(async move {
                 // make producer and consumer
-                let mut p = Producer::connect(None).unwrap();
+                let mut p = Producer::connect(None).await.unwrap();
                 let mut c = ConsumerBuilder::default();
                 c.register("SomeJob", |_| {
-                    let mut rng = rand::thread_rng();
-                    if rng.gen_bool(0.01) {
-                        Err(io::Error::new(io::ErrorKind::Other, "worker closed"))
-                    } else {
-                        Ok(())
-                    }
+                    Box::pin(async move {
+                        let mut rng = rand::thread_rng();
+                        if rng.gen_bool(0.01) {
+                            Err(io::Error::new(io::ErrorKind::Other, "worker closed"))
+                        } else {
+                            Ok(())
+                        }
+                    })
                 });
-                let mut c = c.connect(None).unwrap();
+                let mut c = c.connect(None).await.unwrap();
 
-                let mut rng = rand::thread_rng();
+                let mut rng = rand::rngs::OsRng;
                 let mut random_queues = Vec::from(QUEUES);
                 random_queues.shuffle(&mut rng);
                 for idx in 0..jobs {
@@ -77,13 +81,13 @@ fn main() {
                         );
                         job.priority = Some(rng.gen_range(1..10));
                         job.queue = QUEUES.choose(&mut rng).unwrap().to_string();
-                        p.enqueue(job)?;
+                        p.enqueue(job).await?;
                         if pushed.fetch_add(1, atomic::Ordering::SeqCst) >= jobs {
                             return Ok(idx);
                         }
                     } else {
                         // pop
-                        c.run_one(0, &random_queues[..])?;
+                        c.run_one(0, &random_queues[..]).await?;
                         if popped.fetch_add(1, atomic::Ordering::SeqCst) >= jobs {
                             return Ok(idx);
                         }
@@ -94,7 +98,10 @@ fn main() {
         })
         .collect();
 
-    let _ops_count: Result<Vec<_>, _> = threads.into_iter().map(|jt| jt.join().unwrap()).collect();
+    let mut _ops_count = Vec::with_capacity(threads.len());
+    for jh in threads {
+        _ops_count.push(jh.await.unwrap())
+    }
     let stop = start.elapsed();
     let stop_secs = stop.as_secs() * 1_000_000_000 + u64::from(stop.subsec_nanos());
     let stop_secs = stop_secs as f64 / 1_000_000_000.0;

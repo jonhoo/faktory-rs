@@ -34,25 +34,28 @@
 //! If you want to **submit** jobs to Faktory, use `Producer`.
 //!
 //! ```no_run
+//! # tokio_test::block_on(async {
 //! use faktory::{Producer, Job};
-//! let mut p = Producer::connect(None).unwrap();
-//! p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
+//! let mut p = Producer::connect(None).await.unwrap();
+//! p.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
+//! });
 //! ```
-//!
 //! If you want to **accept** jobs from Faktory, use `Consumer`.
 //!
 //! ```no_run
+//! # tokio_test::block_on(async {
 //! use faktory::ConsumerBuilder;
 //! use std::io;
 //! let mut c = ConsumerBuilder::default();
-//! c.register("foobar", |job| -> io::Result<()> {
+//! c.register("foobar", |job| Box::pin(async move {
 //!     println!("{:?}", job);
-//!     Ok(())
-//! });
-//! let mut c = c.connect(None).unwrap();
-//! if let Err(e) = c.run(&["default"]) {
+//!     Ok::<(), io::Error>(())
+//! }));
+//! let mut c = c.connect(None).await.unwrap();
+//! if let Err(e) = c.run(&["default"]).await {
 //!     println!("worker failed: {}", e);
 //! }
+//! # });
 //! ```
 #![deny(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -61,7 +64,6 @@
 #[macro_use]
 extern crate serde_derive;
 
-mod r#async;
 mod consumer;
 pub mod error;
 mod producer;
@@ -74,14 +76,8 @@ mod tls;
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use tls::TlsStream;
 
-pub use crate::r#async::tls::AsyncTlsStream;
-
 pub use crate::consumer::{Consumer, ConsumerBuilder};
 pub use crate::error::Error;
 pub use crate::producer::Producer;
 pub use crate::proto::Reconnect;
 pub use crate::proto::{Job, JobBuilder};
-
-pub use crate::r#async::consumer::{AsyncConsumer, AsyncConsumerBuilder};
-pub use crate::r#async::producer::AsyncProducer;
-pub use crate::r#async::proto::AsyncReconnect;

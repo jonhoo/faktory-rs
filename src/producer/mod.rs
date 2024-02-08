@@ -1,7 +1,8 @@
-use crate::error::Error;
-use crate::proto::{self, Client, Info, Job, Push, QueueAction, QueueControl};
-use std::io::prelude::*;
-use std::net::TcpStream;
+use crate::proto::utils::{get_env_url, host_from_url, url_parse};
+use crate::proto::{Client, Info, Job, Push, QueueAction, QueueControl};
+use crate::Error;
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufStream};
+use tokio::net::TcpStream as TokioStream;
 
 /// `Producer` is used to enqueue new jobs that will in turn be processed by Faktory workers.
 ///
@@ -42,33 +43,95 @@ use std::net::TcpStream;
 /// Connecting to an unsecured Faktory server using environment variables
 ///
 /// ```no_run
+/// # tokio_test::block_on(async {
 /// use faktory::Producer;
-/// let p = Producer::connect(None).unwrap();
+/// let p = Producer::connect(None).await.unwrap();
+/// # });
 /// ```
 ///
 /// Connecting to a secured Faktory server using an explicit URL
 ///
 /// ```no_run
+/// # tokio_test::block_on(async {
 /// use faktory::Producer;
-/// let p = Producer::connect(Some("tcp://:hunter2@localhost:7439")).unwrap();
+/// let p = Producer::connect(Some("tcp://:hunter2@localhost:7439")).await.unwrap();
+/// # })
 /// ```
 ///
 /// Issuing a job using a `Producer`
 ///
 /// ```no_run
+/// # tokio_test::block_on(async {
 /// # use faktory::Producer;
-/// # let mut p = Producer::connect(None).unwrap();
+/// # let mut p = Producer::connect(None).await.unwrap();
 /// use faktory::Job;
-/// p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
+/// p.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
+/// # });
 /// ```
 ///
-// TODO: provide way of inspecting status of job.
-pub struct Producer<S: Read + Write> {
+pub struct Producer<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> {
     c: Client<S>,
 }
 
-impl Producer<TcpStream> {
-    /// Connect to a Faktory server.
+impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> Producer<S> {
+    /// Asynchronously enqueue the given job on the Faktory server.
+    ///
+    /// Returns `Ok` if the job was successfully queued by the Faktory server.
+    pub async fn enqueue(&mut self, job: Job) -> Result<(), Error> {
+        self.c.issue(&Push::from(job)).await?.read_ok().await
+    }
+
+    /// Retrieve information about the running server.
+    ///
+    /// The returned value is the result of running the `INFO` command on the server.
+    pub async fn info(&mut self) -> Result<serde_json::Value, Error> {
+        self.c
+            .issue(&Info)
+            .await?
+            .read_json()
+            .await
+            .map(|v| v.expect("info command cannot give empty response"))
+    }
+
+    /// Pause the given queues.
+    pub async fn queue_pause<Q>(&mut self, queues: &[Q]) -> Result<(), Error>
+    where
+        Q: AsRef<str> + Sync,
+    {
+        self.c
+            .issue(&QueueControl::new(QueueAction::Pause, queues))
+            .await?
+            .read_ok()
+            .await
+    }
+
+    /// Resume the given queues.
+    pub async fn queue_resume<Q: AsRef<str>>(&mut self, queues: &[Q]) -> Result<(), Error>
+    where
+        Q: AsRef<str> + Sync,
+    {
+        self.c
+            .issue(&QueueControl::new(QueueAction::Resume, queues))
+            .await?
+            .read_ok()
+            .await
+    }
+}
+
+impl<S: AsyncRead + AsyncWrite + Send + Unpin> Producer<BufStream<S>> {
+    /// Connect to a Faktory server with a non-standard stream.
+    pub async fn connect_with(
+        stream: S,
+        pwd: Option<String>,
+    ) -> Result<Producer<BufStream<S>>, Error> {
+        let buffered = BufStream::new(stream);
+        let c = Client::new_producer(buffered, pwd).await?;
+        Ok(Producer { c })
+    }
+}
+
+impl Producer<BufStream<TokioStream>> {
+    /// Create a producer and asynchronously connect to a Faktory server.
     ///
     /// If `url` is not given, will use the standard Faktory environment variables. Specifically,
     /// `FAKTORY_PROVIDER` is read to get the name of the environment variable to get the address
@@ -81,66 +144,13 @@ impl Producer<TcpStream> {
     /// ```
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
-    pub fn connect(url: Option<&str>) -> Result<Self, Error> {
+    pub async fn connect(url: Option<&str>) -> Result<Self, Error> {
         let url = match url {
-            Some(url) => proto::url_parse(url),
-            None => proto::url_parse(&proto::get_env_url()),
+            Some(url) => url_parse(url),
+            None => url_parse(&get_env_url()),
         }?;
-        let stream = TcpStream::connect(proto::host_from_url(&url))?;
-        Self::connect_with(stream, url.password().map(|p| p.to_string()))
-    }
-}
-
-impl<S: Read + Write> Producer<S> {
-    /// Connect to a Faktory server with a non-standard stream.
-    pub fn connect_with(stream: S, pwd: Option<String>) -> Result<Producer<S>, Error> {
-        Ok(Producer {
-            c: Client::new_producer(stream, pwd)?,
-        })
-    }
-
-    /// Enqueue the given job on the Faktory server.
-    ///
-    /// Returns `Ok` if the job was successfully queued by the Faktory server.
-    pub fn enqueue(&mut self, job: Job) -> Result<(), Error> {
-        self.c.issue(&Push::from(job))?.await_ok()
-    }
-
-    /// Retrieve information about the running server.
-    ///
-    /// The returned value is the result of running the `INFO` command on the server.
-    pub fn info(&mut self) -> Result<serde_json::Value, Error> {
-        self.c
-            .issue(&Info)?
-            .read_json()
-            .map(|v| v.expect("info command cannot give empty response"))
-    }
-
-    /// Pause the given queues.
-    pub fn queue_pause<T: AsRef<str>>(&mut self, queues: &[T]) -> Result<(), Error> {
-        self.c
-            .issue(&QueueControl::new(QueueAction::Pause, queues))?
-            .await_ok()
-    }
-
-    /// Resume the given queues.
-    pub fn queue_resume<T: AsRef<str>>(&mut self, queues: &[T]) -> Result<(), Error> {
-        self.c
-            .issue(&QueueControl::new(QueueAction::Resume, queues))?
-            .await_ok()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    // https://github.com/rust-lang/rust/pull/42219
-    //#[allow_fail]
-    #[ignore]
-    fn it_works() {
-        let mut p = Producer::connect(None).unwrap();
-        p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
+        let stream = TokioStream::connect(host_from_url(&url)).await?;
+        // let buffered = BufStream::new(stream);
+        Self::connect_with(stream, url.password().map(|p| p.to_string())).await
     }
 }
