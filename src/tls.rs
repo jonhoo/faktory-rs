@@ -28,7 +28,7 @@ use tokio_rustls::TlsConnector;
 #[pin_project::pin_project]
 pub struct TlsStream<S> {
     connector: TlsConnector,
-    hostname: String,
+    hostname: &'static str,
     #[pin]
     stream: UnderlyingTlsStream<S>,
 }
@@ -78,7 +78,8 @@ impl TlsStream<TokioTcpStream> {
         }?;
         let hostname = utils::host_from_url(&url);
         let tcp_stream = TokioTcpStream::connect(&hostname).await?;
-        Ok(TlsStream::new(tcp_stream, connector, url.host_str().unwrap()).await?)
+        let hostname: &'static str = url.host_str().unwrap().to_string().leak();
+        Ok(TlsStream::new(tcp_stream, connector, hostname).await?)
     }
 }
 
@@ -90,7 +91,7 @@ where
     ///
     /// Internally creates a `ClientConfig` with an empty root certificates store and no client
     /// authentication. Use [`new`](TlsStream::new) for a customized `TlsConnector`.
-    pub async fn default(stream: S, hostname: &str) -> io::Result<Self> {
+    pub async fn default(stream: S, hostname: &'static str) -> io::Result<Self> {
         let conf = ClientConfig::builder()
             .with_root_certificates(RootCertStore::empty())
             .with_no_client_auth();
@@ -99,19 +100,20 @@ where
     }
 
     /// Create a new asynchronous TLS connection on an existing stream with a non-default TLS configuration.
-    pub async fn new(stream: S, connector: TlsConnector, hostname: &str) -> io::Result<Self> {
-        let domain = hostname
-            .to_string()
-            .clone()
-            .try_into()
-            .expect("a valid DNS name or IP address");
+    pub async fn new(
+        stream: S,
+        connector: TlsConnector,
+        hostname: &'static str,
+    ) -> io::Result<Self> {
+        // let hostname: &'static str = hostname.to_string().leak();
+        let domain = hostname.try_into().expect("a valid DNS name or IP address");
         let tls_stream = connector
             .connect(domain, stream)
             .await
             .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e))?;
         Ok(TlsStream {
             connector,
-            hostname: hostname.to_string(),
+            hostname,
             stream: tls_stream,
         })
     }
