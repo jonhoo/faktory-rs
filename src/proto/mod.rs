@@ -1,3 +1,5 @@
+use std::io;
+
 use crate::error::{self, Error};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufStream};
 use tokio::net::TcpStream as TokioStream;
@@ -68,22 +70,23 @@ pub struct Client<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> {
 #[async_trait::async_trait]
 pub trait Reconnect: Sized {
     /// Re-establish the stream.
-    async fn reconnect(&self) -> Result<Self, Error>;
+    async fn reconnect(&self) -> io::Result<Self>;
 }
 
 #[async_trait::async_trait]
 impl Reconnect for TokioStream {
-    async fn reconnect(&self) -> Result<Self, Error> {
+    async fn reconnect(&self) -> io::Result<Self> {
         let addr = &self.peer_addr().expect("socket address");
-        Ok(TokioStream::connect(addr).await?)
+        TokioStream::connect(addr).await
     }
 }
 
 #[async_trait::async_trait]
 impl Reconnect for BufStream<TokioStream> {
-    async fn reconnect(&self) -> Result<Self, Error> {
+    async fn reconnect(&self) -> io::Result<Self> {
         let addr = &self.get_ref().peer_addr().expect("socket address");
-        Ok(Self::new(TokioStream::connect(addr).await?))
+        let stream = TokioStream::connect(addr).await?;
+        Ok(Self::new(stream))
     }
 }
 

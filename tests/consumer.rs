@@ -1,64 +1,65 @@
-// extern crate faktory;
-// extern crate mockstream;
-// extern crate serde_json;
-// extern crate url;
+extern crate faktory;
+extern crate pin_project;
+extern crate serde_json;
+extern crate url;
 
-// mod mock;
+mod mock;
 
-// use faktory::*;
-// use std::io;
-// use std::thread;
-// use std::time::Duration;
+use faktory::*;
+use std::io;
+use std::thread;
+use std::time::Duration;
 
-// #[test]
-// fn hello() {
-//     let mut s = mock::Stream::default();
+#[tokio::test]
+async fn hello() {
+    let mut s = mock::Stream::default();
 
-//     let mut c = ConsumerBuilder::default();
-//     c.hostname("host".to_string())
-//         .wid("wid".to_string())
-//         .labels(vec!["foo".to_string(), "bar".to_string()]);
-//     c.register("never_called", |_| -> io::Result<()> { unreachable!() });
-//     let c = c.connect_with(s.clone(), None).unwrap();
-//     let written = s.pop_bytes_written(0);
-//     assert!(written.starts_with(b"HELLO {"));
-//     let written: serde_json::Value = serde_json::from_slice(&written[b"HELLO ".len()..]).unwrap();
-//     let written = written.as_object().unwrap();
-//     assert_eq!(
-//         written.get("hostname").and_then(|h| h.as_str()),
-//         Some("host")
-//     );
-//     assert_eq!(written.get("wid").and_then(|h| h.as_str()), Some("wid"));
-//     assert_eq!(written.get("pid").map(|h| h.is_number()), Some(true));
-//     assert_eq!(written.get("v").and_then(|h| h.as_i64()), Some(2));
-//     let labels = written["labels"].as_array().unwrap();
-//     assert_eq!(labels, &["foo", "bar"]);
+    let mut c: ConsumerBuilder<io::Error> = ConsumerBuilder::default();
+    c.hostname("host".to_string())
+        .wid("wid".to_string())
+        .labels(vec!["foo".to_string(), "bar".to_string()]);
+    c.register("never_called", |_| Box::pin(async move { unreachable!() }));
+    let c = c.connect_with(s.clone(), None).await.unwrap();
+    let written = s.pop_bytes_written(0);
+    assert!(written.starts_with(b"HELLO {"));
+    let written: serde_json::Value = serde_json::from_slice(&written[b"HELLO ".len()..]).unwrap();
+    let written = written.as_object().unwrap();
+    assert_eq!(
+        written.get("hostname").and_then(|h| h.as_str()),
+        Some("host")
+    );
+    assert_eq!(written.get("wid").and_then(|h| h.as_str()), Some("wid"));
+    assert_eq!(written.get("pid").map(|h| h.is_number()), Some(true));
+    assert_eq!(written.get("v").and_then(|h| h.as_i64()), Some(2));
+    let labels = written["labels"].as_array().unwrap();
+    assert_eq!(labels, &["foo", "bar"]);
 
-//     drop(c);
-//     let written = s.pop_bytes_written(0);
-//     assert_eq!(written, b"END\r\n");
-// }
+    drop(c);
+    let written = s.pop_bytes_written(0);
+    assert_eq!(written, b"END\r\n");
+}
 
-// #[test]
-// fn hello_pwd() {
-//     let mut s = mock::Stream::with_salt(1545, "55104dc76695721d");
+#[tokio::test]
+async fn hello_pwd() {
+    let mut s = mock::Stream::with_salt(1545, "55104dc76695721d");
 
-//     let mut c = ConsumerBuilder::default();
-//     c.register("never_called", |_| -> io::Result<()> { unreachable!() });
-//     let c = c
-//         .connect_with(s.clone(), Some("foobar".to_string()))
-//         .unwrap();
-//     let written = s.pop_bytes_written(0);
-//     assert!(written.starts_with(b"HELLO {"));
-//     let written: serde_json::Value = serde_json::from_slice(&written[b"HELLO ".len()..]).unwrap();
-//     let written = written.as_object().unwrap();
-//     assert_eq!(
-//         written.get("pwdhash").and_then(|h| h.as_str()),
-//         Some("6d877f8e5544b1f2598768f817413ab8a357afffa924dedae99eb91472d4ec30")
-//     );
+    let mut c: ConsumerBuilder<io::Error> = ConsumerBuilder::default();
+    c.register("never_called", |_| Box::pin(async move { unreachable!() }));
+    let c = c
+        .connect_with(s.clone(), Some("foobar".to_string()))
+        .await
+        .unwrap();
+    let written = s.pop_bytes_written(0);
+    assert!(written.starts_with(b"HELLO {"));
+    let written: serde_json::Value = serde_json::from_slice(&written[b"HELLO ".len()..]).unwrap();
+    let written = written.as_object().unwrap();
+    assert_eq!(
+        written.get("pwdhash").and_then(|h| h.as_str()),
+        Some("6d877f8e5544b1f2598768f817413ab8a357afffa924dedae99eb91472d4ec30")
+    );
 
-//     drop(c);
-// }
+    drop(c);
+}
 
 // #[test]
 // fn dequeue() {

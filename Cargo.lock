@@ -335,7 +335,6 @@ dependencies = [
  "fnv",
  "hostname",
  "libc",
- "mockstream",
  "pin-project",
  "rand",
  "serde",
@@ -511,12 +510,6 @@ dependencies = [
  "wasi",
  "windows-sys 0.48.0",
 ]
-
-[[package]]
-name = "mockstream"
-version = "0.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35bbe0c0c9d254b463b13734bc361d1423289547e052b1e77e5a77292496ba2e"
 
 [[package]]
 name = "num-traits"
