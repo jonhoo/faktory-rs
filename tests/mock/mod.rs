@@ -1,6 +1,6 @@
 use faktory::Reconnect;
 use std::{
-    io,
+    io::{self, Read},
     sync::{Arc, Mutex},
 };
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -44,7 +44,7 @@ impl AsyncRead for Stream {
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<io::Result<()>> {
         let this = self.project();
-        let stream = this.mine.project().0;
+        let stream = this.mine.project().reader;
         stream.poll_read(cx, buf)
     }
 }
@@ -55,21 +55,31 @@ impl AsyncWrite for Stream {
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, io::Error>> {
-        todo!()
+        let this = self.project();
+        let stream = this.mine.project().writer;
+        println!(
+            "poll_write {:#?}",
+            String::from_utf8(buf.to_owned()).unwrap()
+        );
+        stream.poll_write(cx, buf)
     }
 
     fn poll_flush(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), io::Error>> {
-        todo!()
+        let this = self.project();
+        let stream = this.mine.project().writer;
+        stream.poll_flush(cx)
     }
 
     fn poll_shutdown(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), io::Error>> {
-        todo!()
+        let this = self.project();
+        let stream = this.mine.project().writer;
+        stream.poll_shutdown(cx)
     }
 }
 
@@ -77,7 +87,8 @@ impl Stream {
     fn make(salt: Option<(usize, &str)>, streams: usize) -> Self {
         let streams = (0..streams)
             .map(|_| {
-                let mut s = inner::MockStream::new();
+                let mut s = inner::MockStream::default();
+                eprintln!("{:#?}", s);
                 // need to say HELLO
                 if let Some((iters, salt)) = salt {
                     // include salt for pwdhash

@@ -7,12 +7,13 @@ mod mock;
 
 use faktory::*;
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn hello() {
     let mut s = mock::Stream::default();
 
     let p = Producer::connect_with(s.clone(), None).await.unwrap();
     let written = s.pop_bytes_written(0);
+    eprintln!("{:?}", String::from_utf8(written.clone()).unwrap());
     assert!(written.starts_with(b"HELLO {"));
     let written: serde_json::Value = serde_json::from_slice(&written[b"HELLO ".len()..]).unwrap();
     let written = written.as_object().unwrap();
@@ -27,7 +28,7 @@ async fn hello() {
     assert_eq!(written, b"END\r\n");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn hello_pwd() {
     let mut s = mock::Stream::with_salt(1545, "55104dc76695721d");
 
@@ -46,7 +47,7 @@ async fn hello_pwd() {
     drop(c);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn enqueue() {
     let mut s = mock::Stream::default();
     let mut p = Producer::connect_with(s.clone(), None).await.unwrap();
@@ -87,7 +88,7 @@ async fn enqueue() {
     assert_eq!(written.get("backtrace").and_then(|h| h.as_u64()), Some(0));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn queue_control() {
     let mut s = mock::Stream::default();
     let mut p = Producer::connect_with(s.clone(), None).await.unwrap();
