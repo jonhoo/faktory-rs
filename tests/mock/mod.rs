@@ -1,6 +1,7 @@
 use faktory::Reconnect;
 use std::{
-    io::{self, Read},
+    io,
+    pin::Pin,
     sync::{Arc, Mutex},
 };
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -8,9 +9,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 mod inner;
 
 #[derive(Clone)]
-#[pin_project::pin_project]
 pub struct Stream {
-    #[pin]
     mine: inner::MockStream,
     all: Arc<Mutex<inner::Inner>>,
 }
@@ -43,9 +42,9 @@ impl AsyncRead for Stream {
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<io::Result<()>> {
-        let this = self.project();
-        let stream = this.mine.project().reader;
-        stream.poll_read(cx, buf)
+        // let wrapper = ;
+        let mut duplex = self.mine.duplex.lock().unwrap();
+        Pin::new(&mut duplex.reader).poll_read(cx, buf)
     }
 }
 
@@ -55,31 +54,24 @@ impl AsyncWrite for Stream {
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, io::Error>> {
-        let this = self.project();
-        let stream = this.mine.project().writer;
-        println!(
-            "poll_write {:#?}",
-            String::from_utf8(buf.to_owned()).unwrap()
-        );
-        stream.poll_write(cx, buf)
+        let mut duplex = self.mine.duplex.lock().unwrap();
+        Pin::new(&mut duplex.writer).poll_write(cx, buf)
     }
 
     fn poll_flush(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), io::Error>> {
-        let this = self.project();
-        let stream = this.mine.project().writer;
-        stream.poll_flush(cx)
+        let mut duplex = self.mine.duplex.lock().unwrap();
+        Pin::new(&mut duplex.writer).poll_flush(cx)
     }
 
     fn poll_shutdown(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), io::Error>> {
-        let this = self.project();
-        let stream = this.mine.project().writer;
-        stream.poll_shutdown(cx)
+        let mut duplex = self.mine.duplex.lock().unwrap();
+        Pin::new(&mut duplex.writer).poll_shutdown(cx)
     }
 }
 
@@ -108,7 +100,7 @@ impl Stream {
             take_next: 0,
             streams,
         };
-        let mine = inner.take_stream().unwrap(); // ??
+        let mine = inner.take_stream().unwrap();
 
         Stream {
             mine,

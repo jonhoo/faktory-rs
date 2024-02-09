@@ -50,7 +50,6 @@ pin-project = { version = "1.1.4", optional = true }
 clap = { version = "4.4.10", optional = true }
 
 [dev-dependencies]
-pin-project = "1.1.4"
 tokio = { version = "1.35.1", features = ["rt", "macros"] }
 tokio-test = "0.4.3"
 
