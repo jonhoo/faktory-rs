@@ -1,5 +1,4 @@
 extern crate faktory;
-extern crate pin_project;
 extern crate serde_json;
 extern crate url;
 

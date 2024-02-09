@@ -22,7 +22,7 @@ impl Default for Stream {
 
 #[async_trait::async_trait]
 impl Reconnect for Stream {
-    async fn reconnect(&self) -> Result<Self, io::Error> {
+    async fn reconnect(&mut self) -> Result<Self, io::Error> {
         let mine = self
             .all
             .lock()
@@ -42,8 +42,7 @@ impl AsyncRead for Stream {
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<io::Result<()>> {
-        // let wrapper = ;
-        let mut duplex = self.mine.duplex.lock().unwrap();
+        let mut duplex = self.mine.du.lock().unwrap();
         Pin::new(&mut duplex.reader).poll_read(cx, buf)
     }
 }
@@ -54,7 +53,7 @@ impl AsyncWrite for Stream {
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<Result<usize, io::Error>> {
-        let mut duplex = self.mine.duplex.lock().unwrap();
+        let mut duplex = self.mine.du.lock().unwrap();
         Pin::new(&mut duplex.writer).poll_write(cx, buf)
     }
 
@@ -62,7 +61,7 @@ impl AsyncWrite for Stream {
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), io::Error>> {
-        let mut duplex = self.mine.duplex.lock().unwrap();
+        let mut duplex = self.mine.du.lock().unwrap();
         Pin::new(&mut duplex.writer).poll_flush(cx)
     }
 
@@ -70,7 +69,7 @@ impl AsyncWrite for Stream {
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), io::Error>> {
-        let mut duplex = self.mine.duplex.lock().unwrap();
+        let mut duplex = self.mine.du.lock().unwrap();
         Pin::new(&mut duplex.writer).poll_shutdown(cx)
     }
 }
@@ -130,5 +129,12 @@ impl Stream {
 
     pub fn pop_bytes_written(&mut self, stream: usize) -> Vec<u8> {
         self.all.lock().unwrap().streams[stream].pop_bytes_written()
+    }
+}
+
+impl Drop for Stream {
+    fn drop(&mut self) {
+        let x = self.all.lock().unwrap();
+        assert_eq!(x.take_next, x.streams.len());
     }
 }

@@ -122,8 +122,8 @@ impl<S> Reconnect for TlsStream<S>
 where
     S: AsyncRead + AsyncWrite + Send + Unpin + Reconnect + Debug + 'static + Sync,
 {
-    async fn reconnect(&self) -> io::Result<Self> {
-        let stream = self.stream.get_ref().0.reconnect().await?;
+    async fn reconnect(&mut self) -> io::Result<Self> {
+        let stream = self.stream.get_mut().0.reconnect().await?;
         Self::new(stream, self.connector.clone(), &self.hostname).await
     }
 }

@@ -9,16 +9,16 @@ pub(crate) struct Duplex {
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct MockStream {
-    pub duplex: Arc<Mutex<Duplex>>,
+    pub du: Arc<Mutex<Duplex>>,
 }
 
 impl MockStream {
     pub fn push_bytes_to_read(&mut self, bytes: &[u8]) {
-        self.duplex.lock().unwrap().reader.get_mut().extend(bytes);
+        self.du.lock().unwrap().reader.get_mut().extend(bytes);
     }
 
     pub fn pop_bytes_written(&mut self) -> Vec<u8> {
-        let mut du = self.duplex.lock().unwrap();
+        let mut du = self.du.lock().unwrap();
         let mut wr = Vec::new();
         mem::swap(&mut wr, du.writer.get_mut());
         du.writer.set_position(0);
