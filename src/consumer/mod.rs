@@ -240,11 +240,9 @@ impl<E> ConsumerBuilder<E> {
     pub fn register<K, H>(&mut self, kind: K, handler: H) -> &mut Self
     where
         K: Into<String>,
-        // Annoyingly, can't just use the JobRunner<E> type alias here.
         H: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
     {
-        self.callbacks.insert(kind.into(), Box::new(handler));
-        self
+        self.register_runner(kind, handler)
     }
 
     /// Register a handler for the given job type (`kind`).
