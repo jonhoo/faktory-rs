@@ -1,0 +1,24 @@
+# Since `dependabot` does not yet support `compose` files,
+# we are using "proxy" dockerfiles, as per instructions:
+# https://github.com/dependabot/dependabot-core/issues/390#issuecomment-1062170379
+
+services:
+  faktory:
+    build:
+      context: .
+      dockerfile: faktory.Dockerfile
+    command: "/faktory -b :7419 -w :7420"
+  nginx:
+    depends_on:
+      - faktory
+    build:
+      context: .
+      dockerfile: nginx.Dockerfile
+    ports:
+      - "127.0.0.1:7419:7419"
+      - "127.0.0.1:7420:7420"
+      - "127.0.0.1:17419:17419"
+      - "127.0.0.1:17420:17420"
+    volumes:
+      - ./nginx:/etc/nginx:ro
+      - ./certs:/etc/ssl/certs:ro
