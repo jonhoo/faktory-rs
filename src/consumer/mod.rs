@@ -47,21 +47,21 @@ const STATUS_TERMINATING: usize = 2;
 /// ```
 pub trait JobRunner: Send + Sync {
     /// The error type that the handler may return.
-    type E;
+    type Error;
     /// A handler function that runs a job.
-    fn run(&self, job: Job) -> Result<(), Self::E>;
+    fn run(&self, job: Job) -> Result<(), Self::Error>;
 }
 // Implements JobRunner for a closure that takes a Job and returns a Result<(), E>
 impl<E, F> JobRunner for F
 where
     F: Fn(Job) -> Result<(), E> + Send + Sync,
 {
-    type E = E;
+    type Error = E;
     fn run(&self, job: Job) -> Result<(), E> {
         self(job)
     }
 }
-type BoxedJobRunner<E> = Box<dyn JobRunner<E = E>>;
+type BoxedJobRunner<E> = Box<dyn JobRunner<Error = E>>;
 
 /// `Consumer` is used to run a worker that processes jobs provided by Faktory.
 ///
@@ -254,7 +254,7 @@ impl<E> ConsumerBuilder<E> {
     pub fn register_runner<K, H>(&mut self, kind: K, runner: H) -> &mut Self
     where
         K: Into<String>,
-        H: JobRunner<E = E> + 'static,
+        H: JobRunner<Error = E> + 'static,
     {
         self.callbacks.insert(kind.into(), Box::new(runner));
         self
