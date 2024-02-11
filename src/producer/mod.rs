@@ -118,10 +118,15 @@ impl<S: Read + Write> Producer<S> {
     ///
     /// Note that this is not an all-or-nothing operation: jobs that contain errors will not be enqueued,
     /// while those that are error-free _will_ be enqueued by the Faktory server.
-    pub fn enqueue_many(
+    pub fn enqueue_many<J>(
         &mut self,
-        jobs: &[Job],
-    ) -> Result<(usize, Option<HashMap<String, String>>), Error> {
+        jobs: J,
+    ) -> Result<(usize, Option<HashMap<String, String>>), Error>
+      where J: IntoIterator<Item = Job>,
+            J::IntoIter: ExactSizeIterator
+    {
+        let jobs = jobs.into_iter();
+        let njobs = jobs.len();
         let errors: HashMap<String, String> = self
             .c
             .issue(&PushBulk::from(jobs))?
