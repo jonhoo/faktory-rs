@@ -40,7 +40,7 @@ jobs:
   # See: https://github.com/rust-lang/rustfmt/issues/5083
   imports:
     runs-on: ubuntu-latest
-    name: nightly / fmt (imports)
+    name: nightly / fmt (import grouping)
     steps:
       - uses: actions/checkout@v4
         with:
