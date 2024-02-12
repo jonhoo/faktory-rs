@@ -122,20 +122,21 @@ impl<S: Read + Write> Producer<S> {
         &mut self,
         jobs: J,
     ) -> Result<(usize, Option<HashMap<String, String>>), Error>
-      where J: IntoIterator<Item = Job>,
-            J::IntoIter: ExactSizeIterator
+    where
+        J: IntoIterator<Item = Job>,
+        J::IntoIter: ExactSizeIterator,
     {
         let jobs = jobs.into_iter();
-        let njobs = jobs.len();
+        let jobs_count = jobs.len();
         let errors: HashMap<String, String> = self
             .c
-            .issue(&PushBulk::from(jobs))?
+            .issue(&PushBulk::from(jobs.collect::<Vec<_>>()))?
             .read_json()?
             .expect("Faktory server sends {} literal when there are no errors");
         if errors.is_empty() {
-            return Ok((jobs.len(), None));
+            return Ok((jobs_count, None));
         }
-        Ok((jobs.len() - errors.len(), Some(errors)))
+        Ok((jobs_count - errors.len(), Some(errors)))
     }
 
     /// Retrieve information about the running server.

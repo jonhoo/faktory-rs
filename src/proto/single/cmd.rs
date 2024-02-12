@@ -244,22 +244,22 @@ impl FaktoryCommand for Push {
 
 // ----------------------------------------------
 
-pub struct PushBulk<'a>(&'a [Job]);
+pub struct PushBulk(Vec<Job>);
 
-impl<'a> Deref for PushBulk<'a> {
-    type Target = &'a [Job];
+impl Deref for PushBulk {
+    type Target = Vec<Job>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl<'a> From<&'a [Job]> for PushBulk<'a> {
-    fn from(jobs: &'a [Job]) -> Self {
+impl From<Vec<Job>> for PushBulk {
+    fn from(jobs: Vec<Job>) -> Self {
         PushBulk(jobs)
     }
 }
 
-impl<'a> FaktoryCommand for PushBulk<'a> {
+impl FaktoryCommand for PushBulk {
     fn issue<W: Write>(&self, w: &mut W) -> Result<(), Error> {
         w.write_all(b"PUSHB ")?;
         serde_json::to_writer(&mut *w, &**self).map_err(Error::Serialization)?;
