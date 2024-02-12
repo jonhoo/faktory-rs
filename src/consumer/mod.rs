@@ -52,8 +52,9 @@ pub trait JobRunner: Send + Sync {
     /// A handler function that runs a job.
     fn run(&self, job: Job) -> Result<(), Self::Error>;
 }
+type BoxedJobRunner<E> = Box<dyn JobRunner<Error = E>>;
 // Implements JobRunner for a closure that takes a Job and returns a Result<(), E>
-impl<E, F> JobRunner for F
+impl<E, F> JobRunner for Box<F>
 where
     F: Fn(Job) -> Result<(), E> + Send + Sync,
 {
@@ -62,7 +63,26 @@ where
         self(job)
     }
 }
-type BoxedJobRunner<E> = Box<dyn JobRunner<Error = E>>;
+
+// Additional Blanket Implementation
+impl<'a, E, F> JobRunner for &'a F
+where
+    F: Fn(Job) -> Result<(), E> + Send + Sync,
+{
+    type Error = E;
+    fn run(&self, job: Job) -> Result<(), E> {
+        self(job)
+    }
+}
+impl<'a, E, F> JobRunner for &'a mut F
+where
+    F: Fn(Job) -> Result<(), E> + Send + Sync,
+{
+    type Error = E;
+    fn run(&self, job: Job) -> Result<(), E> {
+        (self as &F)(job)
+    }
+}
 
 /// `Consumer` is used to run a worker that processes jobs provided by Faktory.
 ///
@@ -243,7 +263,7 @@ impl<E> ConsumerBuilder<E> {
         K: Into<String>,
         H: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
     {
-        self.register_runner(kind, handler)
+        self.register_runner(kind, Box::new(handler))
     }
 
     /// Register a handler for the given job type (`kind`).
