@@ -38,7 +38,7 @@
 //! let mut p = Producer::connect(None).unwrap();
 //! p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
 //!
-//! let (enqueued_count, errors) = p.enqueue_many(&[Job::new("foobar", vec!["z"]), Job::new("foobar", vec!["z"])]).unwrap();
+//! let (enqueued_count, errors) = p.enqueue_many(vec![Job::new("foobar", vec!["z"]), Job::new("foobar", vec!["z"])]).unwrap();
 //! assert_eq!(enqueued_count, 2);
 //! assert_eq!(errors, None);
 //! ```
