@@ -82,23 +82,6 @@ impl Reconnect for TcpStream {
     }
 }
 
-#[derive(Debug, Clone)]
-pub(crate) enum ClientRole {
-    // `Client` in Faktory terms. We've got a dedicated construct - `Producer` - wrapping
-    // a client who has got `ClientRole::Producer` role.
-    Producer,
-    // `Worker` in Faktory terms. We've got a dedicated construct - `Consumer` - wrapping
-    // a client who has got `ClientRole::Consumer` role.
-    Consumer,
-    // Does not have a dedicated name in Faktory narrative. The tacker's functionality
-    // (setting and getting a job's execution progress, retrieving a batch's status) is what
-    // a `Client` and a `Worker` have in common, so we are not maintaining a dedicated construct
-    // for this case, rather exposing those methods on the Client directly.
-    // Note, this is only available in Enterprise Faktory.
-    #[cfg(feature = "ent")]
-    Tracker,
-}
-
 #[derive(Clone)]
 pub(crate) struct ClientOptions {
     /// Hostname to advertise to server.
@@ -121,7 +104,7 @@ pub(crate) struct ClientOptions {
     /// Defaults to None,
     pub(crate) password: Option<String>,
 
-    role: ClientRole,
+    pub(crate) is_worker: bool,
 }
 
 impl Default for ClientOptions {
@@ -132,7 +115,7 @@ impl Default for ClientOptions {
             wid: None,
             labels: vec!["rust".to_string()],
             password: None,
-            role: ClientRole::Consumer,
+            is_worker: false,
         }
     }
 }
@@ -146,8 +129,8 @@ impl Default for ClientOptions {
 /// ```no_run
 /// use faktory::{Client, JobState};
 /// let job_id = String::from("W8qyVle9vXzUWQOf");
-/// let mut tracker = Client::connect_tracker(None)?;
-/// if let Some(progress) = tracker.get_progress(job_id)? {
+/// let mut cl = Client::connect(None)?;
+/// if let Some(progress) = cl.get_progress(job_id)? {
 ///     match progress.state {
 ///         JobState::Success => {
 ///         # /*
@@ -166,20 +149,20 @@ impl Default for ClientOptions {
 /// ```no_run
 /// use faktory::{Client, ProgressUpdateBuilder};
 /// let jid = String::from("W8qyVle9vXzUWQOf");
-/// let mut tracker = Client::connect_tracker(None)?;
+/// let mut cl = Client::connect(None)?;
 /// let progress = ProgressUpdateBuilder::new(&jid)
 ///     .desc("Almost done...".to_owned())
 ///     .percent(99)
 ///     .build();
-/// tracker.set_progress(progress)?;
+/// cl.set_progress(progress)?;
 /// # Ok::<(), faktory::Error>(())
 ///````
 /// Fetching a batch's status:
 /// ```no_run
 /// use faktory::Client;
 /// let bid = String::from("W8qyVle9vXzUWQOg");
-/// let mut tracker = Client::connect_tracker(None)?;
-/// if let Some(status) = tracker.get_batch_status(bid)? {
+/// let mut cl = Client::connect(None)?;
+/// if let Some(status) = cl.get_batch_status(bid)? {
 ///     println!("This batch created at {}", status.created_at);
 /// }
 /// # Ok::<(), faktory::Error>(())
@@ -215,23 +198,13 @@ impl<S: Read + Write> Client<S> {
         Ok(c)
     }
 
-    pub(crate) fn new_producer(stream: S, pwd: Option<String>) -> Result<Client<S>, Error> {
+    /// Create new [`Client`] and connect to a Faktory server with a non-standard stream.
+    pub fn connect_with(stream: S, pwd: Option<String>) -> Result<Client<S>, Error> {
         let opts = ClientOptions {
             password: pwd,
-            role: ClientRole::Producer,
             ..Default::default()
         };
-        Self::new(stream, opts)
-    }
-
-    #[cfg(feature = "ent")]
-    pub(crate) fn new_tracker(stream: S, pwd: Option<String>) -> Result<Client<S>, Error> {
-        let opts = ClientOptions {
-            password: pwd,
-            role: ClientRole::Tracker,
-            ..Default::default()
-        };
-        Self::new(stream, opts)
+        Ok(Client::new(stream, opts)?)
     }
 }
 
@@ -252,7 +225,7 @@ impl<S: Read + Write> Client<S> {
             }
         }
 
-        if let ClientRole::Consumer = self.opts.role {
+        if self.opts.is_worker {
             // fill in any missing options, and remember them for re-connect
             let hostname = self
                 .opts
@@ -305,19 +278,10 @@ impl<S: Read + Write> Client<S> {
         let cmd = GetBatchStatus::from(bid);
         self.issue(&cmd)?.read_json()
     }
-
-    /// Connect to a Faktory server with a non-standard stream.
-    ///
-    /// For a standard TCP stream use [`connect_tracker`](Client::connect_tracker).
-    pub fn connect_tracker_with(stream: S, pwd: Option<String>) -> Result<Client<S>, Error> {
-        Client::new_tracker(stream, pwd)
-    }
 }
 
-#[cfg(feature = "ent")]
-#[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
 impl Client<TcpStream> {
-    /// Create new [`Client`] and connect to a Faktory server to perform tracking actions.
+    /// Create new [`Client`] and connect to a Faktory server.
     ///
     /// If `url` is not given, will use the standard Faktory environment variables. Specifically,
     /// `FAKTORY_PROVIDER` is read to get the name of the environment variable to get the address
@@ -328,12 +292,10 @@ impl Client<TcpStream> {
     /// ```text
     /// tcp://localhost:7419
     /// ```
-    pub fn connect_tracker(url: Option<&str>) -> Result<Client<TcpStream>, Error> {
+    pub fn connect(url: Option<&str>) -> Result<Client<TcpStream>, Error> {
         let url = parse_provided_or_from_env(url)?;
-        let addr = host_from_url(&url);
-        let pwd = url.password().map(Into::into);
-        let stream = TcpStream::connect(addr)?;
-        Client::new_tracker(stream, pwd)
+        let stream = TcpStream::connect(host_from_url(&url))?;
+        Self::connect_with(stream, url.password().map(|p| p.to_string()))
     }
 }
 

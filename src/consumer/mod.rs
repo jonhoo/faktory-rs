@@ -226,6 +226,7 @@ impl<E> ConsumerBuilder<E> {
         pwd: Option<String>,
     ) -> Result<Consumer<S, E>, Error> {
         self.opts.password = pwd;
+        self.opts.is_worker = true;
         Ok(Consumer::new(
             Client::new(stream, self.opts)?,
             self.workers,

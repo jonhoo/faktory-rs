@@ -405,7 +405,7 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
     let url = learn_faktory_url();
 
     let t = Arc::new(Mutex::new(
-        Client::connect_tracker(Some(&url)).expect("job progress tracker created successfully"),
+        Client::connect(Some(&url)).expect("job progress tracker created successfully"),
     ));
 
     let t_captured = Arc::clone(&t);
@@ -555,8 +555,7 @@ fn test_batch_of_jobs_can_be_initiated() {
     c.register("thumbnail", move |_job| -> io::Result<_> { Ok(()) });
     c.register("clean_up", move |_job| -> io::Result<_> { Ok(()) });
     let mut c = c.connect(Some(&url)).unwrap();
-    let mut t =
-        Client::connect_tracker(Some(&url)).expect("job progress tracker created successfully");
+    let mut t = Client::connect(Some(&url)).expect("job progress tracker created successfully");
 
     let job_1 = Job::builder("thumbnail")
         .args(vec!["path/to/original/image1"])
@@ -685,8 +684,7 @@ fn test_batches_can_be_nested() {
     let mut c = ConsumerBuilder::default();
     c.register("jobtype", move |_job| -> io::Result<_> { Ok(()) });
     let mut _c = c.connect(Some(&url)).unwrap();
-    let mut t =
-        Client::connect_tracker(Some(&url)).expect("job progress tracker created successfully");
+    let mut t = Client::connect(Some(&url)).expect("job progress tracker created successfully");
 
     // Prepare some jobs:
     let parent_job1 = Job::builder("jobtype")
@@ -776,7 +774,7 @@ fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
     c.register("order", move |_job| -> io::Result<_> { Ok(()) });
     c.register("order_clean_up", move |_job| -> io::Result<_> { Ok(()) });
     let mut c = c.connect(Some(&url)).unwrap();
-    let mut t = Client::connect_tracker(Some(&url)).unwrap();
+    let mut t = Client::connect(Some(&url)).unwrap();
 
     let mut jobs = some_jobs(
         "order",
@@ -862,7 +860,7 @@ fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
     skip_if_not_enterprise!();
     let url = learn_faktory_url();
     let mut p = Producer::connect(Some(&url)).unwrap();
-    let mut t = Client::connect_tracker(Some(&url)).unwrap();
+    let mut t = Client::connect(Some(&url)).unwrap();
     let q_name = "test_callback_will_be_queued_upon_commit_even_if_batch_is_empty";
     let complete_cb_jobtype = "complete_callback_jobtype";
     let success_cb_jobtype = "success_cb_jobtype";
@@ -934,7 +932,7 @@ fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
     skip_if_not_enterprise!();
     let url = learn_faktory_url();
     let mut p = Producer::connect(Some(&url)).unwrap();
-    let mut t = Client::connect_tracker(Some(&url)).unwrap();
+    let mut t = Client::connect(Some(&url)).unwrap();
     let mut jobs = some_jobs("order", "test_batch_can_be_reopned_add_extra_jobs_added", 4);
     let mut callbacks = some_jobs(
         "order_clean_up",

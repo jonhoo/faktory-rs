@@ -1,7 +1,5 @@
 use crate::error::Error;
-use crate::proto::{
-    self, parse_provided_or_from_env, Client, Info, Job, Push, QueueAction, QueueControl,
-};
+use crate::proto::{Client, Info, Job, Push, QueueAction, QueueControl};
 use std::io::prelude::*;
 use std::net::TcpStream;
 
@@ -87,18 +85,16 @@ impl Producer<TcpStream> {
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
     pub fn connect(url: Option<&str>) -> Result<Self, Error> {
-        let url = parse_provided_or_from_env(url)?;
-        let stream = TcpStream::connect(proto::host_from_url(&url))?;
-        Self::connect_with(stream, url.password().map(|p| p.to_string()))
+        let c = Client::connect(url)?;
+        Ok(Producer { c })
     }
 }
 
 impl<S: Read + Write> Producer<S> {
     /// Connect to a Faktory server with a non-standard stream.
     pub fn connect_with(stream: S, pwd: Option<String>) -> Result<Producer<S>, Error> {
-        Ok(Producer {
-            c: Client::new_producer(stream, pwd)?,
-        })
+        let c = Client::connect_with(stream, pwd)?;
+        Ok(Producer { c })
     }
 
     /// Enqueue the given job on the Faktory server.

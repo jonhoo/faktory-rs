@@ -99,7 +99,7 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// b.add(job)?;
 /// b.commit()?;
 ///
-/// let mut t = Client::connect_tracker(None)?;
+/// let mut t = Client::connect(None)?;
 /// let s = t.get_batch_status(bid)?.unwrap();
 /// assert_eq!(s.total, 1);
 /// assert_eq!(s.pending, 1);
