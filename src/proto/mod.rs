@@ -101,9 +101,11 @@ pub(crate) struct ClientOptions {
     pub(crate) labels: Vec<String>,
 
     /// Password to authenticate with
-    /// Defaults to None,
+    /// Defaults to None.
     pub(crate) password: Option<String>,
 
+    /// Whether this client is instatianted for
+    /// a consumer (`worker` in Faktory terms).
     pub(crate) is_worker: bool,
 }
 
