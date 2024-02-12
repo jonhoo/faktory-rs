@@ -249,15 +249,18 @@ impl<'a, S: Read + Write> BatchHandle<'a, S> {
 // Not documented, but existing de fakto and also mentioned in the official client
 // https://github.com/contribsys/faktory/blob/main/client/batch.go#L17-L19
 /// State of a `callback` job of a [`Batch`].
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum CallbackState {
     /// Not enqueued yet.
     #[serde(rename = "")]
     Pending,
     /// Enqueued by the server, because the jobs belonging to this batch have finished executing.
+    /// If a callback has been consumed, it's status is still `Enqueued`.
+    /// If a callback has finished with failure, it's status remains `Enqueued`.
     #[serde(rename = "1")]
     Enqueued,
-    /// The enqueued callback job has been consumed.
+    /// The enqueued callback job has been consumed and successfully executed.
     #[serde(rename = "2")]
     FinishedOk,
 }

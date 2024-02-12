@@ -93,7 +93,7 @@ impl JobBuilder {
 
 // Ref: https://github.com/contribsys/faktory/wiki/Ent-Tracking#notes
 /// Job's state as last known by the Faktory server.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum JobState {
     /// The server can't tell a job's state.

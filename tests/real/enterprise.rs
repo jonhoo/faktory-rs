@@ -492,7 +492,7 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
 
     // But it actually knows the job's real status, since the consumer (worker)
     // informed it immediately after finishing with the job:
-    assert_eq!(progress.state.to_string(), "success");
+    assert_eq!(progress.state, JobState::Success);
 
     // Let's update the status once again to verify the 'update_builder' method
     // on the `Progress` struct works as expected:
@@ -539,7 +539,7 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
     assert_eq!(progress.jid, job_id);
 
     // Returned from Faktory: '{"jid":"f7APFzrS2RZi9eaA","state":"unknown","updated_at":""}'
-    assert_eq!(progress.state.to_string(), "unknown");
+    assert_eq!(progress.state, JobState::Unknown);
     assert!(progress.updated_at.is_none());
     assert!(progress.percent.is_none());
     assert!(progress.desc.is_none());
@@ -588,7 +588,7 @@ fn test_batch_of_jobs_can_be_initiated() {
 
     assert!(b.add(job_1).unwrap().is_none());
     assert!(b.add(job_2).unwrap().is_none());
-    assert_eq!(b.add(job_3).unwrap().unwrap(), Value::from("check-check"));
+    assert_eq!(b.add(job_3).unwrap().unwrap(), "check-check");
     b.commit().unwrap();
 
     // The batch has been committed, let's see its status:
@@ -609,8 +609,8 @@ fn test_batch_of_jobs_can_be_initiated() {
     assert_eq!(s.failed, 0);
     // Docs do not mention it, but the golang client does:
     // https://github.com/contribsys/faktory/blob/main/client/batch.go#L17-L19
-    assert_eq!(s.success_callback_state.to_string(), "Pending"); // we did not even provide the 'success' callback
-    assert_eq!(s.complete_callback_state.to_string(), "Pending");
+    assert_eq!(s.success_callback_state, CallbackState::Pending); // we did not even provide the 'success' callback
+    assert_eq!(s.complete_callback_state, CallbackState::Pending);
 
     // consume and execute job 1 ...
     assert_had_one!(&mut c, "test_batch_of_jobs_can_be_initiated");
@@ -659,7 +659,7 @@ fn test_batch_of_jobs_can_be_initiated() {
     assert_eq!(s.total, 3);
     assert_eq!(s.pending, 0);
     assert_eq!(s.failed, 0);
-    assert_eq!(s.complete_callback_state.to_string(), "Enqueued");
+    assert_eq!(s.complete_callback_state, CallbackState::Enqueued);
 
     // let's now successfully consume from the "callback" queue:
     assert_had_one!(&mut c, "test_batch_of_jobs_can_be_initiated__CALLBACKs");
@@ -671,7 +671,7 @@ fn test_batch_of_jobs_can_be_initiated() {
         .expect("...and it's not none");
 
     // this is because we have just consumed and executed 2 of 3 jobs:
-    assert_eq!(s.complete_callback_state.to_string(), "FinishedOk");
+    assert_eq!(s.complete_callback_state, CallbackState::FinishedOk);
 }
 
 #[test]
@@ -806,7 +806,7 @@ fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
     let s = t.get_batch_status(bid.clone()).unwrap().unwrap();
     assert_eq!(s.total, 3);
     assert_eq!(s.pending, 3);
-    assert_eq!(s.success_callback_state.to_string(), "Pending");
+    assert_eq!(s.success_callback_state, CallbackState::Pending);
 
     // consume those 3 jobs successfully;
     for _ in 0..3 {
@@ -827,7 +827,7 @@ fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
     assert_eq!(s.total, 3);
     assert_eq!(s.pending, 0);
     assert_eq!(s.failed, 0);
-    assert_eq!(s.success_callback_state.to_string(), "Pending"); // not just yet;
+    assert_eq!(s.success_callback_state, CallbackState::Pending); // not just yet;
 
     // to double-check, let's assert the success callbacks queue is empty:
     assert_is_empty!(
@@ -840,7 +840,7 @@ fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
 
     // ... and check batch status:
     let s = t.get_batch_status(bid.clone()).unwrap().unwrap();
-    assert_eq!(s.success_callback_state.to_string(), "Enqueued");
+    assert_eq!(s.success_callback_state, CallbackState::Enqueued);
 
     // finally, let's consume from the success callbacks queue ...
     assert_had_one!(
@@ -850,7 +850,7 @@ fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
 
     // ... and see the final status:
     let s = t.get_batch_status(bid.clone()).unwrap().unwrap();
-    assert_eq!(s.success_callback_state.to_string(), "FinishedOk");
+    assert_eq!(s.success_callback_state, CallbackState::FinishedOk);
 }
 
 #[test]
@@ -877,8 +877,8 @@ fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
 
     let s = t.get_batch_status(bid.clone()).unwrap().unwrap();
     assert_eq!(s.total, 0); // no jobs in the batch;
-    assert_eq!(s.success_callback_state.to_string(), "Pending");
-    assert_eq!(s.complete_callback_state.to_string(), "Pending");
+    assert_eq!(s.success_callback_state, CallbackState::Pending);
+    assert_eq!(s.complete_callback_state, CallbackState::Pending);
 
     b.commit().unwrap();
 
@@ -890,8 +890,8 @@ fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
 
     // The docs say "If you don't push any jobs into the batch, any callbacks will fire immediately upon BATCH COMMIT."
     // and "the success callback for a batch will always enqueue after the complete callback"
-    assert_eq!(s.complete_callback_state.to_string(), "Enqueued");
-    assert_eq!(s.success_callback_state.to_string(), "Pending");
+    assert_eq!(s.complete_callback_state, CallbackState::Enqueued);
+    assert_eq!(s.success_callback_state, CallbackState::Pending);
 
     let mut c = ConsumerBuilder::default();
     c.register(complete_cb_jobtype, move |_job| -> io::Result<_> { Ok(()) });
@@ -920,11 +920,11 @@ fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
 
     let s = t.get_batch_status(bid.clone()).unwrap().unwrap();
     assert_eq!(s.total, 0);
-    assert_eq!(s.complete_callback_state.to_string(), "FinishedOk");
+    assert_eq!(s.complete_callback_state, CallbackState::FinishedOk);
     // Still `Enqueued` due to the fact that it was not finished with success.
     // Had we registered a handler for `success_cb_jobtype` returing Ok(()) rather then Err(),
     // the state would be `FinishedOk` just like it's the case with the `complete` callback.
-    assert_eq!(s.success_callback_state.to_string(), "Enqueued");
+    assert_eq!(s.success_callback_state, CallbackState::Enqueued);
 }
 
 #[test]
@@ -1027,7 +1027,7 @@ fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
     let s = t.get_batch_status(nested_bid.clone()).unwrap().unwrap();
     assert_eq!(s.total, 0);
     assert_eq!(s.parent_bid, Some(bid)); // this is really our child batch
-    assert_eq!(s.complete_callback_state.to_string(), "Enqueued");
+    assert_eq!(s.complete_callback_state, CallbackState::Enqueued);
 
     // Subtest 3 result:
     // We managed to open an already committed batch "from outside" and the server accepted
