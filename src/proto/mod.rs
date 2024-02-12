@@ -206,7 +206,7 @@ impl<S: Read + Write> Client<S> {
             password: pwd,
             ..Default::default()
         };
-        Ok(Client::new(stream, opts)?)
+        Client::new(stream, opts)
     }
 }
 
