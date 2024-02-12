@@ -27,8 +27,9 @@ const STATUS_TERMINATING: usize = 2;
 /// struct MyHandler {
 ///     config: String,
 /// }
-/// impl JobRunner<io::Error> for MyHandler {
-///    fn run(&self, job: Job) -> Result<(), io::Error> {
+/// impl JobRunner for MyHandler {
+///    type Error = io::Error;
+///    fn run(&self, job: Job) -> Result<(), Self::Error> {
 ///       println!("config: {}", self.config);
 ///       println!("job: {:?}", job);
 ///       Ok(())
@@ -39,7 +40,7 @@ const STATUS_TERMINATING: usize = 2;
 /// let handler = MyHandler {
 ///    config: "bar".to_string(),
 /// };
-/// c.register_runner("foo", Box::new(handler));
+/// c.register_runner("foo", handler);
 /// let mut c = c.connect(None).unwrap();
 /// if let Err(e) = c.run(&["default"]) {
 ///     println!("worker failed: {}", e);
