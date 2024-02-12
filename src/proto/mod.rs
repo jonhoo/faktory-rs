@@ -1,3 +1,6 @@
+#[cfg(doc)]
+use crate::{Consumer, Producer};
+
 use crate::error::{self, Error};
 use bufstream::BufStream;
 use libc::getpid;
@@ -79,6 +82,23 @@ impl Reconnect for TcpStream {
     }
 }
 
+#[derive(Debug, Clone)]
+pub(crate) enum ClientRole {
+    // `Client` in Faktory terms. We've got a dedicated construct - `Producer` - wrapping
+    // a client who has got `ClientRole::Producer` role.
+    Producer,
+    // `Worker` in Faktory terms. We've got a dedicated construct - `Consumer` - wrapping
+    // a client who has got `ClientRole::Consumer` role.
+    Consumer,
+    // Does not have a dedicated name in Faktory narrative. The tacker's functionality
+    // (setting and getting a job's execution progress, retrieving a batch's status) is what
+    // a `Client` and a `Worker` have in common, so we are not maintaining a dedicated construct
+    // for this case, rather exposing those methods on the Client directly.
+    // Note, this is only available in Enterprise Faktory.
+    #[cfg(feature = "ent")]
+    Tracker,
+}
+
 #[derive(Clone)]
 pub(crate) struct ClientOptions {
     /// Hostname to advertise to server.
@@ -101,7 +121,7 @@ pub(crate) struct ClientOptions {
     /// Defaults to None,
     pub(crate) password: Option<String>,
 
-    is_producer: bool,
+    role: ClientRole,
 }
 
 impl Default for ClientOptions {
@@ -112,12 +132,59 @@ impl Default for ClientOptions {
             wid: None,
             labels: vec!["rust".to_string()],
             password: None,
-            is_producer: false,
+            role: ClientRole::Consumer,
         }
     }
 }
 
-pub(crate) struct Client<S: Read + Write> {
+/// A construct used internally by [`Producer`] and [`Consumer`].
+/// Can be used directly for retrieving and updating information on a job's execution progress
+/// (see [`Progress`] and [`ProgressUpdate`]), as well for retrieving a batch's status
+/// from the Faktory server (see [`BatchStatus`]).
+///
+/// Fetching a job's execution progress:
+/// ```no_run
+/// use faktory::{Client, JobState};
+/// let job_id = String::from("W8qyVle9vXzUWQOf");
+/// let mut tracker = Client::connect_tracker(None)?;
+/// if let Some(progress) = tracker.get_progress(job_id)? {
+///     match progress.state {
+///         JobState::Success => {
+///         # /*
+///             ...
+///         # */
+///         },
+///         # /*
+///         ...
+///         # */
+///         # _ => {},
+///     }
+/// }
+/// # Ok::<(), faktory::Error>(())
+/// ```
+/// Sending an update on a job's execution progress:
+/// ```no_run
+/// use faktory::{Client, ProgressUpdateBuilder};
+/// let jid = String::from("W8qyVle9vXzUWQOf");
+/// let mut tracker = Client::connect_tracker(None)?;
+/// let progress = ProgressUpdateBuilder::new(&jid)
+///     .desc("Almost done...".to_owned())
+///     .percent(99)
+///     .build();
+/// tracker.set_progress(progress)?;
+/// # Ok::<(), faktory::Error>(())
+///````
+/// Fetching a batch's status:
+/// ```no_run
+/// use faktory::Client;
+/// let bid = String::from("W8qyVle9vXzUWQOg");
+/// let mut tracker = Client::connect_tracker(None)?;
+/// if let Some(status) = tracker.get_batch_status(bid)? {
+///     println!("This batch created at {}", status.created_at);
+/// }
+/// # Ok::<(), faktory::Error>(())
+/// ```
+pub struct Client<S: Read + Write> {
     stream: BufStream<S>,
     opts: ClientOptions,
 }
@@ -131,7 +198,7 @@ where
         Client::new(s, self.opts.clone())
     }
 
-    pub fn reconnect(&mut self) -> Result<(), Error> {
+    pub(crate) fn reconnect(&mut self) -> Result<(), Error> {
         let s = self.stream.get_ref().reconnect()?;
         self.stream = BufStream::new(s);
         self.init()
@@ -151,7 +218,7 @@ impl<S: Read + Write> Client<S> {
     pub(crate) fn new_producer(stream: S, pwd: Option<String>) -> Result<Client<S>, Error> {
         let opts = ClientOptions {
             password: pwd,
-            is_producer: true,
+            role: ClientRole::Producer,
             ..Default::default()
         };
         Self::new(stream, opts)
@@ -161,14 +228,10 @@ impl<S: Read + Write> Client<S> {
     pub(crate) fn new_tracker(stream: S, pwd: Option<String>) -> Result<Client<S>, Error> {
         let opts = ClientOptions {
             password: pwd,
+            role: ClientRole::Tracker,
             ..Default::default()
         };
-        let mut c = Client {
-            stream: BufStream::new(stream),
-            opts,
-        };
-        c.init_tracker()?;
-        Ok(c)
+        Self::new(stream, opts)
     }
 }
 
@@ -189,8 +252,8 @@ impl<S: Read + Write> Client<S> {
             }
         }
 
-        // fill in any missing options, and remember them for re-connect
-        if !self.opts.is_producer {
+        if let ClientRole::Consumer = self.opts.role {
+            // fill in any missing options, and remember them for re-connect
             let hostname = self
                 .opts
                 .hostname
@@ -214,31 +277,63 @@ impl<S: Read + Write> Client<S> {
 
         single::write_command_and_await_ok(&mut self.stream, &hello)
     }
-
-    #[cfg(feature = "ent")]
-    fn init_tracker(&mut self) -> Result<(), Error> {
-        let hi = single::read_hi(&mut self.stream)?;
-
-        check_protocols_match(hi.version)?;
-
-        let mut hello = single::Hello::default();
-
-        // prepare password hash, if one expected by 'Faktory'
-        if hi.salt.is_some() {
-            if let Some(ref pwd) = self.opts.password {
-                hello.set_password(&hi, pwd);
-            } else {
-                return Err(error::Connect::AuthenticationNeeded.into());
-            }
-        }
-
-        single::write_command_and_await_ok(&mut self.stream, &hello)
-    }
 }
 
 impl<S: Read + Write> Drop for Client<S> {
     fn drop(&mut self) {
         single::write_command(&mut self.stream, &single::End).unwrap();
+    }
+}
+
+#[cfg(feature = "ent")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
+impl<S: Read + Write> Client<S> {
+    /// Send information on a job's execution progress to Faktory.
+    pub fn set_progress(&mut self, upd: ProgressUpdate) -> Result<(), Error> {
+        let cmd = Track::Set(upd);
+        self.issue(&cmd)?.await_ok()
+    }
+
+    /// Fetch information on a job's execution progress from Faktory.
+    pub fn get_progress(&mut self, jid: String) -> Result<Option<Progress>, Error> {
+        let cmd = Track::Get(jid);
+        self.issue(&cmd)?.read_json()
+    }
+
+    /// Fetch information on a batch of jobs execution progress.
+    pub fn get_batch_status(&mut self, bid: String) -> Result<Option<BatchStatus>, Error> {
+        let cmd = GetBatchStatus::from(bid);
+        self.issue(&cmd)?.read_json()
+    }
+
+    /// Connect to a Faktory server with a non-standard stream.
+    ///
+    /// For a standard TCP stream use [`connect_tracker`](Client::connect_tracker).
+    pub fn connect_tracker_with(stream: S, pwd: Option<String>) -> Result<Client<S>, Error> {
+        Client::new_tracker(stream, pwd)
+    }
+}
+
+#[cfg(feature = "ent")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
+impl Client<TcpStream> {
+    /// Create new [`Client`] and connect to a Faktory server to perform tracking actions.
+    ///
+    /// If `url` is not given, will use the standard Faktory environment variables. Specifically,
+    /// `FAKTORY_PROVIDER` is read to get the name of the environment variable to get the address
+    /// from (defaults to `FAKTORY_URL`), and then that environment variable is read to get the
+    /// server address. If the latter environment variable is not defined, the connection will be
+    /// made to
+    ///
+    /// ```text
+    /// tcp://localhost:7419
+    /// ```
+    pub fn connect_tracker(url: Option<&str>) -> Result<Client<TcpStream>, Error> {
+        let url = parse_provided_or_from_env(url)?;
+        let addr = host_from_url(&url);
+        let pwd = url.password().map(Into::into);
+        let stream = TcpStream::connect(addr)?;
+        Client::new_tracker(stream, pwd)
     }
 }
 

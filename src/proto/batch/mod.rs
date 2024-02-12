@@ -1,5 +1,5 @@
 #[cfg(doc)]
-use crate::Tracker;
+use crate::Client;
 
 use crate::{Error, Job, Producer};
 use chrono::{DateTime, Utc};
@@ -83,10 +83,10 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// effectively building a pipeline this way, since the Faktory guarantees that callback jobs will not be queued unless
 /// the batch gets committed.
 ///
-/// You can retieve the batch status using a [`Tracker`]:
+/// You can retieve the batch status using a [`Client`]:
 /// ```no_run
 /// # use faktory::Error;
-/// # use faktory::{Producer, Job, Batch, Tracker, CallbackState};
+/// # use faktory::{Producer, Job, Batch, Client, CallbackState};
 /// let mut prod = Producer::connect(None)?;
 /// let job = Job::builder("job_type").build();
 /// let cb_job = Job::builder("callback_job_type").build();
@@ -99,7 +99,7 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// b.add(job)?;
 /// b.commit()?;
 ///
-/// let mut t = Tracker::connect(None)?;
+/// let mut t = Client::connect_tracker(None)?;
 /// let s = t.get_batch_status(bid)?.unwrap();
 /// assert_eq!(s.total, 1);
 /// assert_eq!(s.pending, 1);

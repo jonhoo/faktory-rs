@@ -76,7 +76,7 @@ pub use tls::TlsStream;
 pub use crate::consumer::{Consumer, ConsumerBuilder};
 pub use crate::error::Error;
 pub use crate::producer::Producer;
-pub use crate::proto::{Job, JobBuilder, Reconnect};
+pub use crate::proto::{Client, Job, JobBuilder, Reconnect};
 
 #[cfg(feature = "ent")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
@@ -84,8 +84,3 @@ pub use crate::proto::{
     Batch, BatchBuilder, BatchHandle, BatchStatus, CallbackState, JobState, Progress,
     ProgressUpdate, ProgressUpdateBuilder,
 };
-#[cfg(feature = "ent")]
-mod tracker;
-#[cfg(feature = "ent")]
-#[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
-pub use crate::tracker::Tracker;
