@@ -192,7 +192,7 @@ fn test_jobs_pushed_in_bulk() {
     // Let's break these rules:
 
     let (enqueued_count, errors) = p
-        .enqueue_many(vec![
+        .enqueue_many([
             Job::builder("broken").jid("short").queue(local_3).build(), // jid.len() < 8
             Job::builder("") // empty string jobtype
                 .jid("3sZCbdp8e9WX__0")
