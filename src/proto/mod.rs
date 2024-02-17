@@ -122,7 +122,8 @@ impl Default for ClientOptions {
     }
 }
 
-/// A construct used internally by [`Producer`] and [`Consumer`].
+/// A Faktory connection that represents neither a [`Producer`] nor a [`Consumer`].
+///
 /// Can be used directly for retrieving and updating information on a job's execution progress
 /// (see [`Progress`] and [`ProgressUpdate`]), as well for retrieving a batch's status
 /// from the Faktory server (see [`BatchStatus`]).
