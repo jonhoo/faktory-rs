@@ -80,7 +80,7 @@ pub use crate::proto::{Client, Job, JobBuilder, Reconnect};
 
 #[cfg(feature = "ent")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
-/// Constructs only available with the enterprise version of Faktory. 
+/// Constructs only available with the enterprise version of Faktory.
 pub mod ent {
     pub use crate::proto::{
         Batch, BatchBuilder, BatchHandle, BatchStatus, CallbackState, JobState, Progress,

@@ -1,6 +1,6 @@
+use crate::ent::Batch;
 use crate::proto::single::FaktoryCommand;
 use crate::Error;
-use crate::ent::Batch;
 use std::io::Write;
 
 impl FaktoryCommand for Batch {
