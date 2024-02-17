@@ -130,7 +130,7 @@ impl Default for ClientOptions {
 ///
 /// Fetching a job's execution progress:
 /// ```no_run
-/// use faktory::{Client, JobState};
+/// use faktory::{Client, ent::JobState};
 /// let job_id = String::from("W8qyVle9vXzUWQOf");
 /// let mut cl = Client::connect(None)?;
 /// if let Some(progress) = cl.get_progress(job_id)? {
@@ -146,7 +146,7 @@ impl Default for ClientOptions {
 /// Sending an update on a job's execution progress:
 ///
 /// ```no_run
-/// use faktory::{Client, ProgressUpdateBuilder};
+/// use faktory::{Client, ent::ProgressUpdateBuilder};
 /// let jid = String::from("W8qyVle9vXzUWQOf");
 /// let mut cl = Client::connect(None)?;
 /// let progress = ProgressUpdateBuilder::new(&jid)

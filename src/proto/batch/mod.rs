@@ -28,7 +28,7 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// Here is how you can create a simple batch:
 /// ```no_run
 /// # use faktory::Error;
-/// use faktory::{Producer, Job, Batch};
+/// use faktory::{Producer, Job, ent::Batch};
 ///
 /// let mut prod = Producer::connect(None)?;
 /// let job1 = Job::builder("job_type").build();
@@ -49,7 +49,8 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 ///
 /// Nested batches are also supported:
 /// ```no_run
-/// # use faktory::{Producer, Job, Batch, Error};
+/// # use faktory::{Producer, Job, Error};
+/// # use faktory::ent::Batch;
 /// # let mut prod = Producer::connect(None)?;
 /// let parent_job1 = Job::builder("job_type").build();
 /// let parent_job2 = Job::builder("another_job_type").build();
@@ -86,7 +87,8 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// You can retieve the batch status using a [`Client`]:
 /// ```no_run
 /// # use faktory::Error;
-/// # use faktory::{Producer, Job, Batch, Client, CallbackState};
+/// # use faktory::{Producer, Job, Client};
+/// # use faktory::ent::{Batch, CallbackState};
 /// let mut prod = Producer::connect(None)?;
 /// let job = Job::builder("job_type").build();
 /// let cb_job = Job::builder("callback_job_type").build();
