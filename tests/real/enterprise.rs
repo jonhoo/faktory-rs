@@ -4,6 +4,7 @@ extern crate url;
 
 use chrono::Utc;
 use faktory::*;
+use faktory::ent::*;
 use serde_json::Value;
 use std::io;
 

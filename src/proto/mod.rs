@@ -173,6 +173,25 @@ pub struct Client<S: Read + Write> {
     opts: ClientOptions,
 }
 
+impl Client<TcpStream> {
+    /// Create new [`Client`] and connect to a Faktory server.
+    ///
+    /// If `url` is not given, will use the standard Faktory environment variables. Specifically,
+    /// `FAKTORY_PROVIDER` is read to get the name of the environment variable to get the address
+    /// from (defaults to `FAKTORY_URL`), and then that environment variable is read to get the
+    /// server address. If the latter environment variable is not defined, the connection will be
+    /// made to
+    ///
+    /// ```text
+    /// tcp://localhost:7419
+    /// ```
+    pub fn connect(url: Option<&str>) -> Result<Client<TcpStream>, Error> {
+        let url = parse_provided_or_from_env(url)?;
+        let stream = TcpStream::connect(host_from_url(&url))?;
+        Self::connect_with(stream, url.password().map(|p| p.to_string()))
+    }
+}
+
 impl<S> Client<S>
 where
     S: Read + Write + Reconnect,
@@ -278,25 +297,6 @@ impl<S: Read + Write> Client<S> {
     pub fn get_batch_status(&mut self, bid: String) -> Result<Option<BatchStatus>, Error> {
         let cmd = GetBatchStatus::from(bid);
         self.issue(&cmd)?.read_json()
-    }
-}
-
-impl Client<TcpStream> {
-    /// Create new [`Client`] and connect to a Faktory server.
-    ///
-    /// If `url` is not given, will use the standard Faktory environment variables. Specifically,
-    /// `FAKTORY_PROVIDER` is read to get the name of the environment variable to get the address
-    /// from (defaults to `FAKTORY_URL`), and then that environment variable is read to get the
-    /// server address. If the latter environment variable is not defined, the connection will be
-    /// made to
-    ///
-    /// ```text
-    /// tcp://localhost:7419
-    /// ```
-    pub fn connect(url: Option<&str>) -> Result<Client<TcpStream>, Error> {
-        let url = parse_provided_or_from_env(url)?;
-        let stream = TcpStream::connect(host_from_url(&url))?;
-        Self::connect_with(stream, url.password().map(|p| p.to_string()))
     }
 }
 
