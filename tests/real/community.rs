@@ -175,7 +175,7 @@ fn test_jobs_pushed_in_bulk() {
 
     let mut p = Producer::connect(None).unwrap();
     let (enqueued_count, errors) = p
-        .enqueue_many([
+        .enqueue_many(vec![
             Job::builder("common").queue(local_1).build(),
             Job::builder("common").queue(local_2).build(),
             Job::builder("special").queue(local_2).build(),

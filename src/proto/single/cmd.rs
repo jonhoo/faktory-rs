@@ -1,5 +1,5 @@
 use crate::{error::Error, Job};
-use std::{cell::RefCell, io::prelude::*};
+use std::io::prelude::*;
 
 pub trait FaktoryCommand {
     fn issue<W: Write>(&self, w: &mut W) -> Result<(), Error>;
@@ -244,38 +244,25 @@ impl FaktoryCommand for Push {
 
 // ----------------------------------------------
 
-pub struct PushBulk<I>(RefCell<I>);
+pub struct PushBulk(Vec<Job>);
 
-use serde::{ser::SerializeSeq, Serialize, Serializer};
-impl<I> Serialize for PushBulk<I>
-where
-    I: ExactSizeIterator<Item = Job>,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut seq = serializer.serialize_seq(Some(self.0.borrow().len()))?;
-        for element in self.0.borrow_mut().by_ref() {
-            seq.serialize_element(&element)?;
-        }
-        seq.end()
+impl Deref for PushBulk {
+    type Target = Vec<Job>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
-impl<I> From<I> for PushBulk<I> {
-    fn from(jobs: I) -> Self {
-        PushBulk(RefCell::new(jobs))
+impl From<Vec<Job>> for PushBulk {
+    fn from(jobs: Vec<Job>) -> Self {
+        PushBulk(jobs)
     }
 }
 
-impl<I> FaktoryCommand for PushBulk<I>
-where
-    I: ExactSizeIterator<Item = Job>,
-{
+impl FaktoryCommand for PushBulk {
     fn issue<W: Write>(&self, w: &mut W) -> Result<(), Error> {
         w.write_all(b"PUSHB ")?;
-        serde_json::to_writer(&mut *w, self).map_err(Error::Serialization)?;
+        serde_json::to_writer(&mut *w, &**self).map_err(Error::Serialization)?;
         Ok(w.write_all(b"\r\n")?)
     }
 }
