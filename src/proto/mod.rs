@@ -148,7 +148,9 @@ impl Default for ClientOptions {
 /// }
 /// # Ok::<(), faktory::Error>(())
 /// ```
+///
 /// Sending an update on a job's execution progress:
+///
 /// ```no_run
 /// use faktory::{Client, ProgressUpdateBuilder};
 /// let jid = String::from("W8qyVle9vXzUWQOf");
