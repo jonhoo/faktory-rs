@@ -130,7 +130,7 @@ impl<S: Read + Write> Producer<S> {
         let jobs_count = jobs.len();
         let errors: HashMap<String, String> = self
             .c
-            .issue(&PushBulk::from(jobs.collect::<Vec<_>>()))?
+            .issue(&PushBulk::from(jobs))?
             .read_json()?
             .expect("Faktory server sends {} literal when there are no errors");
         if errors.is_empty() {
