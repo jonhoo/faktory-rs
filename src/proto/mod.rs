@@ -134,16 +134,10 @@ impl Default for ClientOptions {
 /// let job_id = String::from("W8qyVle9vXzUWQOf");
 /// let mut cl = Client::connect(None)?;
 /// if let Some(progress) = cl.get_progress(job_id)? {
-///     match progress.state {
-///         JobState::Success => {
-///         # /*
-///             ...
-///         # */
-///         },
+///     if let JobState::Success = progress.state {
 ///         # /*
 ///         ...
 ///         # */
-///         # _ => {},
 ///     }
 /// }
 /// # Ok::<(), faktory::Error>(())
