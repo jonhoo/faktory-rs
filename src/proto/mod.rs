@@ -160,7 +160,9 @@ impl Default for ClientOptions {
 /// cl.set_progress(progress)?;
 /// # Ok::<(), faktory::Error>(())
 ///````
+///
 /// Fetching a batch's status:
+///
 /// ```no_run
 /// use faktory::Client;
 /// let bid = String::from("W8qyVle9vXzUWQOg");
