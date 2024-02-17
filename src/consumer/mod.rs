@@ -12,7 +12,7 @@ const STATUS_RUNNING: usize = 0;
 const STATUS_QUIET: usize = 1;
 const STATUS_TERMINATING: usize = 2;
 
-/// Implementors of this trait can be registered to run jobs in a `Consumer`.
+/// Implementations of this trait can be registered to run jobs in a `Consumer`.
 ///
 /// # Example
 ///
@@ -64,7 +64,7 @@ where
     }
 }
 
-// Additional Blanket Implementation
+// Additional Blanket Implementations
 impl<'a, E, F> JobRunner for &'a F
 where
     F: Fn(Job) -> Result<(), E> + Send + Sync,
@@ -81,6 +81,17 @@ where
     type Error = E;
     fn run(&self, job: Job) -> Result<(), E> {
         (self as &F)(job)
+    }
+}
+#[repr(transparent)]
+struct Closure<F>(F);
+impl<E, F> JobRunner for Closure<F>
+where
+    F: Fn(Job) -> Result<(), E> + Send + Sync,
+{
+    type Error = E;
+    fn run(&self, job: Job) -> Result<(), E> {
+        (self.0)(job)
     }
 }
 
@@ -263,7 +274,7 @@ impl<E> ConsumerBuilder<E> {
         K: Into<String>,
         H: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
     {
-        self.register_runner(kind, Box::new(handler))
+        self.register_runner(kind, Closure(handler))
     }
 
     /// Register a handler for the given job type (`kind`).
