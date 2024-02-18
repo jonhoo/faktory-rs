@@ -37,6 +37,10 @@
 //! use faktory::{Producer, Job};
 //! let mut p = Producer::connect(None).unwrap();
 //! p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
+//!
+//! let (enqueued_count, errors) = p.enqueue_many(vec![Job::new("foobar", vec!["z"]), Job::new("foobar", vec!["z"])]).unwrap();
+//! assert_eq!(enqueued_count, 2);
+//! assert_eq!(errors, None);
 //! ```
 //!
 //! If you want to **accept** jobs from Faktory, use `Consumer`.
@@ -61,20 +65,31 @@
 #[macro_use]
 extern crate serde_derive;
 
-mod consumer;
 pub mod error;
+
+mod consumer;
 mod producer;
 mod proto;
-
-#[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
-mod tls;
-#[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
-pub use tls::TlsStream;
 
 pub use crate::consumer::{Consumer, ConsumerBuilder, JobRunner};
 pub use crate::error::Error;
 pub use crate::producer::Producer;
-pub use crate::proto::Reconnect;
-pub use crate::proto::{Job, JobBuilder};
+pub use crate::proto::{Client, Job, JobBuilder, Reconnect};
+
+#[cfg(feature = "ent")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
+/// Constructs only available with the enterprise version of Faktory.
+pub mod ent {
+    pub use crate::proto::{
+        Batch, BatchBuilder, BatchHandle, BatchStatus, CallbackState, JobState, Progress,
+        ProgressUpdate, ProgressUpdateBuilder,
+    };
+}
+
+#[cfg(feature = "tls")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
+mod tls;
+
+#[cfg(feature = "tls")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
+pub use tls::TlsStream;

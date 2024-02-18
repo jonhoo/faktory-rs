@@ -1,7 +1,11 @@
 use crate::error::Error;
-use crate::proto::{self, Client, Info, Job, Push, QueueAction, QueueControl};
+use crate::proto::{Client, Info, Job, Push, PushBulk, QueueAction, QueueControl};
+use std::collections::HashMap;
 use std::io::prelude::*;
 use std::net::TcpStream;
+
+#[cfg(feature = "ent")]
+use crate::proto::{Batch, BatchHandle, CommitBatch, OpenBatch};
 
 /// `Producer` is used to enqueue new jobs that will in turn be processed by Faktory workers.
 ///
@@ -82,21 +86,16 @@ impl Producer<TcpStream> {
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
     pub fn connect(url: Option<&str>) -> Result<Self, Error> {
-        let url = match url {
-            Some(url) => proto::url_parse(url),
-            None => proto::url_parse(&proto::get_env_url()),
-        }?;
-        let stream = TcpStream::connect(proto::host_from_url(&url))?;
-        Self::connect_with(stream, url.password().map(|p| p.to_string()))
+        let c = Client::connect(url)?;
+        Ok(Producer { c })
     }
 }
 
 impl<S: Read + Write> Producer<S> {
     /// Connect to a Faktory server with a non-standard stream.
     pub fn connect_with(stream: S, pwd: Option<String>) -> Result<Producer<S>, Error> {
-        Ok(Producer {
-            c: Client::new_producer(stream, pwd)?,
-        })
+        let c = Client::connect_with(stream, pwd)?;
+        Ok(Producer { c })
     }
 
     /// Enqueue the given job on the Faktory server.
@@ -104,6 +103,38 @@ impl<S: Read + Write> Producer<S> {
     /// Returns `Ok` if the job was successfully queued by the Faktory server.
     pub fn enqueue(&mut self, job: Job) -> Result<(), Error> {
         self.c.issue(&Push::from(job))?.await_ok()
+    }
+
+    /// Enqueue numerous jobs on the Faktory server.
+    ///
+    /// Provided you have numerous jobs to submit, using this method will be more efficient as compared
+    /// to calling [`enqueue`](Producer::enqueue) multiple times.
+    ///
+    /// The returned `Ok` result will contain a tuple of enqueued jobs count and an option of a hash map
+    /// with job ids mapped onto error messages. Therefore `Ok(n, None)` will indicate that all n jobs
+    /// have been enqueued without errors.
+    ///
+    /// Note that this is not an all-or-nothing operation: jobs that contain errors will not be enqueued,
+    /// while those that are error-free _will_ be enqueued by the Faktory server.
+    pub fn enqueue_many<J>(
+        &mut self,
+        jobs: J,
+    ) -> Result<(usize, Option<HashMap<String, String>>), Error>
+    where
+        J: IntoIterator<Item = Job>,
+        J::IntoIter: ExactSizeIterator,
+    {
+        let jobs = jobs.into_iter();
+        let jobs_count = jobs.len();
+        let errors: HashMap<String, String> = self
+            .c
+            .issue(&PushBulk::from(jobs.collect::<Vec<_>>()))?
+            .read_json()?
+            .expect("Faktory server sends {} literal when there are no errors");
+        if errors.is_empty() {
+            return Ok((jobs_count, None));
+        }
+        Ok((jobs_count - errors.len(), Some(errors)))
     }
 
     /// Retrieve information about the running server.
@@ -128,6 +159,30 @@ impl<S: Read + Write> Producer<S> {
         self.c
             .issue(&QueueControl::new(QueueAction::Resume, queues))?
             .await_ok()
+    }
+
+    /// Initiate a new batch of jobs.
+    #[cfg(feature = "ent")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
+    pub fn start_batch(&mut self, batch: Batch) -> Result<BatchHandle<'_, S>, Error> {
+        let bid = self.c.issue(&batch)?.read_bid()?;
+        Ok(BatchHandle::new(bid, self))
+    }
+
+    /// Open an already existing batch of jobs.
+    ///
+    /// This will not error if a batch with the provided `bid` does not exist,
+    /// rather `Ok(None)` will be returned.
+    #[cfg(feature = "ent")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
+    pub fn open_batch(&mut self, bid: String) -> Result<Option<BatchHandle<'_, S>>, Error> {
+        let bid = self.c.issue(&OpenBatch::from(bid))?.maybe_bid()?;
+        Ok(bid.map(|bid| BatchHandle::new(bid, self)))
+    }
+
+    #[cfg(feature = "ent")]
+    pub(crate) fn commit_batch(&mut self, bid: String) -> Result<(), Error> {
+        self.c.issue(&CommitBatch::from(bid))?.await_ok()
     }
 }
 
