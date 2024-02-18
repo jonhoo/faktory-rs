@@ -9,11 +9,13 @@ mod utils;
 
 #[cfg(feature = "ent")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
-mod ent;
+pub mod ent;
 
 pub use self::cmd::*;
 pub use self::resp::*;
 use crate::error::Error;
+
+pub(crate) use self::utils::gen_random_wid;
 
 const JOB_DEFAULT_QUEUE: &str = "default";
 const JOB_DEFAULT_RESERVED_FOR_SECS: usize = 600;
@@ -56,7 +58,7 @@ const JOB_DEFAULT_BACKTRACE: usize = 0;
 /// ```
 ///
 /// See also the [Faktory wiki](https://github.com/contribsys/faktory/wiki/The-Job-Payload).
-#[derive(Builder, Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Debug, Clone, Builder)]
 #[builder(
     custom_constructor,
     setter(into),
@@ -177,7 +179,16 @@ impl JobBuilder {
     }
 
     /// Builds a new [`Job`] from the parameters of this builder.
-    pub fn build(&self) -> Job {
+    ///
+    /// For Enterprise edition of Faktory builds a new _trackable_ `Job`.
+    /// In Enterprise Faktory, a progress update can be sent and received only for the jobs
+    /// that have been explicitly marked as trackable via `"track":1` in the job's custom hash.
+    /// In case you have a reason to opt out of tracking, either unset (remove) the "track" on
+    /// the resulted job's [`custom`](Job::custom) hash or set it to 0.
+    pub fn build(&mut self) -> Job {
+        if cfg!(feature = "ent") {
+            self.add_to_custom_data("track", 1);
+        }
         self.try_build()
             .expect("All required fields have been set.")
     }
@@ -283,7 +294,14 @@ mod test {
         assert_eq!(job.priority, Some(JOB_DEFAULT_PRIORITY));
         assert_eq!(job.backtrace, Some(JOB_DEFAULT_BACKTRACE));
         assert!(job.failure.is_none());
-        assert_eq!(job.custom, HashMap::default());
+
+        if cfg!(feature = "ent") {
+            let mut custom = HashMap::new();
+            custom.insert("track".into(), 1.into());
+            assert_eq!(job.custom, custom)
+        } else {
+            assert_eq!(job.custom, HashMap::default());
+        }
 
         let job = JobBuilder::new(job_kind).build();
         assert!(job.args.is_empty());

@@ -34,23 +34,6 @@ jobs:
           components: rustfmt
       - name: cargo fmt --check
         run: cargo fmt --check
-  # This is currently a dedicated job due to the rustfmt's `group_imports` configuration
-  # option being available on the nightly channel only as of February 2024.
-  # Once stabilized, can be merged with the `stable / fmt` job in this workflow.
-  # See: https://github.com/rust-lang/rustfmt/issues/5083
-  imports:
-    runs-on: ubuntu-latest
-    name: nightly / fmt (import grouping)
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - name: Install nightly
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rustfmt
-      - name: cargo +nightly fmt -- --config group_imports=one --check
-        run: cargo +nightly fmt -- --config group_imports=one --check
   clippy:
     runs-on: ubuntu-latest
     name: ${{ matrix.toolchain }} / clippy

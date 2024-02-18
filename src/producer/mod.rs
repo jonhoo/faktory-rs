@@ -1,8 +1,11 @@
 use crate::error::Error;
-use crate::proto::{self, Client, Info, Job, Push, PushBulk, QueueAction, QueueControl};
+use crate::proto::{Client, Info, Job, Push, PushBulk, QueueAction, QueueControl};
 use std::collections::HashMap;
 use std::io::prelude::*;
 use std::net::TcpStream;
+
+#[cfg(feature = "ent")]
+use crate::proto::{Batch, BatchHandle, CommitBatch, OpenBatch};
 
 /// `Producer` is used to enqueue new jobs that will in turn be processed by Faktory workers.
 ///
@@ -83,21 +86,16 @@ impl Producer<TcpStream> {
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
     pub fn connect(url: Option<&str>) -> Result<Self, Error> {
-        let url = match url {
-            Some(url) => proto::url_parse(url),
-            None => proto::url_parse(&proto::get_env_url()),
-        }?;
-        let stream = TcpStream::connect(proto::host_from_url(&url))?;
-        Self::connect_with(stream, url.password().map(|p| p.to_string()))
+        let c = Client::connect(url)?;
+        Ok(Producer { c })
     }
 }
 
 impl<S: Read + Write> Producer<S> {
     /// Connect to a Faktory server with a non-standard stream.
     pub fn connect_with(stream: S, pwd: Option<String>) -> Result<Producer<S>, Error> {
-        Ok(Producer {
-            c: Client::new_producer(stream, pwd)?,
-        })
+        let c = Client::connect_with(stream, pwd)?;
+        Ok(Producer { c })
     }
 
     /// Enqueue the given job on the Faktory server.
@@ -161,6 +159,30 @@ impl<S: Read + Write> Producer<S> {
         self.c
             .issue(&QueueControl::new(QueueAction::Resume, queues))?
             .await_ok()
+    }
+
+    /// Initiate a new batch of jobs.
+    #[cfg(feature = "ent")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
+    pub fn start_batch(&mut self, batch: Batch) -> Result<BatchHandle<'_, S>, Error> {
+        let bid = self.c.issue(&batch)?.read_bid()?;
+        Ok(BatchHandle::new(bid, self))
+    }
+
+    /// Open an already existing batch of jobs.
+    ///
+    /// This will not error if a batch with the provided `bid` does not exist,
+    /// rather `Ok(None)` will be returned.
+    #[cfg(feature = "ent")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
+    pub fn open_batch(&mut self, bid: String) -> Result<Option<BatchHandle<'_, S>>, Error> {
+        let bid = self.c.issue(&OpenBatch::from(bid))?.maybe_bid()?;
+        Ok(bid.map(|bid| BatchHandle::new(bid, self)))
+    }
+
+    #[cfg(feature = "ent")]
+    pub(crate) fn commit_batch(&mut self, bid: String) -> Result<(), Error> {
+        self.c.issue(&CommitBatch::from(bid))?.await_ok()
     }
 }
 

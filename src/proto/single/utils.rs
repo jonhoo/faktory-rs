@@ -1,13 +1,22 @@
 use rand::{thread_rng, Rng};
 
 const JOB_ID_LENGTH: usize = 16;
+const WORKER_ID_LENGTH: usize = 32;
 
-pub fn gen_random_jid() -> String {
+fn gen_random_id(length: usize) -> String {
     thread_rng()
         .sample_iter(&rand::distributions::Alphanumeric)
         .map(char::from)
-        .take(JOB_ID_LENGTH)
+        .take(length)
         .collect()
+}
+
+pub(crate) fn gen_random_jid() -> String {
+    gen_random_id(JOB_ID_LENGTH)
+}
+
+pub(crate) fn gen_random_wid() -> String {
+    gen_random_id(WORKER_ID_LENGTH)
 }
 
 #[cfg(test)]
@@ -16,17 +25,16 @@ mod test {
     use std::collections::HashSet;
 
     #[test]
-    fn test_jid_of_known_size_generated() {
-        let jid1 = gen_random_jid();
-        let jid2 = gen_random_jid();
-        assert_ne!(jid1, jid2);
-        println!("{}", jid1);
-        assert_eq!(jid1.len(), JOB_ID_LENGTH);
-        assert_eq!(jid2.len(), JOB_ID_LENGTH);
+    fn test_id_of_known_size_generated() {
+        let id1 = gen_random_id(WORKER_ID_LENGTH);
+        let id2 = gen_random_id(WORKER_ID_LENGTH);
+        assert_ne!(id1, id2);
+        assert_eq!(id1.len(), WORKER_ID_LENGTH);
+        assert_eq!(id2.len(), WORKER_ID_LENGTH);
     }
 
     #[test]
-    fn test_jids_are_unique() {
+    fn test_ids_are_unique() {
         let mut ids = HashSet::new();
 
         ids.insert("IYKOxEfLcwcgKaRa".to_string());
@@ -36,8 +44,8 @@ mod test {
         ids.clear();
 
         for _ in 0..1_000_000 {
-            let jid = gen_random_jid();
-            ids.insert(jid);
+            let id = gen_random_id(JOB_ID_LENGTH);
+            ids.insert(id);
         }
         assert_eq!(ids.len(), 1_000_000);
     }

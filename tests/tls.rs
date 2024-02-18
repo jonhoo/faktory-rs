@@ -1,13 +1,10 @@
-extern crate faktory;
-extern crate serde_json;
-extern crate url;
+#![cfg(feature = "tls")]
 
 use faktory::*;
 use serde_json::Value;
 use std::{env, fs, io, sync};
 
 #[test]
-#[cfg(feature = "tls")]
 fn roundtrip_tls() {
     use native_tls::{Certificate, TlsConnector};
 

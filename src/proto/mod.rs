@@ -1,3 +1,6 @@
+#[cfg(doc)]
+use crate::{Consumer, Producer};
+
 use crate::error::{self, Error};
 use bufstream::BufStream;
 use libc::getpid;
@@ -13,6 +16,17 @@ mod single;
 // commands that users can issue
 pub use self::single::{
     Ack, Fail, Heartbeat, Info, Job, JobBuilder, Push, PushBulk, QueueAction, QueueControl,
+};
+
+#[cfg(feature = "ent")]
+pub use self::single::ent::{JobState, Progress, ProgressUpdate, ProgressUpdateBuilder, Track};
+
+#[cfg(feature = "ent")]
+mod batch;
+#[cfg(feature = "ent")]
+pub use batch::{
+    Batch, BatchBuilder, BatchHandle, BatchStatus, CallbackState, CommitBatch, GetBatchStatus,
+    OpenBatch,
 };
 
 pub(crate) fn get_env_url() -> String {
@@ -39,6 +53,21 @@ pub(crate) fn url_parse(url: &str) -> Result<Url, Error> {
     }
 
     Ok(url)
+}
+
+pub(crate) fn parse_provided_or_from_env(url: Option<&str>) -> Result<Url, Error> {
+    url_parse(url.unwrap_or(&get_env_url()))
+}
+
+fn check_protocols_match(ver: usize) -> Result<(), Error> {
+    if ver != EXPECTED_PROTOCOL_VERSION {
+        return Err(error::Connect::VersionMismatch {
+            ours: EXPECTED_PROTOCOL_VERSION,
+            theirs: ver,
+        }
+        .into());
+    }
+    Ok(())
 }
 
 /// A stream that can be re-established after failing.
@@ -72,10 +101,12 @@ pub(crate) struct ClientOptions {
     pub(crate) labels: Vec<String>,
 
     /// Password to authenticate with
-    /// Defaults to None,
+    /// Defaults to None.
     pub(crate) password: Option<String>,
 
-    is_producer: bool,
+    /// Whether this client is instatianted for
+    /// a consumer ("worker" in Faktory terms).
+    pub(crate) is_worker: bool,
 }
 
 impl Default for ClientOptions {
@@ -86,14 +117,79 @@ impl Default for ClientOptions {
             wid: None,
             labels: vec!["rust".to_string()],
             password: None,
-            is_producer: false,
+            is_worker: false,
         }
     }
 }
 
-pub(crate) struct Client<S: Read + Write> {
+/// A Faktory connection that represents neither a [`Producer`] nor a [`Consumer`].
+///
+/// Useful for retrieving and updating information on a job's execution progress
+/// (see [`Progress`] and [`ProgressUpdate`]), as well for retrieving a batch's status
+/// from the Faktory server (see [`BatchStatus`]).
+///
+/// Fetching a job's execution progress:
+/// ```no_run
+/// use faktory::{Client, ent::JobState};
+/// let job_id = String::from("W8qyVle9vXzUWQOf");
+/// let mut cl = Client::connect(None)?;
+/// if let Some(progress) = cl.get_progress(job_id)? {
+///     if let JobState::Success = progress.state {
+///         # /*
+///         ...
+///         # */
+///     }
+/// }
+/// # Ok::<(), faktory::Error>(())
+/// ```
+///
+/// Sending an update on a job's execution progress:
+///
+/// ```no_run
+/// use faktory::{Client, ent::ProgressUpdateBuilder};
+/// let jid = String::from("W8qyVle9vXzUWQOf");
+/// let mut cl = Client::connect(None)?;
+/// let progress = ProgressUpdateBuilder::new(&jid)
+///     .desc("Almost done...".to_owned())
+///     .percent(99)
+///     .build();
+/// cl.set_progress(progress)?;
+/// # Ok::<(), faktory::Error>(())
+///````
+///
+/// Fetching a batch's status:
+///
+/// ```no_run
+/// use faktory::Client;
+/// let bid = String::from("W8qyVle9vXzUWQOg");
+/// let mut cl = Client::connect(None)?;
+/// if let Some(status) = cl.get_batch_status(bid)? {
+///     println!("This batch created at {}", status.created_at);
+/// }
+/// # Ok::<(), faktory::Error>(())
+/// ```
+pub struct Client<S: Read + Write> {
     stream: BufStream<S>,
     opts: ClientOptions,
+}
+
+impl Client<TcpStream> {
+    /// Create new [`Client`] and connect to a Faktory server.
+    ///
+    /// If `url` is not given, will use the standard Faktory environment variables. Specifically,
+    /// `FAKTORY_PROVIDER` is read to get the name of the environment variable to get the address
+    /// from (defaults to `FAKTORY_URL`), and then that environment variable is read to get the
+    /// server address. If the latter environment variable is not defined, the connection will be
+    /// made to
+    ///
+    /// ```text
+    /// tcp://localhost:7419
+    /// ```
+    pub fn connect(url: Option<&str>) -> Result<Client<TcpStream>, Error> {
+        let url = parse_provided_or_from_env(url)?;
+        let stream = TcpStream::connect(host_from_url(&url))?;
+        Self::connect_with(stream, url.password().map(|p| p.to_string()))
+    }
 }
 
 impl<S> Client<S>
@@ -105,7 +201,7 @@ where
         Client::new(s, self.opts.clone())
     }
 
-    pub fn reconnect(&mut self) -> Result<(), Error> {
+    pub(crate) fn reconnect(&mut self) -> Result<(), Error> {
         let s = self.stream.get_ref().reconnect()?;
         self.stream = BufStream::new(s);
         self.init()
@@ -122,13 +218,13 @@ impl<S: Read + Write> Client<S> {
         Ok(c)
     }
 
-    pub(crate) fn new_producer(stream: S, pwd: Option<String>) -> Result<Client<S>, Error> {
+    /// Create new [`Client`] and connect to a Faktory server with a non-standard stream.
+    pub fn connect_with(stream: S, pwd: Option<String>) -> Result<Client<S>, Error> {
         let opts = ClientOptions {
             password: pwd,
-            is_producer: true,
             ..Default::default()
         };
-        Self::new(stream, opts)
+        Client::new(stream, opts)
     }
 }
 
@@ -136,17 +232,21 @@ impl<S: Read + Write> Client<S> {
     fn init(&mut self) -> Result<(), Error> {
         let hi = single::read_hi(&mut self.stream)?;
 
-        if hi.version != EXPECTED_PROTOCOL_VERSION {
-            return Err(error::Connect::VersionMismatch {
-                ours: EXPECTED_PROTOCOL_VERSION,
-                theirs: hi.version,
+        check_protocols_match(hi.version)?;
+
+        let mut hello = single::Hello::default();
+
+        // prepare password hash, if one expected by 'Faktory'
+        if hi.salt.is_some() {
+            if let Some(ref pwd) = self.opts.password {
+                hello.set_password(&hi, pwd);
+            } else {
+                return Err(error::Connect::AuthenticationNeeded.into());
             }
-            .into());
         }
 
-        // fill in any missing options, and remember them for re-connect
-        let mut hello = single::Hello::default();
-        if !self.opts.is_producer {
+        if self.opts.is_worker {
+            // fill in any missing options, and remember them for re-connect
             let hostname = self
                 .opts
                 .hostname
@@ -159,28 +259,13 @@ impl<S: Read + Write> Client<S> {
                 .pid
                 .unwrap_or_else(|| unsafe { getpid() } as usize);
             self.opts.pid = Some(pid);
-            let wid = self.opts.wid.clone().unwrap_or_else(|| {
-                use rand::{thread_rng, Rng};
-                thread_rng()
-                    .sample_iter(&rand::distributions::Alphanumeric)
-                    .map(char::from)
-                    .take(32)
-                    .collect()
-            });
+            let wid = self.opts.wid.clone().unwrap_or_else(single::gen_random_wid);
             self.opts.wid = Some(wid);
 
             hello.hostname = Some(self.opts.hostname.clone().unwrap());
             hello.wid = Some(self.opts.wid.clone().unwrap());
             hello.pid = Some(self.opts.pid.unwrap());
             hello.labels = self.opts.labels.clone();
-        }
-
-        if hi.salt.is_some() {
-            if let Some(ref pwd) = self.opts.password {
-                hello.set_password(&hi, pwd);
-            } else {
-                return Err(error::Connect::AuthenticationNeeded.into());
-            }
         }
 
         single::write_command_and_await_ok(&mut self.stream, &hello)
@@ -190,6 +275,28 @@ impl<S: Read + Write> Client<S> {
 impl<S: Read + Write> Drop for Client<S> {
     fn drop(&mut self) {
         single::write_command(&mut self.stream, &single::End).unwrap();
+    }
+}
+
+#[cfg(feature = "ent")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
+impl<S: Read + Write> Client<S> {
+    /// Send information on a job's execution progress to Faktory.
+    pub fn set_progress(&mut self, upd: ProgressUpdate) -> Result<(), Error> {
+        let cmd = Track::Set(upd);
+        self.issue(&cmd)?.await_ok()
+    }
+
+    /// Fetch information on a job's execution progress from Faktory.
+    pub fn get_progress(&mut self, jid: String) -> Result<Option<Progress>, Error> {
+        let cmd = Track::Get(jid);
+        self.issue(&cmd)?.read_json()
+    }
+
+    /// Fetch information on a batch of jobs execution progress.
+    pub fn get_batch_status(&mut self, bid: String) -> Result<Option<BatchStatus>, Error> {
+        let cmd = GetBatchStatus::from(bid);
+        self.issue(&cmd)?.read_json()
     }
 }
 
@@ -252,6 +359,28 @@ impl<'a, S: Read + Write> ReadToken<'a, S> {
         T: serde::de::DeserializeOwned,
     {
         single::read_json(&mut self.0.stream)
+    }
+
+    #[cfg(feature = "ent")]
+    pub(crate) fn read_bid(self) -> Result<String, Error> {
+        single::read_bid(&mut self.0.stream)
+    }
+
+    #[cfg(feature = "ent")]
+    pub(crate) fn maybe_bid(self) -> Result<Option<String>, Error> {
+        let bid_read_res = single::read_bid(&mut self.0.stream);
+        if bid_read_res.is_ok() {
+            return Ok(Some(bid_read_res.unwrap()));
+        }
+        match bid_read_res.unwrap_err() {
+            Error::Protocol(error::Protocol::Internal { msg }) => {
+                if msg.starts_with("No such batch") {
+                    return Ok(None);
+                }
+                return Err(error::Protocol::Internal { msg }.into());
+            }
+            another => Err(another),
+        }
     }
 }
 

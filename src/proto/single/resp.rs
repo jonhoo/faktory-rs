@@ -59,6 +59,26 @@ pub fn read_json<R: BufRead, T: serde::de::DeserializeOwned>(r: R) -> Result<Opt
 
 // ----------------------------------------------
 
+#[cfg(feature = "ent")]
+pub fn read_bid<R: BufRead>(r: R) -> Result<String, Error> {
+    match read(r)? {
+        RawResponse::Blob(ref b) if b.is_empty() => Err(error::Protocol::BadType {
+            expected: "non-empty blob representation of batch id",
+            received: "empty blob".into(),
+        }
+        .into()),
+        RawResponse::Blob(ref b) => Ok(std::str::from_utf8(b)
+            .map_err(|_| error::Protocol::BadType {
+                expected: "valid blob representation of batch id",
+                received: "unprocessable blob".into(),
+            })?
+            .into()),
+        something_else => Err(bad("id", &something_else).into()),
+    }
+}
+
+// ----------------------------------------------
+
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Hi {
     #[serde(rename = "v")]

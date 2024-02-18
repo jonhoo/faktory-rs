@@ -65,19 +65,31 @@
 #[macro_use]
 extern crate serde_derive;
 
-mod consumer;
 pub mod error;
+
+mod consumer;
 mod producer;
 mod proto;
+
+pub use crate::consumer::{Consumer, ConsumerBuilder};
+pub use crate::error::Error;
+pub use crate::producer::Producer;
+pub use crate::proto::{Client, Job, JobBuilder, Reconnect};
+
+#[cfg(feature = "ent")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
+/// Constructs only available with the enterprise version of Faktory.
+pub mod ent {
+    pub use crate::proto::{
+        Batch, BatchBuilder, BatchHandle, BatchStatus, CallbackState, JobState, Progress,
+        ProgressUpdate, ProgressUpdateBuilder,
+    };
+}
 
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 mod tls;
-pub use crate::consumer::{Consumer, ConsumerBuilder};
-pub use crate::error::Error;
-pub use crate::producer::Producer;
-pub use crate::proto::Reconnect;
-pub use crate::proto::{Job, JobBuilder};
+
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use tls::TlsStream;
