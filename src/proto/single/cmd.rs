@@ -246,13 +246,6 @@ impl FaktoryCommand for Push {
 
 pub struct PushBulk(Vec<Job>);
 
-impl Deref for PushBulk {
-    type Target = Vec<Job>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 impl From<Vec<Job>> for PushBulk {
     fn from(jobs: Vec<Job>) -> Self {
         PushBulk(jobs)
@@ -262,7 +255,7 @@ impl From<Vec<Job>> for PushBulk {
 impl FaktoryCommand for PushBulk {
     fn issue<W: Write>(&self, w: &mut W) -> Result<(), Error> {
         w.write_all(b"PUSHB ")?;
-        serde_json::to_writer(&mut *w, &**self).map_err(Error::Serialization)?;
+        serde_json::to_writer(&mut *w, &self.0).map_err(Error::Serialization)?;
         Ok(w.write_all(b"\r\n")?)
     }
 }
