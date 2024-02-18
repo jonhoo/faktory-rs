@@ -8,6 +8,7 @@ check:
 	cargo fmt --check
 	cargo clippy
 	cargo d --no-deps --all-features
+	cargo +nightly fmt -- --config group_imports=one --check
 
 .PHONY: doc
 doc:
@@ -34,6 +35,10 @@ faktory/tls:
 .PHONY: faktory/tls/kill
 faktory/tls/kill:
 	docker compose -f docker/compose.yml down
+
+.PHONY: sort
+sort:
+	cargo +nightly fmt -- --config group_imports=one
 
 .PHONY: test
 test:
