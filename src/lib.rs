@@ -71,7 +71,7 @@ mod consumer;
 mod producer;
 mod proto;
 
-pub use crate::consumer::{Consumer, ConsumerBuilder};
+pub use crate::consumer::{Consumer, ConsumerBuilder, JobRunner};
 pub use crate::error::Error;
 pub use crate::producer::Producer;
 pub use crate::proto::{Client, Job, JobBuilder, Reconnect};
