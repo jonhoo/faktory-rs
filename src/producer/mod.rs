@@ -1,5 +1,6 @@
 use crate::error::Error;
-use crate::proto::{Client, Info, Job, Push, QueueAction, QueueControl};
+use crate::proto::{Client, Info, Job, Push, PushBulk, QueueAction, QueueControl};
+use std::collections::HashMap;
 use std::io::prelude::*;
 use std::net::TcpStream;
 
@@ -102,6 +103,38 @@ impl<S: Read + Write> Producer<S> {
     /// Returns `Ok` if the job was successfully queued by the Faktory server.
     pub fn enqueue(&mut self, job: Job) -> Result<(), Error> {
         self.c.issue(&Push::from(job))?.await_ok()
+    }
+
+    /// Enqueue numerous jobs on the Faktory server.
+    ///
+    /// Provided you have numerous jobs to submit, using this method will be more efficient as compared
+    /// to calling [`enqueue`](Producer::enqueue) multiple times.
+    ///
+    /// The returned `Ok` result will contain a tuple of enqueued jobs count and an option of a hash map
+    /// with job ids mapped onto error messages. Therefore `Ok(n, None)` will indicate that all n jobs
+    /// have been enqueued without errors.
+    ///
+    /// Note that this is not an all-or-nothing operation: jobs that contain errors will not be enqueued,
+    /// while those that are error-free _will_ be enqueued by the Faktory server.
+    pub fn enqueue_many<J>(
+        &mut self,
+        jobs: J,
+    ) -> Result<(usize, Option<HashMap<String, String>>), Error>
+    where
+        J: IntoIterator<Item = Job>,
+        J::IntoIter: ExactSizeIterator,
+    {
+        let jobs = jobs.into_iter();
+        let jobs_count = jobs.len();
+        let errors: HashMap<String, String> = self
+            .c
+            .issue(&PushBulk::from(jobs.collect::<Vec<_>>()))?
+            .read_json()?
+            .expect("Faktory server sends {} literal when there are no errors");
+        if errors.is_empty() {
+            return Ok((jobs_count, None));
+        }
+        Ok((jobs_count - errors.len(), Some(errors)))
     }
 
     /// Retrieve information about the running server.

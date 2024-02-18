@@ -11,10 +11,9 @@ mod utils;
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
 pub mod ent;
 
-use crate::error::Error;
-
 pub use self::cmd::*;
 pub use self::resp::*;
+use crate::error::Error;
 
 pub(crate) use self::utils::gen_random_wid;
 

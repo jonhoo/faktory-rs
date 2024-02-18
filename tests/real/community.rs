@@ -165,6 +165,87 @@ fn queue() {
 }
 
 #[test]
+fn test_jobs_pushed_in_bulk() {
+    skip_check!();
+
+    let local_1 = "test_jobs_pushed_in_bulk_1";
+    let local_2 = "test_jobs_pushed_in_bulk_2";
+    let local_3 = "test_jobs_pushed_in_bulk_3";
+    let local_4 = "test_jobs_pushed_in_bulk_4";
+
+    let mut p = Producer::connect(None).unwrap();
+    let (enqueued_count, errors) = p
+        .enqueue_many(vec![
+            Job::builder("common").queue(local_1).build(),
+            Job::builder("common").queue(local_2).build(),
+            Job::builder("special").queue(local_2).build(),
+        ])
+        .unwrap();
+    assert_eq!(enqueued_count, 3);
+    assert!(errors.is_none()); // error-free
+
+    // From the Faktory source code, we know that:
+    // 1) job ID should be at least 8 chars long string; NB! Should be taken in account when introducing `Jid` new type;
+    // 2) jobtype should be a non-empty string;
+    // 3) job cannot be reserved for more than 86400 days;
+    // ref: https://github.com/contribsys/faktory/blob/main/manager/manager.go#L192-L203
+    // Let's break these rules:
+
+    let (enqueued_count, errors) = p
+        .enqueue_many([
+            Job::builder("broken").jid("short").queue(local_3).build(), // jid.len() < 8
+            Job::builder("") // empty string jobtype
+                .jid("3sZCbdp8e9WX__0")
+                .queue(local_3)
+                .build(),
+            Job::builder("broken")
+                .jid("3sZCbdp8e9WX__1")
+                .queue(local_3)
+                .reserve_for(864001) // reserve_for exceeded
+                .build(),
+            // plus some valid ones:
+            Job::builder("very_special").queue(local_4).build(),
+            Job::builder("very_special").queue(local_4).build(),
+        ])
+        .unwrap();
+
+    // 3 out of 5 not enqueued;
+    let errors = errors.unwrap();
+    assert_eq!(errors.len(), 3);
+    assert_eq!(
+        errors.get("short").unwrap(),
+        "jobs must have a reasonable jid parameter"
+    );
+    assert_eq!(
+        errors.get("3sZCbdp8e9WX__0").unwrap(),
+        "jobs must have a jobtype parameter"
+    );
+    assert_eq!(
+        errors.get("3sZCbdp8e9WX__1").unwrap(),
+        "jobs cannot be reserved for more than one day"
+    );
+
+    assert_eq!(enqueued_count, 2);
+    // Let's check that the two well-formatted jobs
+    // have _really_ been enqueued, i.e. that `enqueue_many`
+    // is not an  all-or-nothing operation:
+    let mut c = ConsumerBuilder::default();
+    c.hostname("tester".to_string()).wid(local_3.to_string());
+    c.register("very_special", move |_job| -> io::Result<()> { Ok(()) });
+    c.register("broken", move |_job| -> io::Result<()> { Ok(()) });
+    let mut c = c.connect(None).unwrap();
+
+    // we targeted "very_special" jobs to "local_4" queue
+    assert!(c.run_one(0, &[local_4]).unwrap());
+    assert!(c.run_one(0, &[local_4]).unwrap());
+    assert!(!c.run_one(0, &[local_4]).unwrap()); // drained
+
+    // also let's check that the 'broken' jobs have NOT been enqueued,
+    // reminder: we target the broken jobs to "local_3" queue
+    assert!(!c.run_one(0, &[local_3]).unwrap()); // empty
+}
+
+#[test]
 fn test_jobs_created_with_builder() {
     skip_check!();
 

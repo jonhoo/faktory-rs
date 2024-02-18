@@ -34,6 +34,23 @@ jobs:
           components: rustfmt
       - name: cargo fmt --check
         run: cargo fmt --check
+  # This is currently a dedicated job due to the rustfmt's `group_imports` configuration
+  # option being available on the nightly channel only as of February 2024.
+  # Once stabilized, can be merged with the `stable / fmt` job in this workflow.
+  # See: https://github.com/rust-lang/rustfmt/issues/5083
+  imports:
+    runs-on: ubuntu-latest
+    name: nightly / fmt (import grouping)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+      - name: cargo +nightly fmt -- --config group_imports=one --check
+        run: cargo +nightly fmt -- --config group_imports=one --check
   clippy:
     runs-on: ubuntu-latest
     name: ${{ matrix.toolchain }} / clippy
@@ -55,9 +72,10 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
           components: clippy
       - name: cargo clippy
-        uses: actions-rs/clippy-check@v1
+        uses: giraffate/clippy-action@v1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: 'github-pr-check'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
   doc:
     # run docs generation on nightly rather than stable. This enables features like
     # https://doc.rust-lang.org/beta/unstable-book/language-features/doc-cfg.html which allows an

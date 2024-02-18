@@ -11,6 +11,8 @@ repository = "https://github.com/jonhoo/faktory-rs.git"
 keywords = ["faktory", "api-bindings", "work-server", "job-server"]
 categories = ["api-bindings", "asynchronous", "network-programming"]
 
+exclude = [".github", "docker", ".gitignore", "Makefile"]
+
 [features]
 default = []
 tls = ["native-tls"]

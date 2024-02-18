@@ -1,5 +1,4 @@
 use crate::{error::Error, Job};
-
 use std::io::prelude::*;
 
 pub trait FaktoryCommand {
@@ -239,6 +238,24 @@ impl FaktoryCommand for Push {
     fn issue<W: Write>(&self, w: &mut W) -> Result<(), Error> {
         w.write_all(b"PUSH ")?;
         serde_json::to_writer(&mut *w, &**self).map_err(Error::Serialization)?;
+        Ok(w.write_all(b"\r\n")?)
+    }
+}
+
+// ----------------------------------------------
+
+pub struct PushBulk(Vec<Job>);
+
+impl From<Vec<Job>> for PushBulk {
+    fn from(jobs: Vec<Job>) -> Self {
+        PushBulk(jobs)
+    }
+}
+
+impl FaktoryCommand for PushBulk {
+    fn issue<W: Write>(&self, w: &mut W) -> Result<(), Error> {
+        w.write_all(b"PUSHB ")?;
+        serde_json::to_writer(&mut *w, &self.0).map_err(Error::Serialization)?;
         Ok(w.write_all(b"\r\n")?)
     }
 }
