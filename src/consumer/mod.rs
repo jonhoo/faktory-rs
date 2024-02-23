@@ -1,100 +1,25 @@
-use crate::error::Error;
-use crate::proto::{
-    self, parse_provided_or_from_env, Ack, Client, ClientOptions, Fail, HeartbeatStatus, Job,
-    Reconnect,
+use super::proto::{Client, Reconnect};
+use crate::{
+    proto::{Ack, Fail},
+    Error, Job,
 };
-use fnv::FnvHashMap;
-use std::error::Error as StdError;
-use std::io::prelude::*;
-use std::net::TcpStream;
-use std::sync::{atomic, Arc, Mutex};
+use std::sync::{atomic, Arc};
+use std::{error::Error as StdError, sync::atomic::AtomicUsize};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio::task::JoinHandle;
 
-const STATUS_RUNNING: usize = 0;
-const STATUS_QUIET: usize = 1;
-const STATUS_TERMINATING: usize = 2;
+mod builder;
+mod health;
+mod registries;
+mod runner;
 
-/// Implementations of this trait can be registered to run jobs in a `Consumer`.
-///
-/// # Example
-///
-/// Create a worker with all default options, register a single handler (for the `foo` job
-/// type), connect to the Faktory server, and start accepting jobs.
-/// The handler is a struct that implements `JobRunner`.
-///
-/// ```no_run
-/// use faktory::{ConsumerBuilder, JobRunner, Job};
-/// use std::io;
-///
-/// struct MyHandler {
-///     config: String,
-/// }
-/// impl JobRunner for MyHandler {
-///    type Error = io::Error;
-///    fn run(&self, job: Job) -> Result<(), Self::Error> {
-///       println!("config: {}", self.config);
-///       println!("job: {:?}", job);
-///       Ok(())
-///   }
-/// }
-///
-/// let mut c = ConsumerBuilder::default();
-/// let handler = MyHandler {
-///    config: "bar".to_string(),
-/// };
-/// c.register_runner("foo", handler);
-/// let mut c = c.connect(None).unwrap();
-/// if let Err(e) = c.run(&["default"]) {
-///     println!("worker failed: {}", e);
-/// }
-/// ```
-pub trait JobRunner: Send + Sync {
-    /// The error type that the handler may return.
-    type Error;
-    /// A handler function that runs a job.
-    fn run(&self, job: Job) -> Result<(), Self::Error>;
-}
-type BoxedJobRunner<E> = Box<dyn JobRunner<Error = E>>;
-// Implements JobRunner for a closure that takes a Job and returns a Result<(), E>
-impl<E, F> JobRunner for Box<F>
-where
-    F: Fn(Job) -> Result<(), E> + Send + Sync,
-{
-    type Error = E;
-    fn run(&self, job: Job) -> Result<(), E> {
-        self(job)
-    }
-}
+pub use builder::ConsumerBuilder;
+use registries::{CallbacksRegistry, StatesRegistry};
+pub use runner::JobRunner;
 
-// Additional Blanket Implementations
-impl<'a, E, F> JobRunner for &'a F
-where
-    F: Fn(Job) -> Result<(), E> + Send + Sync,
-{
-    type Error = E;
-    fn run(&self, job: Job) -> Result<(), E> {
-        self(job)
-    }
-}
-impl<'a, E, F> JobRunner for &'a mut F
-where
-    F: Fn(Job) -> Result<(), E> + Send + Sync,
-{
-    type Error = E;
-    fn run(&self, job: Job) -> Result<(), E> {
-        (self as &F)(job)
-    }
-}
-#[repr(transparent)]
-struct Closure<F>(F);
-impl<E, F> JobRunner for Closure<F>
-where
-    F: Fn(Job) -> Result<(), E> + Send + Sync,
-{
-    type Error = E;
-    fn run(&self, job: Job) -> Result<(), E> {
-        (self.0)(job)
-    }
-}
+pub(crate) const STATUS_RUNNING: usize = 0;
+pub(crate) const STATUS_QUIET: usize = 1;
+pub(crate) const STATUS_TERMINATING: usize = 2;
 
 /// `Consumer` is used to run a worker that processes jobs provided by Faktory.
 ///
@@ -165,9 +90,9 @@ where
 ///
 /// If all this process is doing is handling jobs, reconnecting on failure, and exiting when told
 /// to by the Faktory server, you should use
-/// [`run_to_completion`](struct.Consumer.html#method.run_to_completion). If you want more
+/// [`run_to_completion`](Consumer::run_to_completion). If you want more
 /// fine-grained control over the lifetime of your process, you should use
-/// [`Consumer::run`](struct.Consumer.html#method.run). See the documentation for each of these
+/// [`run`](Consumer::run). See the documentation for each of these
 /// methods for details.
 ///
 /// # Examples
@@ -176,153 +101,43 @@ where
 /// type), connect to the Faktory server, and start accepting jobs.
 ///
 /// ```no_run
+/// # tokio_test::block_on(async {
 /// use faktory::ConsumerBuilder;
 /// use std::io;
+///
 /// let mut c = ConsumerBuilder::default();
-/// c.register("foobar", |job| -> io::Result<()> {
+/// c.register("foobar", |job| Box::pin(async move {
 ///     println!("{:?}", job);
-///     Ok(())
-/// });
-/// let mut c = c.connect(None).unwrap();
-/// if let Err(e) = c.run(&["default"]) {
+///     Ok::<(), io::Error>(())
+/// }));
+/// let mut c = c.connect(None).await.unwrap();
+/// if let Err(e) = c.run(&["default"]).await {
 ///     println!("worker failed: {}", e);
 /// }
+/// # });
 /// ```
-pub struct Consumer<S, E>
-where
-    S: Read + Write,
-{
+///
+pub struct Consumer<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> {
     c: Client<S>,
-    worker_states: Arc<Vec<Mutex<WorkerState>>>,
-    callbacks: Arc<FnvHashMap<String, BoxedJobRunner<E>>>,
+    worker_states: Arc<StatesRegistry>,
+    callbacks: Arc<CallbacksRegistry<E>>,
     terminated: bool,
 }
 
-#[derive(Default)]
-struct WorkerState {
-    last_job_result: Option<Result<String, Fail>>,
-    running_job: Option<String>,
+impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin + Reconnect, E> Consumer<S, E> {
+    async fn reconnect(&mut self) -> Result<(), Error> {
+        self.c.reconnect().await
+    }
 }
 
-/// Convenience wrapper for building a Faktory worker.
-///
-/// See the [`Consumer`](struct.Consumer.html) documentation for details.
-pub struct ConsumerBuilder<E> {
-    opts: ClientOptions,
-    workers: usize,
-    callbacks: FnvHashMap<String, BoxedJobRunner<E>>,
-}
-
-impl<E> Default for ConsumerBuilder<E> {
-    /// Construct a new worker with default worker options and the url fetched from environment
-    /// variables.
-    ///
-    /// This will construct a worker where:
-    ///
-    ///  - `hostname` is this machine's hostname.
-    ///  - `wid` is a randomly generated string.
-    ///  - `pid` is the OS PID of this process.
-    ///  - `labels` is `["rust"]`.
-    ///
-    fn default() -> Self {
-        ConsumerBuilder {
-            opts: ClientOptions::default(),
-            workers: 1,
-            callbacks: Default::default(),
+impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> Consumer<S, E> {
+    async fn new(c: Client<S>, workers_count: usize, callbacks: CallbacksRegistry<E>) -> Self {
+        Consumer {
+            c,
+            callbacks: Arc::new(callbacks),
+            worker_states: Arc::new(StatesRegistry::new(workers_count)),
+            terminated: false,
         }
-    }
-}
-
-impl<E> ConsumerBuilder<E> {
-    /// Set the hostname to use for this worker.
-    ///
-    /// Defaults to the machine's hostname as reported by the operating system.
-    pub fn hostname(&mut self, hn: String) -> &mut Self {
-        self.opts.hostname = Some(hn);
-        self
-    }
-
-    /// Set a unique identifier for this worker.
-    ///
-    /// Defaults to a randomly generated ASCII string.
-    pub fn wid(&mut self, wid: String) -> &mut Self {
-        self.opts.wid = Some(wid);
-        self
-    }
-
-    /// Set the labels to use for this worker.
-    ///
-    /// Defaults to `["rust"]`.
-    pub fn labels(&mut self, labels: Vec<String>) -> &mut Self {
-        self.opts.labels = labels;
-        self
-    }
-
-    /// Set the number of workers to use for `run` and `run_to_completion_*`.
-    ///
-    /// Defaults to 1.
-    pub fn workers(&mut self, w: usize) -> &mut Self {
-        self.workers = w;
-        self
-    }
-
-    /// Register a handler function for the given job type (`kind`).
-    ///
-    /// Whenever a job whose type matches `kind` is fetched from the Faktory, the given handler
-    /// function is called with that job as its argument.
-    pub fn register<K, H>(&mut self, kind: K, handler: H) -> &mut Self
-    where
-        K: Into<String>,
-        H: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
-    {
-        self.register_runner(kind, Closure(handler))
-    }
-
-    /// Register a handler for the given job type (`kind`).
-    ///
-    /// Whenever a job whose type matches `kind` is fetched from the Faktory, the given handler
-    /// object is called with that job as its argument.
-    pub fn register_runner<K, H>(&mut self, kind: K, runner: H) -> &mut Self
-    where
-        K: Into<String>,
-        H: JobRunner<Error = E> + 'static,
-    {
-        self.callbacks.insert(kind.into(), Box::new(runner));
-        self
-    }
-
-    /// Connect to a Faktory server.
-    ///
-    /// If `url` is not given, will use the standard Faktory environment variables. Specifically,
-    /// `FAKTORY_PROVIDER` is read to get the name of the environment variable to get the address
-    /// from (defaults to `FAKTORY_URL`), and then that environment variable is read to get the
-    /// server address. If the latter environment variable is not defined, the connection will be
-    /// made to
-    ///
-    /// ```text
-    /// tcp://localhost:7419
-    /// ```
-    ///
-    /// If `url` is given, but does not specify a port, it defaults to 7419.
-    pub fn connect(self, url: Option<&str>) -> Result<Consumer<TcpStream, E>, Error> {
-        let url = parse_provided_or_from_env(url)?;
-        let stream = TcpStream::connect(proto::host_from_url(&url))?;
-        Self::connect_with(self, stream, url.password().map(|p| p.to_string()))
-    }
-
-    /// Connect to a Faktory server with a non-standard stream.
-    pub fn connect_with<S: Read + Write>(
-        mut self,
-        stream: S,
-        pwd: Option<String>,
-    ) -> Result<Consumer<S, E>, Error> {
-        self.opts.password = pwd;
-        self.opts.is_worker = true;
-        Ok(Consumer::new(
-            Client::new(stream, self.opts)?,
-            self.workers,
-            self.callbacks,
-        ))
     }
 }
 
@@ -331,142 +146,26 @@ enum Failed<E: StdError> {
     BadJobType(String),
 }
 
-impl<E, S: Read + Write> Consumer<S, E> {
-    fn new(c: Client<S>, workers: usize, callbacks: FnvHashMap<String, BoxedJobRunner<E>>) -> Self {
-        Consumer {
-            c,
-            callbacks: Arc::new(callbacks),
-            worker_states: Arc::new((0..workers).map(|_| Default::default()).collect()),
-            terminated: false,
-        }
-    }
-}
-
-impl<E, S: Read + Write + Reconnect> Consumer<S, E> {
-    fn reconnect(&mut self) -> Result<(), Error> {
-        self.c.reconnect()
-    }
-}
-
-impl<S, E> Consumer<S, E>
-where
-    S: Read + Write,
-    E: StdError,
+impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + Send>
+    Consumer<S, E>
 {
-    fn run_job(&mut self, job: Job) -> Result<(), Failed<E>> {
-        match self.callbacks.get(&job.kind) {
-            Some(callback) => callback.run(job).map_err(Failed::Application),
-            None => {
-                // cannot execute job, since no handler exists
-                Err(Failed::BadJobType(job.kind))
-            }
-        }
+    async fn run_job(&mut self, job: Job) -> Result<(), Failed<E>> {
+        let handler = self
+            .callbacks
+            .get(job.kind())
+            .ok_or(Failed::BadJobType(job.kind().to_string()))?;
+        handler.run(job).await.map_err(Failed::Application)
     }
 
-    /// Fetch and run a single job on the current thread, and then return.
-    pub fn run_one<Q>(&mut self, worker: usize, queues: &[Q]) -> Result<bool, Error>
-    where
-        Q: AsRef<str>,
-    {
-        // get a job
-        let job = match self.c.fetch(queues)? {
-            Some(job) => job,
-            None => return Ok(false),
-        };
-
-        // remember the job id
-        let jid = job.jid.clone();
-
-        // keep track of running job in case we're terminated during it
-        self.worker_states[worker].lock().unwrap().running_job = Some(jid.clone());
-
-        // process the job
-        let r = self.run_job(job);
-
-        // report back
-        match r {
-            Ok(_) => {
-                // job done -- acknowledge
-                // remember it in case we fail to notify the server (e.g., broken connection)
-                self.worker_states[worker].lock().unwrap().last_job_result = Some(Ok(jid.clone()));
-                self.c.issue(&Ack::new(jid))?.await_ok()?;
-            }
-            Err(e) => {
-                // job failed -- let server know
-                // "unknown" is the errtype used by the go library too
-                let fail = match e {
-                    Failed::BadJobType(jt) => {
-                        Fail::new(jid, "unknown", format!("No handler for {}", jt))
-                    }
-                    Failed::Application(e) => {
-                        let mut f = Fail::new(jid, "unknown", format!("{}", e));
-                        let mut root = e.source();
-                        let mut backtrace = Vec::new();
-                        while let Some(r) = root.take() {
-                            backtrace.push(format!("{}", r));
-                            root = r.source();
-                        }
-                        f.set_backtrace(backtrace);
-                        f
-                    }
-                };
-
-                let fail2 = fail.clone();
-                self.worker_states[worker].lock().unwrap().last_job_result = Some(Err(fail));
-                self.c.issue(&fail2)?.await_ok()?;
-            }
-        }
-
-        // we won't have to tell the server again
-        {
-            let mut state = self.worker_states[worker].lock().unwrap();
-            state.last_job_result = None;
-            state.running_job = None;
-        }
-        Ok(true)
+    async fn report_failure_to_server(&mut self, f: &Fail) -> Result<(), Error> {
+        self.c.issue(f).await?.read_ok().await
     }
 
-    #[cfg(test)]
-    pub(crate) fn run_n<Q>(&mut self, n: usize, queues: &[Q]) -> Result<(), Error>
-    where
-        Q: AsRef<str>,
-    {
-        for _ in 0..n {
-            self.run_one(0, queues)?;
-        }
-        Ok(())
-    }
-}
-
-impl<S, E> Consumer<S, E>
-where
-    S: Read + Write + Reconnect + Send + 'static,
-    E: StdError + 'static,
-{
-    fn for_worker(&mut self) -> Result<Self, Error> {
-        Ok(Consumer {
-            c: self.c.connect_again()?,
-            callbacks: Arc::clone(&self.callbacks),
-            worker_states: Arc::clone(&self.worker_states),
-            terminated: self.terminated,
-        })
+    async fn report_success_to_server(&mut self, jid: impl Into<String>) -> Result<(), Error> {
+        self.c.issue(&Ack::new(jid)).await?.read_ok().await
     }
 
-    /// Run this worker on the given `queues` until an I/O error occurs (`Err` is returned), or
-    /// until the server tells the worker to disengage (`Ok` is returned).
-    ///
-    /// The value in an `Ok` indicates the number of workers that may still be processing jobs.
-    ///
-    /// Note that if the worker fails, [`reconnect()`](struct.Consumer.html#method.reconnect)
-    /// should likely be called before calling `run()` again. If an error occurred while reporting
-    /// a job success or failure, the result will be re-reported to the server without re-executing
-    /// the job. If the worker was terminated (i.e., `run` returns with an `Ok` response), the
-    /// worker should **not** try to resume by calling `run` again. This will cause a panic.
-    pub fn run<Q>(&mut self, queues: &[Q]) -> Result<usize, Error>
-    where
-        Q: AsRef<str>,
-    {
-        assert!(!self.terminated, "do not re-run a terminated worker");
+    async fn report_on_all_workers(&mut self) -> Result<(), Error> {
         let worker_states = Arc::get_mut(&mut self.worker_states)
             .expect("all workers are scoped to &mut of the user-code-visible Consumer");
 
@@ -476,8 +175,8 @@ where
             let wstate = wstate.get_mut().unwrap();
             if let Some(res) = wstate.last_job_result.take() {
                 let r = match res {
-                    Ok(ref jid) => self.c.issue(&Ack::new(&**jid)),
-                    Err(ref fail) => self.c.issue(fail),
+                    Ok(ref jid) => self.c.issue(&Ack::new(jid)).await,
+                    Err(ref fail) => self.c.issue(fail).await,
                 };
 
                 let r = match r {
@@ -488,7 +187,7 @@ where
                     }
                 };
 
-                if let Err(e) = r.await_ok() {
+                if let Err(e) = r.read_ok().await {
                     // it could be that the server did previously get our ACK/FAIL, and that it was
                     // the resulting OK that failed. in that case, we would get an error response
                     // when re-sending the job response. this should not count as critical. other
@@ -501,93 +200,135 @@ where
             }
         }
 
+        Ok(())
+    }
+
+    // FAIL currently running jobs even though they're still running.
+    // Returns the number of workers that may still be processing jobs.
+    // We are ignoring any FAIL command issue errors, since this is already
+    // an "emergency" case.
+    async fn force_fail_all_workers(&mut self) -> usize {
+        let mut running = 0;
+        for wstate in self.worker_states.iter() {
+            let may_be_jid = wstate.lock().unwrap().running_job.take();
+            if let Some(jid) = may_be_jid {
+                running += 1;
+                let f = Fail::new(&*jid, "unknown", "terminated");
+                let _ = match self.c.issue(&f).await {
+                    Ok(r) => r.read_ok().await,
+                    Err(_) => continue,
+                }
+                .is_ok();
+            }
+        }
+        running
+    }
+
+    /// Fetch and run a single job, and then return.
+    pub async fn run_one<Q>(&mut self, worker: usize, queues: &[Q]) -> Result<bool, Error>
+    where
+        Q: AsRef<str> + Sync,
+    {
+        let job = match self.c.fetch(queues).await? {
+            None => return Ok(false),
+            Some(j) => j,
+        };
+
+        let jid = job.jid.clone();
+
+        self.worker_states.register_running(worker, jid.clone());
+
+        match self.run_job(job).await {
+            Ok(_) => {
+                self.worker_states.register_success(worker, jid.clone());
+                self.report_success_to_server(jid).await?;
+            }
+            Err(e) => {
+                let fail = match e {
+                    Failed::BadJobType(jt) => Fail::generic(jid, format!("No handler for {}", jt)),
+                    Failed::Application(e) => Fail::generic_with_backtrace(jid, e),
+                };
+                self.worker_states.register_failure(worker, &fail);
+                self.report_failure_to_server(&fail).await?;
+            }
+        }
+
+        self.worker_states.reset(worker);
+
+        Ok(true)
+    }
+}
+
+impl<
+        S: AsyncBufReadExt + AsyncWriteExt + Reconnect + Send + Unpin + 'static,
+        E: StdError + 'static + Send,
+    > Consumer<S, E>
+{
+    async fn for_worker(&mut self) -> Result<Self, Error> {
+        Ok(Consumer {
+            c: self.c.connect_again().await?,
+            callbacks: Arc::clone(&self.callbacks),
+            worker_states: Arc::clone(&self.worker_states),
+            terminated: self.terminated,
+        })
+    }
+
+    async fn spawn_worker<Q>(
+        &mut self,
+        status: Arc<AtomicUsize>,
+        worker: usize,
+        queues: &[Q],
+    ) -> Result<JoinHandle<Result<(), Error>>, Error>
+    where
+        Q: AsRef<str>,
+    {
+        let mut w = self.for_worker().await?;
+        let queues: Vec<_> = queues.iter().map(|s| s.as_ref().to_string()).collect();
+        Ok(tokio::spawn(async move {
+            while status.load(atomic::Ordering::SeqCst) == STATUS_RUNNING {
+                if let Err(e) = w.run_one(worker, &queues[..]).await {
+                    status.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
+                    return Err(e);
+                }
+            }
+            status.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
+            Ok(())
+        }))
+    }
+
+    /// Run this worker on the given `queues` until an I/O error occurs (`Err` is returned), or
+    /// until the server tells the worker to disengage (`Ok` is returned).
+    ///
+    /// The value in an `Ok` indicates the number of workers that may still be processing jobs.
+    ///
+    /// Note that if the worker fails, [`reconnect()`](struct.Consumer.html#method.reconnect)
+    /// should likely be called before calling `run()` again. If an error occurred while reporting
+    /// a job success or failure, the result will be re-reported to the server without re-executing
+    /// the job. If the worker was terminated (i.e., `run` returns with an `Ok` response), the
+    /// worker should **not** try to resume by calling `run` again. This will cause a panic.
+    pub async fn run<Q>(&mut self, queues: &[Q]) -> Result<usize, Error>
+    where
+        Q: AsRef<str>,
+    {
+        assert!(!self.terminated, "do not re-run a terminated worker");
+        self.report_on_all_workers().await?;
+
+        let workers_count = self.worker_states.len();
+
         // keep track of the current status of each worker
-        let status: Vec<_> = (0..self.worker_states.len())
+        let statuses: Vec<_> = (0..workers_count)
             .map(|_| Arc::new(atomic::AtomicUsize::new(STATUS_RUNNING)))
             .collect();
 
-        // start worker threads
-        use std::thread;
-        let workers = status
-            .iter()
-            .enumerate()
-            .map(|(worker, status)| {
-                let mut w = self.for_worker()?;
-                let status = Arc::clone(status);
-                let queues: Vec<_> = queues.iter().map(|s| s.as_ref().to_string()).collect();
-                Ok(thread::spawn(move || {
-                    while status.load(atomic::Ordering::SeqCst) == STATUS_RUNNING {
-                        if let Err(e) = w.run_one(worker, &queues[..]) {
-                            status.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
-                            return Err(e);
-                        }
-                    }
-                    status.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
-                    Ok(())
-                }))
-            })
-            .collect::<Result<Vec<_>, Error>>()?;
+        let mut workers = Vec::with_capacity(workers_count);
+        for (worker, status) in statuses.iter().enumerate().take(workers_count) {
+            let handle = self
+                .spawn_worker(Arc::clone(status), worker, queues)
+                .await?;
+            workers.push(handle)
+        }
 
-        // listen for heartbeats
-        let mut target = STATUS_RUNNING;
-        let exit = {
-            use std::time;
-            let mut last = time::Instant::now();
-
-            loop {
-                thread::sleep(time::Duration::from_millis(100));
-
-                // has a worker failed?
-                if target == STATUS_RUNNING
-                    && status
-                        .iter()
-                        .any(|s| s.load(atomic::Ordering::SeqCst) == STATUS_TERMINATING)
-                {
-                    // tell all workers to exit
-                    // (though chances are they've all failed already)
-                    for s in &status {
-                        s.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
-                    }
-                    break Ok(false);
-                }
-
-                if last.elapsed().as_secs() < 5 {
-                    // don't sent a heartbeat yet
-                    continue;
-                }
-
-                match self.c.heartbeat() {
-                    Ok(hb) => {
-                        match hb {
-                            HeartbeatStatus::Ok => {}
-                            HeartbeatStatus::Quiet => {
-                                // tell the workers to eventually terminate
-                                for s in &status {
-                                    s.store(STATUS_QUIET, atomic::Ordering::SeqCst);
-                                }
-                                target = STATUS_QUIET;
-                            }
-                            HeartbeatStatus::Terminate => {
-                                // tell the workers to terminate
-                                // *and* fail the current job and immediately return
-                                for s in &status {
-                                    s.store(STATUS_QUIET, atomic::Ordering::SeqCst);
-                                }
-                                break Ok(true);
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        // for this to fail, the workers have probably also failed
-                        for s in &status {
-                            s.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
-                        }
-                        break Err(e);
-                    }
-                }
-                last = time::Instant::now();
-            }
-        };
+        let exit = self.listen_for_heartbeats(&statuses).await;
 
         // there are a couple of cases here:
         //
@@ -596,91 +337,41 @@ where
         //  - we got an error from heartbeat()
         //
         self.terminated = exit.is_ok();
+
         if let Ok(true) = exit {
-            // FAIL currently running jobs even though they're still running
-            let mut running = 0;
-            for wstate in self.worker_states.iter() {
-                if let Some(jid) = wstate.lock().unwrap().running_job.take() {
-                    let f = Fail::new(&*jid, "unknown", "terminated");
-
-                    // if this fails, we don't want to exit with Err(),
-                    // because we *were* still terminated!
-                    let _ = self.c.issue(&f).and_then(|r| r.await_ok()).is_ok();
-
-                    running += 1;
-                }
-            }
-
+            let running = self.force_fail_all_workers().await;
             if running != 0 {
                 return Ok(running);
             }
         }
 
+        // we want to expose worker errors, or otherwise the heartbeat error
+        let mut results = Vec::with_capacity(workers_count);
+        for w in workers {
+            results.push(w.await.expect("joined ok"));
+        }
+        let result = results.into_iter().collect::<Result<Vec<_>, _>>();
+
         match exit {
-            Ok(_) => {
-                // we want to expose any worker errors
-                workers
-                    .into_iter()
-                    .map(|w| w.join().unwrap())
-                    .collect::<Result<Vec<_>, _>>()
-                    .map(|_| 0)
-            }
-            Err(e) => {
-                // we want to expose worker errors, or otherwise the heartbeat error
-                workers
-                    .into_iter()
-                    .map(|w| w.join().unwrap())
-                    .collect::<Result<Vec<_>, _>>()
-                    .and(Err(e))
-            }
+            Ok(_) => result.map(|_| 0),
+            Err(e) => result.and(Err(e)),
         }
     }
 
     /// Run this worker until the server tells us to exit or a connection cannot be re-established.
     ///
     /// This function never returns. When the worker decides to exit, the process is terminated.
-    pub fn run_to_completion<Q>(mut self, queues: &[Q]) -> !
+    pub async fn run_to_completion<Q>(mut self, queues: &[Q]) -> !
     where
         Q: AsRef<str>,
     {
         use std::process;
-        while self.run(queues).is_err() {
-            if self.reconnect().is_err() {
+        while self.run(queues).await.is_err() {
+            if self.reconnect().await.is_err() {
                 break;
             }
         }
 
         process::exit(0);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    // https://github.com/rust-lang/rust/pull/42219
-    //#[allow_fail]
-    #[ignore]
-    fn it_works() {
-        use crate::producer::Producer;
-        use std::io;
-
-        let mut p = Producer::connect(None).unwrap();
-        let mut j = Job::new("foobar", vec!["z"]);
-        j.queue = "worker_test_1".to_string();
-        p.enqueue(j).unwrap();
-
-        let mut c = ConsumerBuilder::default();
-        c.register("foobar", |job: Job| -> Result<(), io::Error> {
-            assert_eq!(job.args, vec!["z"]);
-            Ok(())
-        });
-        let mut c = c.connect(None).unwrap();
-        let e = c.run_n(1, &["worker_test_1"]);
-        if e.is_err() {
-            println!("{:?}", e);
-        }
-        assert!(e.is_ok());
     }
 }

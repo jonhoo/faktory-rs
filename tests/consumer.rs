@@ -1,25 +1,22 @@
 extern crate faktory;
-extern crate mockstream;
 extern crate serde_json;
 extern crate url;
 
 mod mock;
 
 use faktory::*;
-use std::io;
-use std::thread;
-use std::time::Duration;
+use std::{io, time::Duration};
+use tokio::{spawn, time::sleep};
 
-#[test]
-fn hello() {
+#[tokio::test(flavor = "multi_thread")]
+async fn hello() {
     let mut s = mock::Stream::default();
-
-    let mut c = ConsumerBuilder::default();
+    let mut c: ConsumerBuilder<io::Error> = ConsumerBuilder::default();
     c.hostname("host".to_string())
         .wid("wid".to_string())
         .labels(vec!["foo".to_string(), "bar".to_string()]);
-    c.register("never_called", |_| -> io::Result<()> { unreachable!() });
-    let c = c.connect_with(s.clone(), None).unwrap();
+    c.register("never_called", |_| Box::pin(async move { unreachable!() }));
+    let c = c.connect_with(s.clone(), None).await.unwrap();
     let written = s.pop_bytes_written(0);
     assert!(written.starts_with(b"HELLO {"));
     let written: serde_json::Value = serde_json::from_slice(&written[b"HELLO ".len()..]).unwrap();
@@ -39,14 +36,15 @@ fn hello() {
     assert_eq!(written, b"END\r\n");
 }
 
-#[test]
-fn hello_pwd() {
+#[tokio::test(flavor = "multi_thread")]
+async fn hello_pwd() {
     let mut s = mock::Stream::with_salt(1545, "55104dc76695721d");
 
-    let mut c = ConsumerBuilder::default();
-    c.register("never_called", |_| -> io::Result<()> { unreachable!() });
+    let mut c: ConsumerBuilder<io::Error> = ConsumerBuilder::default();
+    c.register("never_called", |_| Box::pin(async move { unreachable!() }));
     let c = c
         .connect_with(s.clone(), Some("foobar".to_string()))
+        .await
         .unwrap();
     let written = s.pop_bytes_written(0);
     assert!(written.starts_with(b"HELLO {"));
@@ -60,15 +58,17 @@ fn hello_pwd() {
     drop(c);
 }
 
-#[test]
-fn dequeue() {
+#[tokio::test(flavor = "multi_thread")]
+async fn dequeue() {
     let mut s = mock::Stream::default();
     let mut c = ConsumerBuilder::default();
-    c.register("foobar", |job: Job| -> io::Result<()> {
-        assert_eq!(job.args(), &["z"]);
-        Ok(())
+    c.register("foobar", |job: Job| {
+        Box::pin(async move {
+            assert_eq!(job.args(), &["z"]);
+            Ok::<(), io::Error>(())
+        })
     });
-    let mut c = c.connect_with(s.clone(), None).unwrap();
+    let mut c = c.connect_with(s.clone(), None).await.unwrap();
     s.ignore(0);
 
     s.push_bytes_to_read(
@@ -86,7 +86,7 @@ fn dequeue() {
         }\r\n",
     );
     s.ok(0); // for the ACK
-    if let Err(e) = c.run_one(0, &["default"]) {
+    if let Err(e) = c.run_one(0, &["default"]).await {
         println!("{:?}", e);
         unreachable!();
     }
@@ -99,15 +99,17 @@ fn dequeue() {
     );
 }
 
-#[test]
-fn dequeue_first_empty() {
+#[tokio::test(flavor = "multi_thread")]
+async fn dequeue_first_empty() {
     let mut s = mock::Stream::default();
     let mut c = ConsumerBuilder::default();
-    c.register("foobar", |job: Job| -> io::Result<()> {
-        assert_eq!(job.args(), &["z"]);
-        Ok(())
+    c.register("foobar", |job: Job| {
+        Box::pin(async move {
+            assert_eq!(job.args(), &["z"]);
+            Ok::<(), io::Error>(())
+        })
     });
-    let mut c = c.connect_with(s.clone(), None).unwrap();
+    let mut c = c.connect_with(s.clone(), None).await.unwrap();
     s.ignore(0);
 
     s.push_bytes_to_read(
@@ -127,7 +129,7 @@ fn dequeue_first_empty() {
     s.ok(0); // for the ACK
 
     // run once, shouldn't do anything
-    match c.run_one(0, &["default"]) {
+    match c.run_one(0, &["default"]).await {
         Ok(did_work) => assert!(!did_work),
         Err(e) => {
             println!("{:?}", e);
@@ -135,7 +137,7 @@ fn dequeue_first_empty() {
         }
     }
     // run again, this time doing the job
-    match c.run_one(0, &["default"]) {
+    match c.run_one(0, &["default"]).await {
         Ok(did_work) => assert!(did_work),
         Err(e) => {
             println!("{:?}", e);
@@ -154,17 +156,19 @@ fn dequeue_first_empty() {
     );
 }
 
-#[test]
-fn well_behaved() {
+#[tokio::test(flavor = "multi_thread")]
+async fn well_behaved() {
     let mut s = mock::Stream::new(2); // main plus worker
     let mut c = ConsumerBuilder::default();
     c.wid("wid".to_string());
-    c.register("foobar", |_| -> io::Result<()> {
-        // NOTE: this time needs to be so that it lands between the first heartbeat and the second
-        thread::sleep(Duration::from_secs(7));
-        Ok(())
+    c.register("foobar", |_| {
+        Box::pin(async move {
+            // NOTE: this time needs to be so that it lands between the first heartbeat and the second
+            sleep(Duration::from_secs(7)).await;
+            Ok::<(), io::Error>(())
+        })
     });
-    let mut c = c.connect_with(s.clone(), None).unwrap();
+    let mut c = c.connect_with(s.clone(), None).await.unwrap();
     s.ignore(0);
 
     // push a job that'll take a while to run
@@ -183,7 +187,7 @@ fn well_behaved() {
             }\r\n",
     );
 
-    let jh = thread::spawn(move || c.run(&["default"]));
+    let jh = spawn(async move { c.run(&["default"]).await });
 
     // the running thread won't return for a while. the heartbeat thingy is going to eventually
     // send a heartbeat, and we want to respond to that with a "quiet" to make it not accept any
@@ -197,7 +201,7 @@ fn well_behaved() {
     s.push_bytes_to_read(0, b"+{\"state\":\"terminate\"}\r\n");
 
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
-    assert_eq!(jh.join().unwrap().unwrap(), 0);
+    assert_eq!(jh.await.unwrap().unwrap(), 0);
 
     // heartbeat should have seen two beats (quiet + terminate)
     let written = s.pop_bytes_written(0);
@@ -219,17 +223,19 @@ fn well_behaved() {
     );
 }
 
-#[test]
-fn no_first_job() {
+#[tokio::test(flavor = "multi_thread")]
+async fn no_first_job() {
     let mut s = mock::Stream::new(2);
     let mut c = ConsumerBuilder::default();
     c.wid("wid".to_string());
-    c.register("foobar", |_| -> io::Result<()> {
-        // NOTE: this time needs to be so that it lands between the first heartbeat and the second
-        thread::sleep(Duration::from_secs(7));
-        Ok(())
+    c.register("foobar", |_| {
+        Box::pin(async move {
+            // NOTE: this time needs to be so that it lands between the first heartbeat and the second
+            sleep(Duration::from_secs(7)).await;
+            Ok::<(), io::Error>(())
+        })
     });
-    let mut c = c.connect_with(s.clone(), None).unwrap();
+    let mut c = c.connect_with(s.clone(), None).await.unwrap();
     s.ignore(0);
 
     // push a job that'll take a while to run
@@ -248,7 +254,7 @@ fn no_first_job() {
             }\r\n",
     );
 
-    let jh = thread::spawn(move || c.run(&["default"]));
+    let jh = spawn(async move { c.run(&["default"]).await });
 
     // the running thread won't return for a while. the heartbeat thingy is going to eventually
     // send a heartbeat, and we want to respond to that with a "quiet" to make it not accept any
@@ -262,7 +268,7 @@ fn no_first_job() {
     s.push_bytes_to_read(0, b"+{\"state\":\"terminate\"}\r\n");
 
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
-    assert_eq!(jh.join().unwrap().unwrap(), 0);
+    assert_eq!(jh.await.unwrap().unwrap(), 0);
 
     // heartbeat should have seen two beats (quiet + terminate)
     let written = s.pop_bytes_written(0);
@@ -285,18 +291,20 @@ fn no_first_job() {
     );
 }
 
-#[test]
-fn well_behaved_many() {
+#[tokio::test(flavor = "multi_thread")]
+async fn well_behaved_many() {
     let mut s = mock::Stream::new(3);
     let mut c = ConsumerBuilder::default();
     c.workers(2);
     c.wid("wid".to_string());
-    c.register("foobar", |_| -> io::Result<()> {
-        // NOTE: this time needs to be so that it lands between the first heartbeat and the second
-        thread::sleep(Duration::from_secs(7));
-        Ok(())
+    c.register("foobar", |_| {
+        Box::pin(async move {
+            // NOTE: this time needs to be so that it lands between the first heartbeat and the second
+            sleep(Duration::from_secs(7)).await;
+            Ok::<(), io::Error>(())
+        })
     });
-    let mut c = c.connect_with(s.clone(), None).unwrap();
+    let mut c = c.connect_with(s.clone(), None).await.unwrap();
     s.ignore(0);
 
     // push two jobs that'll take a while to run
@@ -322,7 +330,7 @@ fn well_behaved_many() {
         );
     }
 
-    let jh = thread::spawn(move || c.run(&["default"]));
+    let jh = spawn(async move { c.run(&["default"]).await });
 
     // the running thread won't return for a while. the heartbeat thingy is going to eventually
     // send a heartbeat, and we want to respond to that with a "quiet" to make it not accept any
@@ -337,7 +345,7 @@ fn well_behaved_many() {
     s.push_bytes_to_read(0, b"+{\"state\":\"terminate\"}\r\n");
 
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
-    assert_eq!(jh.join().unwrap().unwrap(), 0);
+    assert_eq!(jh.await.unwrap().unwrap(), 0);
 
     // heartbeat should have seen two beats (quiet + terminate)
     let written = s.pop_bytes_written(0);
@@ -361,17 +369,19 @@ fn well_behaved_many() {
     }
 }
 
-#[test]
-fn terminate() {
+#[tokio::test(flavor = "multi_thread")]
+async fn terminate() {
     let mut s = mock::Stream::new(2);
-    let mut c = ConsumerBuilder::default();
+    let mut c: ConsumerBuilder<io::Error> = ConsumerBuilder::default();
     c.wid("wid".to_string());
-    c.register("foobar", |_| -> io::Result<()> {
-        loop {
-            thread::sleep(Duration::from_secs(5));
-        }
+    c.register("foobar", |_| {
+        Box::pin(async move {
+            loop {
+                sleep(Duration::from_secs(5)).await;
+            }
+        })
     });
-    let mut c = c.connect_with(s.clone(), None).unwrap();
+    let mut c = c.connect_with(s.clone(), None).await.unwrap();
     s.ignore(0);
 
     s.push_bytes_to_read(
@@ -389,7 +399,7 @@ fn terminate() {
         }\r\n",
     );
 
-    let jh = thread::spawn(move || c.run(&["default"]));
+    let jh = spawn(async move { c.run(&["default"]).await });
 
     // the running thread won't ever return, because the job never exits. the heartbeat thingy is
     // going to eventually send a heartbeat, and we want to respond to that with a "terminate"
@@ -397,7 +407,7 @@ fn terminate() {
 
     // at this point, c.run() should immediately return with Ok(1) indicating that one job is still
     // running.
-    assert_eq!(jh.join().unwrap().unwrap(), 1);
+    assert_eq!(jh.await.unwrap().unwrap(), 1);
 
     // heartbeat should have seen one beat (terminate) and then send FAIL
     let written = s.pop_bytes_written(0);

@@ -34,29 +34,32 @@
 //! If you want to **submit** jobs to Faktory, use `Producer`.
 //!
 //! ```no_run
+//! # tokio_test::block_on(async {
 //! use faktory::{Producer, Job};
-//! let mut p = Producer::connect(None).unwrap();
-//! p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
+//! let mut p = Producer::connect(None).await.unwrap();
+//! p.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
 //!
-//! let (enqueued_count, errors) = p.enqueue_many(vec![Job::new("foobar", vec!["z"]), Job::new("foobar", vec!["z"])]).unwrap();
+//! let (enqueued_count, errors) = p.enqueue_many([Job::new("foobar", vec!["z"]), Job::new("foobar", vec!["z"])]).await.unwrap();
 //! assert_eq!(enqueued_count, 2);
 //! assert_eq!(errors, None);
+//! });
 //! ```
-//!
 //! If you want to **accept** jobs from Faktory, use `Consumer`.
 //!
 //! ```no_run
+//! # tokio_test::block_on(async {
 //! use faktory::ConsumerBuilder;
 //! use std::io;
 //! let mut c = ConsumerBuilder::default();
-//! c.register("foobar", |job| -> io::Result<()> {
+//! c.register("foobar", |job| Box::pin(async move {
 //!     println!("{:?}", job);
-//!     Ok(())
-//! });
-//! let mut c = c.connect(None).unwrap();
-//! if let Err(e) = c.run(&["default"]) {
+//!     Ok::<(), io::Error>(())
+//! }));
+//! let mut c = c.connect(None).await.unwrap();
+//! if let Err(e) = c.run(&["default"]).await {
 //!     println!("worker failed: {}", e);
 //! }
+//! # });
 //! ```
 #![deny(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg))]

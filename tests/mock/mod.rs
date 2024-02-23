@@ -1,25 +1,17 @@
 use faktory::Reconnect;
-use mockstream::SyncMockStream;
-use std::io;
-use std::sync::{Arc, Mutex};
+use std::{
+    io,
+    pin::Pin,
+    sync::{Arc, Mutex},
+};
+use tokio::io::{AsyncRead, AsyncWrite};
 
-struct Inner {
-    take_next: usize,
-    streams: Vec<SyncMockStream>,
-}
-
-impl Inner {
-    fn take_stream(&mut self) -> Option<SyncMockStream> {
-        self.take_next += 1;
-
-        self.streams.get(self.take_next - 1).cloned()
-    }
-}
+mod inner;
 
 #[derive(Clone)]
 pub struct Stream {
-    mine: Option<SyncMockStream>,
-    all: Arc<Mutex<Inner>>,
+    mine: inner::MockStream,
+    all: Arc<Mutex<inner::Inner>>,
 }
 
 impl Default for Stream {
@@ -28,8 +20,9 @@ impl Default for Stream {
     }
 }
 
+#[async_trait::async_trait]
 impl Reconnect for Stream {
-    fn reconnect(&self) -> io::Result<Self> {
+    async fn reconnect(&mut self) -> Result<Self, io::Error> {
         let mine = self
             .all
             .lock()
@@ -37,25 +30,47 @@ impl Reconnect for Stream {
             .take_stream()
             .expect("tried to make a new stream, but no more connections expected");
         Ok(Stream {
-            mine: Some(mine),
+            mine,
             all: Arc::clone(&self.all),
         })
     }
 }
 
-impl io::Read for Stream {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.mine.as_mut().unwrap().read(buf)
+impl AsyncRead for Stream {
+    fn poll_read(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        let mut duplex = self.mine.du.lock().unwrap();
+        Pin::new(&mut duplex.reader).poll_read(cx, buf)
     }
 }
 
-impl io::Write for Stream {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.mine.as_mut().unwrap().write(buf)
+impl AsyncWrite for Stream {
+    fn poll_write(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<Result<usize, io::Error>> {
+        let mut duplex = self.mine.du.lock().unwrap();
+        Pin::new(&mut duplex.writer).poll_write(cx, buf)
     }
 
-    fn flush(&mut self) -> io::Result<()> {
-        self.mine.as_mut().unwrap().flush()
+    fn poll_flush(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), io::Error>> {
+        let mut duplex = self.mine.du.lock().unwrap();
+        Pin::new(&mut duplex.writer).poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), io::Error>> {
+        let mut duplex = self.mine.du.lock().unwrap();
+        Pin::new(&mut duplex.writer).poll_shutdown(cx)
     }
 }
 
@@ -63,7 +78,8 @@ impl Stream {
     fn make(salt: Option<(usize, &str)>, streams: usize) -> Self {
         let streams = (0..streams)
             .map(|_| {
-                let mut s = SyncMockStream::new();
+                let mut s = inner::MockStream::default();
+                eprintln!("{:#?}", s);
                 // need to say HELLO
                 if let Some((iters, salt)) = salt {
                     // include salt for pwdhash
@@ -79,11 +95,11 @@ impl Stream {
             })
             .collect();
 
-        let mut inner = Inner {
+        let mut inner = inner::Inner {
             take_next: 0,
             streams,
         };
-        let mine = inner.take_stream();
+        let mine = inner.take_stream().unwrap();
 
         Stream {
             mine,

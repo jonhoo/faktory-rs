@@ -4,9 +4,9 @@ use faktory::*;
 use serde_json::Value;
 use std::{env, fs, io, sync};
 
-#[test]
-fn roundtrip_tls() {
-    use native_tls::{Certificate, TlsConnector};
+#[tokio::test(flavor = "multi_thread")]
+async fn roundtrip_tls() {
+    use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 
     // We are utilizing the fact that the "FAKTORY_URL_SECURE" environment variable is set
     // as an indicator that the integration test can and should be performed.
@@ -28,10 +28,12 @@ fn roundtrip_tls() {
     let mut c = ConsumerBuilder::default();
     c.hostname("tester".to_string()).wid(local.to_string());
     {
-        let tx = sync::Arc::clone(&tx);
-        c.register(local, move |j| -> io::Result<()> {
-            tx.lock().unwrap().send(j).unwrap();
-            Ok(())
+        c.register(local, move |j| {
+            let tx = sync::Arc::clone(&tx);
+            Box::pin(async move {
+                tx.lock().unwrap().send(j).unwrap();
+                Ok::<(), io::Error>(())
+            })
         });
     }
 
@@ -40,32 +42,39 @@ fn roundtrip_tls() {
         .join("docker")
         .join("certs")
         .join("faktory.local.crt");
-    let cert = fs::read_to_string(cert_path).unwrap();
+    let cert = fs::read(cert_path).unwrap();
 
-    let tls = || {
-        let connector = if cfg!(target_os = "macos") {
-            TlsConnector::builder()
-                // Danger! Only for testing!
-                // On the macos CI runner, the certs are not trusted:
-                // { code: -67843, message: "The certificate was not trusted." }
-                .danger_accept_invalid_certs(true)
-                .build()
-                .unwrap()
-        } else {
-            let cert = Certificate::from_pem(cert.as_bytes()).unwrap();
-            TlsConnector::builder()
-                .add_root_certificate(cert)
-                .build()
-                .unwrap()
-        };
-        TlsStream::with_connector(connector, Some(&env::var("FAKTORY_URL_SECURE").unwrap()))
+    let tls = || async {
+        // let connector = if cfg!(target_os = "macos") {
+        //     TlsConnector::builder()
+        //         // Danger! Only for testing!
+        //         // On the macos CI runner, the certs are not trusted:
+        //         // { code: -67843, message: "The certificate was not trusted." }
+        //         .danger_accept_invalid_certs(true)
+        //         .build()
+        //         .unwrap()
+        // } else {
+        //     let cert = Certificate::from_pem(cert.as_bytes()).unwrap();
+        //     TlsConnector::builder()
+        //         .add_root_certificate(cert)
+        //         .build()
+        //         .unwrap()
+        // };
+        let mut store = RootCertStore::empty();
+        store.add(cert.clone().into()).unwrap();
+        let conf = ClientConfig::builder()
+            .with_root_certificates(store)
+            .with_no_client_auth();
+        TlsStream::with_client_config(conf, Some(&env::var("FAKTORY_URL_SECURE").unwrap()))
+            .await
             .unwrap()
     };
-    let mut c = c.connect_with(tls(), None).unwrap();
-    let mut p = Producer::connect_with(tls(), None).unwrap();
+    let mut c = c.connect_with(tls().await, None).await.unwrap();
+    let mut p = Producer::connect_with(tls().await, None).await.unwrap();
     p.enqueue(Job::new(local, vec!["z"]).on_queue(local))
+        .await
         .unwrap();
-    c.run_one(0, &[local]).unwrap();
+    c.run_one(0, &[local]).await.unwrap();
 
     let job = rx.recv().unwrap();
     assert_eq!(job.queue, local);

@@ -1,7 +1,7 @@
 use crate::error::{self, Error};
-use std::io::prelude::*;
+use tokio::io::{AsyncBufReadExt, AsyncReadExt};
 
-fn bad(expected: &'static str, got: &RawResponse) -> error::Protocol {
+pub fn bad(expected: &'static str, got: &RawResponse) -> error::Protocol {
     let stringy = match *got {
         RawResponse::String(ref s) => Some(&**s),
         RawResponse::Blob(ref b) => {
@@ -28,8 +28,10 @@ fn bad(expected: &'static str, got: &RawResponse) -> error::Protocol {
 
 // ----------------------------------------------
 
-pub fn read_json<R: BufRead, T: serde::de::DeserializeOwned>(r: R) -> Result<Option<T>, Error> {
-    let rr = read(r)?;
+pub async fn read_json<R: AsyncBufReadExt + Unpin, T: serde::de::DeserializeOwned>(
+    r: R,
+) -> Result<Option<T>, Error> {
+    let rr = read(r).await?;
     match rr {
         RawResponse::String(ref s) if s == "OK" => {
             return Ok(None);
@@ -60,8 +62,8 @@ pub fn read_json<R: BufRead, T: serde::de::DeserializeOwned>(r: R) -> Result<Opt
 // ----------------------------------------------
 
 #[cfg(feature = "ent")]
-pub fn read_bid<R: BufRead>(r: R) -> Result<String, Error> {
-    match read(r)? {
+pub async fn read_bid<R: AsyncBufReadExt + Unpin>(r: R) -> Result<String, Error> {
+    match read(r).await? {
         RawResponse::Blob(ref b) if b.is_empty() => Err(error::Protocol::BadType {
             expected: "non-empty blob representation of batch id",
             received: "empty blob".into(),
@@ -89,21 +91,20 @@ pub struct Hi {
     pub salt: Option<String>,
 }
 
-pub fn read_hi<R: BufRead>(r: R) -> Result<Hi, Error> {
-    let rr = read(r)?;
+pub async fn read_hi<R: AsyncBufReadExt + Unpin>(r: R) -> Result<Hi, Error> {
+    let rr = read(r).await?;
     if let RawResponse::String(ref s) = rr {
         if let Some(s) = s.strip_prefix("HI ") {
             return serde_json::from_str(s).map_err(Error::Serialization);
         }
     }
-
     Err(bad("server hi", &rr).into())
 }
 
 // ----------------------------------------------
 
-pub fn read_ok<R: BufRead>(r: R) -> Result<(), Error> {
-    let rr = read(r)?;
+pub async fn read_ok<R: AsyncBufReadExt + Unpin>(r: R) -> Result<(), Error> {
+    let rr = read(r).await?;
     if let RawResponse::String(ref s) = rr {
         if s == "OK" {
             return Ok(());
@@ -120,22 +121,25 @@ pub fn read_ok<R: BufRead>(r: R) -> Result<(), Error> {
 // ----------------------------------------------
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-enum RawResponse {
+pub enum RawResponse {
     String(String),
     Blob(Vec<u8>),
     Number(isize),
     Null,
 }
 
-fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
+async fn read<R>(mut r: R) -> Result<RawResponse, Error>
+where
+    R: AsyncReadExt + AsyncBufReadExt + Unpin,
+{
     let mut cmdbuf = [0u8; 1];
-    r.read_exact(&mut cmdbuf)?;
+    r.read_exact(&mut cmdbuf).await?;
     match cmdbuf[0] {
         b'+' => {
             // Simple String
             // https://redis.io/topics/protocol#resp-simple-strings
             let mut s = String::new();
-            r.read_line(&mut s)?;
+            r.read_line(&mut s).await?;
 
             // remove newlines
             let l = s.len() - 2;
@@ -147,7 +151,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
             // Error
             // https://redis.io/topics/protocol#resp-errors
             let mut s = String::new();
-            r.read_line(&mut s)?;
+            r.read_line(&mut s).await?;
 
             // remove newlines
             let l = s.len() - 2;
@@ -159,7 +163,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
             // Integer
             // https://redis.io/topics/protocol#resp-integers
             let mut s = String::with_capacity(32);
-            r.read_line(&mut s)?;
+            r.read_line(&mut s).await?;
 
             // remove newlines
             let l = s.len() - 2;
@@ -179,7 +183,7 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
             // Bulk String
             // https://redis.io/topics/protocol#resp-bulk-strings
             let mut bytes = Vec::with_capacity(32);
-            r.read_until(b'\n', &mut bytes)?;
+            r.read_until(b'\n', &mut bytes).await?;
             let s = std::str::from_utf8(&bytes[0..bytes.len() - 2]).map_err(|_| {
                 error::Protocol::BadResponse {
                     typed_as: "bulk string",
@@ -201,8 +205,8 @@ fn read<R: BufRead>(mut r: R) -> Result<RawResponse, Error> {
             } else {
                 let size = size as usize;
                 let mut bytes = vec![0; size];
-                r.read_exact(&mut bytes[..])?;
-                r.read_exact(&mut [0u8; 2])?;
+                r.read_exact(&mut bytes[..]).await?;
+                r.read_exact(&mut [0u8; 2]).await?;
                 Ok(RawResponse::Blob(bytes))
             }
         }
@@ -248,32 +252,34 @@ impl From<Vec<u8>> for RawResponse {
 #[cfg(test)]
 mod test {
     use super::{read, RawResponse};
+
     use crate::error::{self, Error};
     use serde_json::{self, Map, Value};
-    use std::io::{self, Cursor};
+    use std::io::Cursor;
+    use tokio::io::AsyncBufReadExt;
 
-    fn read_json<C: io::BufRead>(c: C) -> Result<Option<Value>, Error> {
-        super::read_json(c)
+    async fn read_json<C: AsyncBufReadExt + Unpin>(c: C) -> Result<Option<Value>, Error> {
+        super::read_json(c).await
     }
 
-    #[test]
-    fn it_parses_simple_strings() {
+    #[tokio::test]
+    async fn it_parses_simple_strings() {
         let c = Cursor::new(b"+OK\r\n");
-        assert_eq!(read(c).unwrap(), RawResponse::from("OK"));
+        assert_eq!(read(c).await.unwrap(), RawResponse::from("OK"));
     }
 
-    #[test]
-    fn it_parses_numbers() {
+    #[tokio::test]
+    async fn it_parses_numbers() {
         let c = Cursor::new(b":1024\r\n");
-        assert_eq!(read(c).unwrap(), RawResponse::from(1024));
+        assert_eq!(read(c).await.unwrap(), RawResponse::from(1024));
     }
 
-    #[test]
-    fn it_errors_on_bad_numbers() {
+    #[tokio::test]
+    async fn it_errors_on_bad_numbers() {
         let c = Cursor::new(b":x\r\n");
         if let Error::Protocol(error::Protocol::BadResponse {
             typed_as, error, ..
-        }) = read(c).unwrap_err()
+        }) = read(c).await.unwrap_err()
         {
             assert_eq!(typed_as, "integer");
             assert_eq!(error, "invalid integer value");
@@ -282,35 +288,35 @@ mod test {
         }
     }
 
-    #[test]
-    fn it_parses_errors() {
+    #[tokio::test]
+    async fn it_parses_errors() {
         let c = Cursor::new(b"-ERR foo\r\n");
-        if let Error::Protocol(error::Protocol::Internal { ref msg }) = read(c).unwrap_err() {
+        if let Error::Protocol(error::Protocol::Internal { ref msg }) = read(c).await.unwrap_err() {
             assert_eq!(msg, "foo");
         } else {
             unreachable!();
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic]
-    fn it_cant_do_arrays() {
+    async fn it_cant_do_arrays() {
         let c = Cursor::new(b"*\r\n");
-        read(c).unwrap_err();
+        read(c).await.unwrap_err();
     }
 
-    #[test]
-    fn it_parses_nills() {
+    #[tokio::test]
+    async fn it_parses_nills() {
         let c = Cursor::new(b"$-1\r\n");
-        assert_eq!(read(c).unwrap(), RawResponse::Null);
+        assert_eq!(read(c).await.unwrap(), RawResponse::Null);
     }
 
-    #[test]
-    fn it_errors_on_bad_sizes() {
+    #[tokio::test]
+    async fn it_errors_on_bad_sizes() {
         let c = Cursor::new(b"$x\r\n\r\n");
         if let Error::Protocol(error::Protocol::BadResponse {
             typed_as, error, ..
-        }) = read(c).unwrap_err()
+        }) = read(c).await.unwrap_err()
         {
             assert_eq!(typed_as, "bulk string");
             assert_eq!(error, "server bulk response size prefix is not an integer");
@@ -319,88 +325,88 @@ mod test {
         }
     }
 
-    #[test]
-    fn it_parses_empty_bulk() {
+    #[tokio::test]
+    async fn it_parses_empty_bulk() {
         let c = Cursor::new(b"$0\r\n\r\n");
-        assert_eq!(read(c).unwrap(), RawResponse::from(vec![]));
+        assert_eq!(read(c).await.unwrap(), RawResponse::from(vec![]));
     }
 
-    #[test]
-    fn it_parses_non_empty_bulk() {
+    #[tokio::test]
+    async fn it_parses_non_empty_bulk() {
         let c = Cursor::new(b"$11\r\nHELLO WORLD\r\n");
         assert_eq!(
-            read(c).unwrap(),
+            read(c).await.unwrap(),
             RawResponse::from(Vec::from(&b"HELLO WORLD"[..]))
         );
     }
 
-    #[test]
-    fn it_decodes_json_ok_string() {
+    #[tokio::test]
+    async fn it_decodes_json_ok_string() {
         let c = Cursor::new(b"+OK\r\n");
-        assert_eq!(read_json(c).unwrap(), None);
+        assert_eq!(read_json(c).await.unwrap(), None);
     }
 
-    #[test]
-    fn it_decodes_json_ok_blob() {
+    #[tokio::test]
+    async fn it_decodes_json_ok_blob() {
         let c = Cursor::new(b"$2\r\nOK\r\n");
-        assert_eq!(read_json(c).unwrap(), None);
+        assert_eq!(read_json(c).await.unwrap(), None);
     }
 
-    #[test]
-    fn it_decodes_json_nill() {
+    #[tokio::test]
+    async fn it_decodes_json_nill() {
         let c = Cursor::new(b"$-1\r\n");
-        assert_eq!(read_json(c).unwrap(), None);
+        assert_eq!(read_json(c).await.unwrap(), None);
     }
 
-    #[test]
-    fn it_decodes_json_empty() {
+    #[tokio::test]
+    async fn it_decodes_json_empty() {
         let c = Cursor::new(b"$0\r\n\r\n");
-        assert_eq!(read_json(c).unwrap(), None);
+        assert_eq!(read_json(c).await.unwrap(), None);
     }
 
-    #[test]
-    fn it_decodes_string_json() {
+    #[tokio::test]
+    async fn it_decodes_string_json() {
         let c = Cursor::new(b"+{\"hello\":1}\r\n");
         let mut m = Map::new();
         m.insert("hello".to_string(), Value::from(1));
-        assert_eq!(read_json(c).unwrap(), Some(Value::Object(m)));
+        assert_eq!(read_json(c).await.unwrap(), Some(Value::Object(m)));
     }
 
-    #[test]
-    fn it_decodes_blob_json() {
+    #[tokio::test]
+    async fn it_decodes_blob_json() {
         let c = Cursor::new(b"$11\r\n{\"hello\":1}\r\n");
         let mut m = Map::new();
         m.insert("hello".to_string(), Value::from(1));
-        assert_eq!(read_json(c).unwrap(), Some(Value::Object(m)));
+        assert_eq!(read_json(c).await.unwrap(), Some(Value::Object(m)));
     }
 
-    #[test]
-    fn it_errors_on_bad_json_blob() {
+    #[tokio::test]
+    async fn it_errors_on_bad_json_blob() {
         let c = Cursor::new(b"$9\r\n{\"hello\"}\r\n");
-        if let Error::Serialization(err) = read_json(c).unwrap_err() {
+        if let Error::Serialization(err) = read_json(c).await.unwrap_err() {
             let _: serde_json::Error = err;
         } else {
             unreachable!();
         }
     }
 
-    #[test]
-    fn it_errors_on_bad_json_string() {
+    #[tokio::test]
+    async fn it_errors_on_bad_json_string() {
         let c = Cursor::new(b"+{\"hello\"}\r\n");
-        if let Error::Serialization(err) = read_json(c).unwrap_err() {
+        if let Error::Serialization(err) = read_json(c).await.unwrap_err() {
             let _: serde_json::Error = err;
         } else {
             unreachable!();
         }
     }
 
-    #[test]
-    fn json_error_on_number() {
+    #[tokio::test]
+    async fn json_error_on_number() {
         let c = Cursor::new(b":9\r\n");
         if let Error::Protocol(error::Protocol::BadType {
             expected,
             ref received,
-        }) = read_json(c).unwrap_err()
+        }) = read_json(c).await.unwrap_err()
         {
             assert_eq!(expected, "json");
             assert_eq!(received, "Number(9)");
@@ -409,12 +415,12 @@ mod test {
         }
     }
 
-    #[test]
-    fn it_errors_on_unknown_resp_type() {
+    #[tokio::test]
+    async fn it_errors_on_unknown_resp_type() {
         let c = Cursor::new(b"^\r\n");
         if let Error::Protocol(error::Protocol::BadResponse {
             typed_as, error, ..
-        }) = read_json(c).unwrap_err()
+        }) = read_json(c).await.unwrap_err()
         {
             assert_eq!(typed_as, "unknown");
             assert_eq!(error, "invalid response type prefix");

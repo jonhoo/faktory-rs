@@ -1,8 +1,9 @@
-use crate::error::Error;
-use crate::proto::{Client, Info, Job, Push, PushBulk, QueueAction, QueueControl};
 use std::collections::HashMap;
-use std::io::prelude::*;
-use std::net::TcpStream;
+
+use crate::proto::{Client, Info, Job, Push, PushBulk, QueueAction, QueueControl};
+use crate::Error;
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufStream};
+use tokio::net::TcpStream as TokioStream;
 
 #[cfg(feature = "ent")]
 use crate::proto::{Batch, BatchHandle, CommitBatch, OpenBatch};
@@ -46,63 +47,42 @@ use crate::proto::{Batch, BatchHandle, CommitBatch, OpenBatch};
 /// Connecting to an unsecured Faktory server using environment variables
 ///
 /// ```no_run
+/// # tokio_test::block_on(async {
 /// use faktory::Producer;
-/// let p = Producer::connect(None).unwrap();
+/// let p = Producer::connect(None).await.unwrap();
+/// # });
 /// ```
 ///
 /// Connecting to a secured Faktory server using an explicit URL
 ///
 /// ```no_run
+/// # tokio_test::block_on(async {
 /// use faktory::Producer;
-/// let p = Producer::connect(Some("tcp://:hunter2@localhost:7439")).unwrap();
+/// let p = Producer::connect(Some("tcp://:hunter2@localhost:7439")).await.unwrap();
+/// # })
 /// ```
 ///
 /// Issuing a job using a `Producer`
 ///
 /// ```no_run
+/// # tokio_test::block_on(async {
 /// # use faktory::Producer;
-/// # let mut p = Producer::connect(None).unwrap();
+/// # let mut p = Producer::connect(None).await.unwrap();
 /// use faktory::Job;
-/// p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
+/// p.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
+/// # });
 /// ```
 ///
-// TODO: provide way of inspecting status of job.
-pub struct Producer<S: Read + Write> {
+pub struct Producer<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> {
     c: Client<S>,
 }
 
-impl Producer<TcpStream> {
-    /// Connect to a Faktory server.
-    ///
-    /// If `url` is not given, will use the standard Faktory environment variables. Specifically,
-    /// `FAKTORY_PROVIDER` is read to get the name of the environment variable to get the address
-    /// from (defaults to `FAKTORY_URL`), and then that environment variable is read to get the
-    /// server address. If the latter environment variable is not defined, the connection will be
-    /// made to
-    ///
-    /// ```text
-    /// tcp://localhost:7419
-    /// ```
-    ///
-    /// If `url` is given, but does not specify a port, it defaults to 7419.
-    pub fn connect(url: Option<&str>) -> Result<Self, Error> {
-        let c = Client::connect(url)?;
-        Ok(Producer { c })
-    }
-}
-
-impl<S: Read + Write> Producer<S> {
-    /// Connect to a Faktory server with a non-standard stream.
-    pub fn connect_with(stream: S, pwd: Option<String>) -> Result<Producer<S>, Error> {
-        let c = Client::connect_with(stream, pwd)?;
-        Ok(Producer { c })
-    }
-
-    /// Enqueue the given job on the Faktory server.
+impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> Producer<S> {
+    /// Asynchronously enqueue the given job on the Faktory server.
     ///
     /// Returns `Ok` if the job was successfully queued by the Faktory server.
-    pub fn enqueue(&mut self, job: Job) -> Result<(), Error> {
-        self.c.issue(&Push::from(job))?.await_ok()
+    pub async fn enqueue(&mut self, job: Job) -> Result<(), Error> {
+        self.c.issue(&Push::from(job)).await?.read_ok().await
     }
 
     /// Enqueue numerous jobs on the Faktory server.
@@ -116,7 +96,7 @@ impl<S: Read + Write> Producer<S> {
     ///
     /// Note that this is not an all-or-nothing operation: jobs that contain errors will not be enqueued,
     /// while those that are error-free _will_ be enqueued by the Faktory server.
-    pub fn enqueue_many<J>(
+    pub async fn enqueue_many<J>(
         &mut self,
         jobs: J,
     ) -> Result<(usize, Option<HashMap<String, String>>), Error>
@@ -128,8 +108,10 @@ impl<S: Read + Write> Producer<S> {
         let jobs_count = jobs.len();
         let errors: HashMap<String, String> = self
             .c
-            .issue(&PushBulk::from(jobs.collect::<Vec<_>>()))?
-            .read_json()?
+            .issue(&PushBulk::from(jobs.collect::<Vec<_>>()))
+            .await?
+            .read_json()
+            .await?
             .expect("Faktory server sends {} literal when there are no errors");
         if errors.is_empty() {
             return Ok((jobs_count, None));
@@ -140,32 +122,44 @@ impl<S: Read + Write> Producer<S> {
     /// Retrieve information about the running server.
     ///
     /// The returned value is the result of running the `INFO` command on the server.
-    pub fn info(&mut self) -> Result<serde_json::Value, Error> {
+    pub async fn info(&mut self) -> Result<serde_json::Value, Error> {
         self.c
-            .issue(&Info)?
+            .issue(&Info)
+            .await?
             .read_json()
+            .await
             .map(|v| v.expect("info command cannot give empty response"))
     }
 
     /// Pause the given queues.
-    pub fn queue_pause<T: AsRef<str>>(&mut self, queues: &[T]) -> Result<(), Error> {
+    pub async fn queue_pause<Q>(&mut self, queues: &[Q]) -> Result<(), Error>
+    where
+        Q: AsRef<str> + Sync,
+    {
         self.c
-            .issue(&QueueControl::new(QueueAction::Pause, queues))?
-            .await_ok()
+            .issue(&QueueControl::new(QueueAction::Pause, queues))
+            .await?
+            .read_ok()
+            .await
     }
 
     /// Resume the given queues.
-    pub fn queue_resume<T: AsRef<str>>(&mut self, queues: &[T]) -> Result<(), Error> {
+    pub async fn queue_resume<Q: AsRef<str>>(&mut self, queues: &[Q]) -> Result<(), Error>
+    where
+        Q: AsRef<str> + Sync,
+    {
         self.c
-            .issue(&QueueControl::new(QueueAction::Resume, queues))?
-            .await_ok()
+            .issue(&QueueControl::new(QueueAction::Resume, queues))
+            .await?
+            .read_ok()
+            .await
     }
 
     /// Initiate a new batch of jobs.
     #[cfg(feature = "ent")]
     #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
-    pub fn start_batch(&mut self, batch: Batch) -> Result<BatchHandle<'_, S>, Error> {
-        let bid = self.c.issue(&batch)?.read_bid()?;
+    pub async fn start_batch(&mut self, batch: Batch) -> Result<BatchHandle<'_, S>, Error> {
+        let bid = self.c.issue(&batch).await?.read_bid().await?;
         Ok(BatchHandle::new(bid, self))
     }
 
@@ -175,27 +169,50 @@ impl<S: Read + Write> Producer<S> {
     /// rather `Ok(None)` will be returned.
     #[cfg(feature = "ent")]
     #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
-    pub fn open_batch(&mut self, bid: String) -> Result<Option<BatchHandle<'_, S>>, Error> {
-        let bid = self.c.issue(&OpenBatch::from(bid))?.maybe_bid()?;
+    pub async fn open_batch(&mut self, bid: String) -> Result<Option<BatchHandle<'_, S>>, Error> {
+        let bid = self
+            .c
+            .issue(&OpenBatch::from(bid))
+            .await?
+            .maybe_bid()
+            .await?;
         Ok(bid.map(|bid| BatchHandle::new(bid, self)))
     }
 
     #[cfg(feature = "ent")]
-    pub(crate) fn commit_batch(&mut self, bid: String) -> Result<(), Error> {
-        self.c.issue(&CommitBatch::from(bid))?.await_ok()
+    pub(crate) async fn commit_batch(&mut self, bid: String) -> Result<(), Error> {
+        self.c.issue(&CommitBatch::from(bid)).await?.read_ok().await
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+impl<S: AsyncRead + AsyncWrite + Send + Unpin> Producer<BufStream<S>> {
+    /// Connect to a Faktory server with a non-standard stream.
+    pub async fn connect_with(
+        stream: S,
+        pwd: Option<String>,
+    ) -> Result<Producer<BufStream<S>>, Error> {
+        let buffered = BufStream::new(stream);
+        let c = Client::connect_with(buffered, pwd).await?;
+        Ok(Producer { c })
+    }
+}
 
-    #[test]
-    // https://github.com/rust-lang/rust/pull/42219
-    //#[allow_fail]
-    #[ignore]
-    fn it_works() {
-        let mut p = Producer::connect(None).unwrap();
-        p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
+impl Producer<BufStream<TokioStream>> {
+    /// Create a producer and asynchronously connect to a Faktory server.
+    ///
+    /// If `url` is not given, will use the standard Faktory environment variables. Specifically,
+    /// `FAKTORY_PROVIDER` is read to get the name of the environment variable to get the address
+    /// from (defaults to `FAKTORY_URL`), and then that environment variable is read to get the
+    /// server address. If the latter environment variable is not defined, the connection will be
+    /// made to
+    ///
+    /// ```text
+    /// tcp://localhost:7419
+    /// ```
+    ///
+    /// If `url` is given, but does not specify a port, it defaults to 7419.
+    pub async fn connect(url: Option<&str>) -> Result<Self, Error> {
+        let c = Client::connect(url).await?;
+        Ok(Producer { c })
     }
 }
