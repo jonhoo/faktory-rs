@@ -133,7 +133,7 @@ pub(crate) const STATUS_TERMINATING: usize = 2;
 /// });
 /// ```
 ///
-/// You can also register anything that implements [`JobRunner`] to handle jobs 
+/// You can also register anything that implements [`JobRunner`] to handle jobs
 /// with [`register_runner`](ConsumerBuilder::register_runner).
 ///
 pub struct Consumer<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> {
