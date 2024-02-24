@@ -54,7 +54,7 @@ tokio-test = "0.4.3"
 x509-parser = "0.15.1"
 
 # to make -Zminimal-versions work
-[target.'cfg(test)'.dependencies]
+[target.'cfg(any())'.dependencies]
 rustls = "0.22.1"
 num-bigint = "0.4.2"
 oid-registry = "0.6.1"
