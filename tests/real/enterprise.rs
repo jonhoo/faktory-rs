@@ -176,13 +176,7 @@ async fn ent_unique_job() {
         .unique_for(unique_for_secs)
         .build();
     // ... so the server will accept it:
-
     p.enqueue(job2).await.unwrap();
-
-    let had_job = c.run_one(0, &[queue_name]).await.unwrap();
-    assert!(had_job);
-    let had_another_one = c.run_one(0, &[queue_name]).await.unwrap();
-    assert!(had_another_one);
 
     assert_had_one!(&mut c, queue_name);
     assert_had_one!(&mut c, queue_name);

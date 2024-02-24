@@ -51,6 +51,7 @@ url = "2"
 [dev-dependencies]
 tokio = { version = "1.35.1", features = ["rt", "macros"] }
 tokio-test = "0.4.3"
+x509-parser = "0.15.1"
 
 [[bin]]
 name = "loadtest"
