@@ -3,7 +3,7 @@
 use faktory::*;
 use serde_json::Value;
 use std::{
-    env, io,
+    env,
     sync::{self, Arc},
 };
 use tokio_rustls::rustls::ClientConfig;
@@ -27,18 +27,10 @@ async fn roundtrip_tls() {
     let local = "roundtrip_tls";
 
     let (tx, rx) = sync::mpsc::channel();
-    let tx = sync::Arc::new(sync::Mutex::new(tx));
     let mut c = ConsumerBuilder::default();
+
     c.hostname("tester".to_string()).wid(local.to_string());
-    {
-        c.register(local, move |j| {
-            let tx = sync::Arc::clone(&tx);
-            Box::pin(async move {
-                tx.lock().unwrap().send(j).unwrap();
-                Ok::<(), io::Error>(())
-            })
-        });
-    }
+    c.register_runner(local, fixtures::JobHandler::new(tx));
 
     let tls = || async {
         let verifier = fixtures::TestServerCertVerifier::new(
@@ -76,68 +68,113 @@ async fn roundtrip_tls() {
 }
 
 mod fixtures {
-    #![allow(unused_variables)]
+    pub use handler::JobHandler;
+    pub use tls::TestServerCertVerifier;
 
-    use std::fs;
-    use std::path::PathBuf;
+    mod handler {
+        use faktory::*;
 
-    use tokio_rustls::rustls::client::danger::{
-        HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
-    };
-    use tokio_rustls::rustls::pki_types::{CertificateDer, ServerName, UnixTime};
-    use tokio_rustls::rustls::DigitallySignedStruct;
-    use tokio_rustls::rustls::Error as RustlsError;
-    use tokio_rustls::rustls::SignatureScheme;
-    use x509_parser::pem::parse_x509_pem;
+        use std::{
+            io,
+            sync::{mpsc::Sender, Arc, Mutex},
+            time::Duration,
+        };
+        use tokio::time;
 
-    #[derive(Debug)]
-    pub(super) struct TestServerCertVerifier<'a> {
-        scheme: SignatureScheme,
-        cert_der: CertificateDer<'a>,
-    }
+        pub struct JobHandler {
+            chan: Arc<Mutex<Sender<Job>>>,
+        }
 
-    impl TestServerCertVerifier<'_> {
-        pub(super) fn new(scheme: SignatureScheme, cert_path: PathBuf) -> Self {
-            let cert = fs::read(&cert_path).unwrap();
-            let (_, pem) = parse_x509_pem(&cert).unwrap();
-            let cert_der = CertificateDer::try_from(pem.contents).unwrap();
-            Self { scheme, cert_der }
+        impl JobHandler {
+            pub fn new(chan: Sender<Job>) -> Self {
+                Self {
+                    chan: Arc::new(Mutex::new(chan)),
+                }
+            }
+
+            async fn process_one(&self, job: Job) -> io::Result<()> {
+                time::sleep(Duration::from_millis(100)).await;
+                eprintln!("{:?}", job);
+                self.chan.lock().unwrap().send(job).unwrap();
+                Ok(())
+            }
+        }
+
+        #[async_trait::async_trait]
+        impl JobRunner for JobHandler {
+            type Error = io::Error;
+
+            async fn run(&self, job: Job) -> Result<(), Self::Error> {
+                self.process_one(job).await.unwrap();
+                Ok(())
+            }
         }
     }
 
-    impl ServerCertVerifier for TestServerCertVerifier<'_> {
-        fn verify_server_cert(
-            &self,
-            end_entity: &CertificateDer<'_>,
-            intermediates: &[CertificateDer<'_>],
-            server_name: &ServerName<'_>,
-            ocsp_response: &[u8],
-            now: UnixTime,
-        ) -> Result<ServerCertVerified, RustlsError> {
-            assert_eq!(&self.cert_der, end_entity);
-            Ok(ServerCertVerified::assertion())
+    mod tls {
+        #![allow(unused_variables)]
+
+        use std::fs;
+        use std::path::PathBuf;
+
+        use tokio_rustls::rustls::client::danger::{
+            HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
+        };
+        use tokio_rustls::rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+        use tokio_rustls::rustls::DigitallySignedStruct;
+        use tokio_rustls::rustls::Error as RustlsError;
+        use tokio_rustls::rustls::SignatureScheme;
+        use x509_parser::pem::parse_x509_pem;
+
+        #[derive(Debug)]
+        pub struct TestServerCertVerifier<'a> {
+            scheme: SignatureScheme,
+            cert_der: CertificateDer<'a>,
         }
 
-        fn verify_tls12_signature(
-            &self,
-            message: &[u8],
-            cert: &CertificateDer<'_>,
-            dss: &DigitallySignedStruct,
-        ) -> Result<HandshakeSignatureValid, RustlsError> {
-            Ok(HandshakeSignatureValid::assertion())
+        impl TestServerCertVerifier<'_> {
+            pub fn new(scheme: SignatureScheme, cert_path: PathBuf) -> Self {
+                let cert = fs::read(&cert_path).unwrap();
+                let (_, pem) = parse_x509_pem(&cert).unwrap();
+                let cert_der = CertificateDer::try_from(pem.contents).unwrap();
+                Self { scheme, cert_der }
+            }
         }
 
-        fn verify_tls13_signature(
-            &self,
-            message: &[u8],
-            cert: &CertificateDer<'_>,
-            dss: &DigitallySignedStruct,
-        ) -> Result<HandshakeSignatureValid, RustlsError> {
-            Ok(HandshakeSignatureValid::assertion())
-        }
+        impl ServerCertVerifier for TestServerCertVerifier<'_> {
+            fn verify_server_cert(
+                &self,
+                end_entity: &CertificateDer<'_>,
+                intermediates: &[CertificateDer<'_>],
+                server_name: &ServerName<'_>,
+                ocsp_response: &[u8],
+                now: UnixTime,
+            ) -> Result<ServerCertVerified, RustlsError> {
+                assert_eq!(&self.cert_der, end_entity);
+                Ok(ServerCertVerified::assertion())
+            }
 
-        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-            vec![self.scheme]
+            fn verify_tls12_signature(
+                &self,
+                message: &[u8],
+                cert: &CertificateDer<'_>,
+                dss: &DigitallySignedStruct,
+            ) -> Result<HandshakeSignatureValid, RustlsError> {
+                Ok(HandshakeSignatureValid::assertion())
+            }
+
+            fn verify_tls13_signature(
+                &self,
+                message: &[u8],
+                cert: &CertificateDer<'_>,
+                dss: &DigitallySignedStruct,
+            ) -> Result<HandshakeSignatureValid, RustlsError> {
+                Ok(HandshakeSignatureValid::assertion())
+            }
+
+            fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+                vec![self.scheme]
+            }
         }
     }
 }
