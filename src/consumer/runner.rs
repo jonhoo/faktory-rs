@@ -97,3 +97,34 @@ where
 }
 
 pub(crate) type BoxedJobRunner<E> = Box<dyn JobRunner<Error = E>>;
+
+#[repr(transparent)]
+pub struct Runner<F>(pub F);
+
+#[async_trait::async_trait]
+impl<E, F, Fut> JobRunner for Runner<F>
+where
+    F: Send + Sync + Fn(Job) -> Fut,
+    Fut: Future<Output = Result<(), E>> + Send,
+    E: 'static
+{
+    type Error = E;
+    async fn run(&self, job: Job) -> Result<(), E> {
+        (self.0)(job).await
+    }
+}
+
+// macro_rules! runner {
+//     ($struct:ident, $cmd:expr) => {
+//         #[async_trait::async_trait]
+//         impl FaktoryCommand for $struct {
+//             async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+//                 let c = format!("{} ", $cmd);
+//                 w.write_all(c.as_bytes()).await?;
+//                 let r = serde_json::to_vec(self).map_err(Error::Serialization)?;
+//                 w.write_all(&r).await?;
+//                 Ok(w.write_all(b"\r\n").await?)
+//             }
+//         }
+//     };
+// }
