@@ -97,25 +97,44 @@ pub(crate) const STATUS_TERMINATING: usize = 2;
 ///
 /// # Examples
 ///
-/// Create a worker with all default options, register a single handler (for the `foobar` job
+/// Create a worker with all default options, register a single handler (for the `foo` job
 /// type), connect to the Faktory server, and start accepting jobs.
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// use faktory::ConsumerBuilder;
+/// use faktory::{ConsumerBuilder, Job};
 /// use std::io;
 ///
-/// let mut c = ConsumerBuilder::default();
-/// c.register("foobar", |job| Box::pin(async move {
+/// async fn process_job(job: Job) -> io::Result<()> {
 ///     println!("{:?}", job);
-///     Ok::<(), io::Error>(())
-/// }));
+///     Ok(())
+/// }
+///
+/// let mut c = ConsumerBuilder::default();
+///
+/// c.register("foo", process_job);
+///
 /// let mut c = c.connect(None).await.unwrap();
 /// if let Err(e) = c.run(&["default"]).await {
 ///     println!("worker failed: {}", e);
 /// }
 /// # });
 /// ```
+///
+/// Handler can be inlined.
+///
+/// ```no_run
+/// # use faktory::ConsumerBuilder;
+/// # use std::io;
+/// let mut c = ConsumerBuilder::default();
+/// c.register("bar", |job| async move {
+///     println!("{:?}", job);
+///     Ok::<(), io::Error>(())
+/// });
+/// ```
+///
+/// You can also register anything that implements [`JobRunner`] to handle jobs 
+/// with [`register_runner`](ConsumerBuilder::register_runner).
 ///
 pub struct Consumer<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> {
     c: Client<S>,

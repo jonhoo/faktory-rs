@@ -7,7 +7,6 @@ use crate::{
     Error, Job, JobRunner,
 };
 use std::future::Future;
-use std::pin::Pin;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
@@ -77,10 +76,12 @@ impl<E: 'static> ConsumerBuilder<E> {
     ///
     /// Whenever a job whose type matches `kind` is fetched from the Faktory, the given handler
     /// function is called with that job as its argument.
-    pub fn register<K, H>(&mut self, kind: K, handler: H) -> &mut Self
+    pub fn register<K, H, Fut>(&mut self, kind: K, handler: H) -> &mut Self
     where
         K: Into<String>,
-        H: Send + Sync + Fn(Job) -> Pin<Box<dyn Future<Output = Result<(), E>> + Send>> + 'static,
+
+        H: Fn(Job) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<(), E>> + Send,
     {
         self.register_runner(kind, Closure(handler));
         self

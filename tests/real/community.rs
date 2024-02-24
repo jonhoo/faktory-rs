@@ -30,13 +30,11 @@ async fn roundtrip() {
     skip_check!();
     let jid = String::from("x-job-id-0123456782");
     let mut c = ConsumerBuilder::default();
-    c.register("order", |job| Box::pin(process_order(job)));
-    c.register("image", |job| {
-        Box::pin(async move {
-            println!("{:?}", job);
-            assert_eq!(job.kind(), "image");
-            Ok(())
-        })
+    c.register("order", process_order);
+    c.register("image", |job| async move {
+        println!("{:?}", job);
+        assert_eq!(job.kind(), "image");
+        Ok(())
     });
     let mut c = c.connect(None).await.unwrap();
     let mut p = Producer::connect(None).await.unwrap();
@@ -237,12 +235,10 @@ async fn test_jobs_pushed_in_bulk() {
     // is not an  all-or-nothing operation:
     let mut c = ConsumerBuilder::default();
     c.hostname("tester".to_string()).wid(local_3.to_string());
-    c.register("very_special", move |_job| {
-        Box::pin(async move { Ok::<(), io::Error>(()) })
+    c.register("very_special", move |_job| async {
+        Ok::<(), io::Error>(())
     });
-    c.register("broken", move |_job| {
-        Box::pin(async move { Ok::<(), io::Error>(()) })
-    });
+    c.register("broken", move |_job| async { Ok::<(), io::Error>(()) });
     let mut c = c.connect(None).await.unwrap();
 
     // we targeted "very_special" jobs to "local_4" queue
@@ -272,8 +268,8 @@ async fn test_jobs_created_with_builder() {
     // prepare a producer ("client" in Faktory terms) and consumer ("worker"):
     let mut producer = Producer::connect(None).await.unwrap();
     let mut consumer = ConsumerBuilder::default();
-    consumer.register("rebuild_index", |j| Box::pin(assert_args_empty(j)));
-    consumer.register("register_order", |j| Box::pin(assert_args_not_empty(j)));
+    consumer.register("rebuild_index", assert_args_empty);
+    consumer.register("register_order", assert_args_not_empty);
 
     let mut consumer = consumer.connect(None).await.unwrap();
 

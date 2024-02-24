@@ -45,7 +45,7 @@ async fn ent_expiring_job() {
     // prepare a producer ("client" in Faktory terms) and consumer ("worker"):
     let mut p = Producer::connect(Some(&url)).await.unwrap();
     let mut c = ConsumerBuilder::default();
-    c.register("AnExpiringJob", |j| Box::pin(print_job(j)));
+    c.register("AnExpiringJob", print_job);
     let mut c = c.connect(Some(&url)).await.unwrap();
 
     // prepare an expiring job:
@@ -94,7 +94,7 @@ async fn ent_unique_job() {
     // prepare producer and consumer:
     let mut p = Producer::connect(Some(&url)).await.unwrap();
     let mut c = ConsumerBuilder::default();
-    c.register(job_type, |j| Box::pin(print_job(j)));
+    c.register(job_type, print_job);
     let mut c = c.connect(Some(&url)).await.unwrap();
 
     // Reminder. Jobs are considered unique for kind + args + queue.
@@ -210,20 +210,18 @@ async fn ent_unique_job_until_success() {
         // to work hard:
         let mut producer_a = Producer::connect(Some(&url1)).await.unwrap();
         let mut consumer_a = ConsumerBuilder::default_async();
-        consumer_a.register(job_type, |job| {
-            Box::pin(async move {
-                let args = job.args().to_owned();
-                let mut args = args.iter();
-                let diffuculty_level = args
-                    .next()
-                    .expect("job difficulty level is there")
-                    .to_owned();
-                let sleep_secs =
-                    serde_json::from_value::<i64>(diffuculty_level).expect("a valid number");
-                time::sleep(time::Duration::from_secs(sleep_secs as u64)).await;
-                eprintln!("{:?}", job);
-                Ok::<(), io::Error>(())
-            })
+        consumer_a.register(job_type, |job| async move {
+            let args = job.args().to_owned();
+            let mut args = args.iter();
+            let diffuculty_level = args
+                .next()
+                .expect("job difficulty level is there")
+                .to_owned();
+            let sleep_secs =
+                serde_json::from_value::<i64>(diffuculty_level).expect("a valid number");
+            time::sleep(time::Duration::from_secs(sleep_secs as u64)).await;
+            eprintln!("{:?}", job);
+            Ok::<(), io::Error>(())
         });
         let mut consumer_a = consumer_a.connect(Some(&url1)).await.unwrap();
         let job = JobBuilder::new(job_type)
@@ -292,20 +290,18 @@ async fn ent_unique_job_until_start() {
     let handle = tokio::spawn(async move {
         let mut producer_a = Producer::connect(Some(&url1)).await.unwrap();
         let mut consumer_a = ConsumerBuilder::default_async();
-        consumer_a.register(job_type, |job| {
-            Box::pin(async move {
-                let args = job.args().to_owned();
-                let mut args = args.iter();
-                let diffuculty_level = args
-                    .next()
-                    .expect("job difficulty level is there")
-                    .to_owned();
-                let sleep_secs =
-                    serde_json::from_value::<i64>(diffuculty_level).expect("a valid number");
-                time::sleep(time::Duration::from_secs(sleep_secs as u64)).await;
-                eprintln!("{:?}", job);
-                Ok::<(), io::Error>(())
-            })
+        consumer_a.register(job_type, |job| async move {
+            let args = job.args().to_owned();
+            let mut args = args.iter();
+            let diffuculty_level = args
+                .next()
+                .expect("job difficulty level is there")
+                .to_owned();
+            let sleep_secs =
+                serde_json::from_value::<i64>(diffuculty_level).expect("a valid number");
+            time::sleep(time::Duration::from_secs(sleep_secs as u64)).await;
+            eprintln!("{:?}", job);
+            Ok::<(), io::Error>(())
         });
         let mut consumer_a = consumer_a.connect(Some(&url1)).await.unwrap();
         producer_a
@@ -384,7 +380,7 @@ async fn ent_unique_job_bypass_unique_lock() {
     // let's consume three times from the queue to verify that the first two jobs
     // have been enqueued for real, while the last one has not.
     let mut c = ConsumerBuilder::default_async();
-    c.register("order", |j| Box::pin(print_job(j)));
+    c.register("order", print_job);
     let mut c = c.connect(Some(&url)).await.unwrap();
 
     assert!(c.run_one(0, &[queue_name]).await.unwrap());
@@ -564,10 +560,8 @@ async fn test_batch_of_jobs_can_be_initiated() {
 
     let mut p = Producer::connect(Some(&url)).await.unwrap();
     let mut c = ConsumerBuilder::default();
-    c.register("thumbnail", move |_job| {
-        Box::pin(async move { Ok::<(), io::Error>(()) })
-    });
-    c.register("clean_up", move |_job| Box::pin(async move { Ok(()) }));
+    c.register("thumbnail", |_job| async { Ok::<(), io::Error>(()) });
+    c.register("clean_up", |_job| async { Ok(()) });
     let mut c = c.connect(Some(&url)).await.unwrap();
     let mut t = Client::connect(Some(&url))
         .await
@@ -703,9 +697,7 @@ async fn test_batches_can_be_nested() {
     // Set up 'producer', 'consumer', and 'tracker':
     let mut p = Producer::connect(Some(&url)).await.unwrap();
     let mut c = ConsumerBuilder::default();
-    c.register("jobtype", move |_job| {
-        Box::pin(async move { Ok::<(), io::Error>(()) })
-    });
+    c.register("jobtype", |_job| async { Ok::<(), io::Error>(()) });
     let mut _c = c.connect(Some(&url)).await.unwrap();
     let mut t = Client::connect(Some(&url))
         .await
@@ -805,10 +797,8 @@ async fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
     // prepare a producer, a consumer of 'order' jobs, and a tracker:
     let mut p = Producer::connect(Some(&url)).await.unwrap();
     let mut c = ConsumerBuilder::default();
-    c.register("order", move |_job| Box::pin(async move { Ok(()) }));
-    c.register("order_clean_up", move |_job| {
-        Box::pin(async move { Ok::<(), io::Error>(()) })
-    });
+    c.register("order", |_job| async { Ok(()) });
+    c.register("order_clean_up", |_job| async { Ok::<(), io::Error>(()) });
     let mut c = c.connect(Some(&url)).await.unwrap();
     let mut t = Client::connect(Some(&url)).await.unwrap();
 
@@ -932,14 +922,12 @@ async fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
     assert_eq!(s.success_callback_state, CallbackState::Pending);
 
     let mut c = ConsumerBuilder::default();
-    c.register(complete_cb_jobtype, |_job| Box::pin(async { Ok(()) }));
-    c.register(success_cb_jobtype, |_job| {
-        Box::pin(async {
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                "we want this one to fail to test the 'CallbackState' behavior",
-            ))
-        })
+    c.register(complete_cb_jobtype, |_job| async { Ok(()) });
+    c.register(success_cb_jobtype, |_job| async {
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            "we want this one to fail to test the 'CallbackState' behavior",
+        ))
     });
 
     let mut c = c.connect(Some(&url)).await.unwrap();

@@ -1,5 +1,5 @@
 use crate::Job;
-use std::{future::Future, pin::Pin};
+use std::future::Future;
 
 /// Implementations of this trait can be registered to run jobs in a `Consumer`.
 ///
@@ -49,9 +49,10 @@ pub trait JobRunner: Send + Sync {
 
 // Implements JobRunner for a closure that takes a Job and returns a Result<(), E>
 #[async_trait::async_trait]
-impl<E, F> JobRunner for Box<F>
+impl<E, F, Fut> JobRunner for Box<F>
 where
-    F: Send + Sync + Fn(Job) -> Pin<Box<dyn Future<Output = Result<(), E>> + Send>>,
+    F: Send + Sync + Fn(Job) -> Fut,
+    Fut: Future<Output = Result<(), E>> + Send,
 {
     type Error = E;
     async fn run(&self, job: Job) -> Result<(), E> {
@@ -61,9 +62,10 @@ where
 
 // Additional Blanket Implementations
 #[async_trait::async_trait]
-impl<'a, E, F> JobRunner for &'a F
+impl<'a, E, F, Fut> JobRunner for &'a F
 where
-    F: Send + Sync + Fn(Job) -> Pin<Box<dyn Future<Output = Result<(), E>> + Send>>,
+    F: Send + Sync + Fn(Job) -> Fut,
+    Fut: Future<Output = Result<(), E>> + Send,
 {
     type Error = E;
     async fn run(&self, job: Job) -> Result<(), E> {
@@ -71,24 +73,14 @@ where
     }
 }
 
-#[async_trait::async_trait]
-impl<'a, E, F> JobRunner for &'a mut F
-where
-    F: Send + Sync + Fn(Job) -> Pin<Box<dyn Future<Output = Result<(), E>> + Send>>,
-{
-    type Error = E;
-    async fn run(&self, job: Job) -> Result<(), E> {
-        (self as &F)(job).await
-    }
-}
-
 #[repr(transparent)]
 pub(crate) struct Closure<F>(pub F);
 
 #[async_trait::async_trait]
-impl<E, F> JobRunner for Closure<F>
+impl<E, F, Fut> JobRunner for Closure<F>
 where
-    F: Send + Sync + Fn(Job) -> Pin<Box<dyn Future<Output = Result<(), E>> + Send>>,
+    F: Send + Sync + Fn(Job) -> Fut,
+    Fut: Future<Output = Result<(), E>> + Send,
 {
     type Error = E;
     async fn run(&self, job: Job) -> Result<(), E> {
@@ -97,34 +89,3 @@ where
 }
 
 pub(crate) type BoxedJobRunner<E> = Box<dyn JobRunner<Error = E>>;
-
-#[repr(transparent)]
-pub struct Runner<F>(pub F);
-
-#[async_trait::async_trait]
-impl<E, F, Fut> JobRunner for Runner<F>
-where
-    F: Send + Sync + Fn(Job) -> Fut,
-    Fut: Future<Output = Result<(), E>> + Send,
-    E: 'static
-{
-    type Error = E;
-    async fn run(&self, job: Job) -> Result<(), E> {
-        (self.0)(job).await
-    }
-}
-
-// macro_rules! runner {
-//     ($struct:ident, $cmd:expr) => {
-//         #[async_trait::async_trait]
-//         impl FaktoryCommand for $struct {
-//             async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
-//                 let c = format!("{} ", $cmd);
-//                 w.write_all(c.as_bytes()).await?;
-//                 let r = serde_json::to_vec(self).map_err(Error::Serialization)?;
-//                 w.write_all(&r).await?;
-//                 Ok(w.write_all(b"\r\n").await?)
-//             }
-//         }
-//     };
-// }
