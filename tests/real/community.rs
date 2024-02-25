@@ -1,7 +1,7 @@
 extern crate faktory;
 
 use crate::skip_check;
-use faktory::{Client, ConsumerBuilder, Job, JobBuilder};
+use faktory::{Client, Job, JobBuilder, WorkerBuilder};
 use serde_json::Value;
 use std::{io, sync};
 
@@ -29,7 +29,7 @@ async fn process_order(j: Job) -> Result<(), std::io::Error> {
 async fn roundtrip() {
     skip_check!();
     let jid = String::from("x-job-id-0123456782");
-    let mut c = ConsumerBuilder::default();
+    let mut c = WorkerBuilder::default();
     c.register("order", process_order);
     c.register("image", |job| async move {
         println!("{:?}", job);
@@ -61,7 +61,7 @@ async fn multi() {
 
     let (tx, rx) = sync::mpsc::channel();
     let tx = sync::Arc::new(sync::Mutex::new(tx));
-    let mut c = ConsumerBuilder::default_async();
+    let mut c = WorkerBuilder::default_async();
     c.hostname("tester".to_string()).wid(local.to_string());
 
     c.register(local, move |j| {
@@ -102,7 +102,7 @@ async fn fail() {
 
     let (tx, rx) = sync::mpsc::channel();
     let tx = sync::Arc::new(sync::Mutex::new(tx));
-    let mut c = ConsumerBuilder::default();
+    let mut c = WorkerBuilder::default();
     c.hostname("tester".to_string()).wid(local.to_string());
 
     c.register(local, move |j| {
@@ -139,7 +139,7 @@ async fn queue() {
     let (tx, rx) = sync::mpsc::channel();
     let tx = sync::Arc::new(sync::Mutex::new(tx));
 
-    let mut c = ConsumerBuilder::default();
+    let mut c = WorkerBuilder::default();
     c.hostname("tester".to_string()).wid(local.to_string());
     c.register(local, move |_job| {
         let tx = sync::Arc::clone(&tx);
@@ -233,7 +233,7 @@ async fn test_jobs_pushed_in_bulk() {
     // Let's check that the two well-formatted jobs
     // have _really_ been enqueued, i.e. that `enqueue_many`
     // is not an  all-or-nothing operation:
-    let mut c = ConsumerBuilder::default();
+    let mut c = WorkerBuilder::default();
     c.hostname("tester".to_string()).wid(local_3.to_string());
     c.register("very_special", move |_job| async {
         Ok::<(), io::Error>(())
@@ -266,12 +266,12 @@ async fn test_jobs_created_with_builder() {
     skip_check!();
 
     // prepare a client and a worker:
-    let mut client = Client::connect(None).await.unwrap();
-    let mut consumer = ConsumerBuilder::default();
-    consumer.register("rebuild_index", assert_args_empty);
-    consumer.register("register_order", assert_args_not_empty);
+    let mut cl = Client::connect(None).await.unwrap();
+    let mut w = WorkerBuilder::default();
+    w.register("rebuild_index", assert_args_empty);
+    w.register("register_order", assert_args_not_empty);
 
-    let mut consumer = consumer.connect(None).await.unwrap();
+    let mut w = w.connect(None).await.unwrap();
 
     // prepare some jobs with JobBuilder:
     let job1 = JobBuilder::new("rebuild_index")
@@ -287,24 +287,24 @@ async fn test_jobs_created_with_builder() {
     job3.queue = "test_jobs_created_with_builder_1".to_string();
 
     // enqueue ...
-    client.enqueue(job1).await.unwrap();
-    client.enqueue(job2).await.unwrap();
-    client.enqueue(job3).await.unwrap();
+    cl.enqueue(job1).await.unwrap();
+    cl.enqueue(job2).await.unwrap();
+    cl.enqueue(job3).await.unwrap();
 
     // ... and execute:
-    let had_job = consumer
+    let had_job = w
         .run_one(0, &["test_jobs_created_with_builder_0"])
         .await
         .unwrap();
     assert!(had_job);
 
-    let had_job = consumer
+    let had_job = w
         .run_one(0, &["test_jobs_created_with_builder_1"])
         .await
         .unwrap();
     assert!(had_job);
 
-    let had_job = consumer
+    let had_job = w
         .run_one(0, &["test_jobs_created_with_builder_1"])
         .await
         .unwrap();

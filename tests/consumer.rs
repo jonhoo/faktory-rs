@@ -11,7 +11,7 @@ use tokio::{spawn, time::sleep};
 #[tokio::test(flavor = "multi_thread")]
 async fn hello() {
     let mut s = mock::Stream::default();
-    let mut c: ConsumerBuilder<io::Error> = ConsumerBuilder::default();
+    let mut c: WorkerBuilder<io::Error> = WorkerBuilder::default();
     c.hostname("host".to_string())
         .wid("wid".to_string())
         .labels(vec!["foo".to_string(), "bar".to_string()]);
@@ -40,7 +40,7 @@ async fn hello() {
 async fn hello_pwd() {
     let mut s = mock::Stream::with_salt(1545, "55104dc76695721d");
 
-    let mut c: ConsumerBuilder<io::Error> = ConsumerBuilder::default();
+    let mut c: WorkerBuilder<io::Error> = WorkerBuilder::default();
     c.register("never_called", |_j: Job| async move { unreachable!() });
     let c = c
         .connect_with(s.clone(), Some("foobar".to_string()))
@@ -61,7 +61,7 @@ async fn hello_pwd() {
 #[tokio::test(flavor = "multi_thread")]
 async fn dequeue() {
     let mut s = mock::Stream::default();
-    let mut c = ConsumerBuilder::default();
+    let mut c = WorkerBuilder::default();
     c.register("foobar", |job: Job| async move {
         assert_eq!(job.args(), &["z"]);
         Ok::<(), io::Error>(())
@@ -100,7 +100,7 @@ async fn dequeue() {
 #[tokio::test(flavor = "multi_thread")]
 async fn dequeue_first_empty() {
     let mut s = mock::Stream::default();
-    let mut c = ConsumerBuilder::default();
+    let mut c = WorkerBuilder::default();
     c.register("foobar", |job: Job| async move {
         assert_eq!(job.args(), &["z"]);
         Ok::<(), io::Error>(())
@@ -155,7 +155,7 @@ async fn dequeue_first_empty() {
 #[tokio::test(flavor = "multi_thread")]
 async fn well_behaved() {
     let mut s = mock::Stream::new(2); // main plus worker
-    let mut c = ConsumerBuilder::default();
+    let mut c = WorkerBuilder::default();
     c.wid("wid".to_string());
     c.register("foobar", |_| async move {
         // NOTE: this time needs to be so that it lands between the first heartbeat and the second
@@ -220,7 +220,7 @@ async fn well_behaved() {
 #[tokio::test(flavor = "multi_thread")]
 async fn no_first_job() {
     let mut s = mock::Stream::new(2);
-    let mut c = ConsumerBuilder::default();
+    let mut c = WorkerBuilder::default();
     c.wid("wid".to_string());
     c.register("foobar", |_| async move {
         // NOTE: this time needs to be so that it lands between the first heartbeat and the second
@@ -286,7 +286,7 @@ async fn no_first_job() {
 #[tokio::test(flavor = "multi_thread")]
 async fn well_behaved_many() {
     let mut s = mock::Stream::new(3);
-    let mut c = ConsumerBuilder::default();
+    let mut c = WorkerBuilder::default();
     c.workers(2);
     c.wid("wid".to_string());
     c.register("foobar", |_| async move {
@@ -362,7 +362,7 @@ async fn well_behaved_many() {
 #[tokio::test(flavor = "multi_thread")]
 async fn terminate() {
     let mut s = mock::Stream::new(2);
-    let mut c: ConsumerBuilder<io::Error> = ConsumerBuilder::default();
+    let mut c: WorkerBuilder<io::Error> = WorkerBuilder::default();
     c.wid("wid".to_string());
     c.register("foobar", |_| async move {
         loop {

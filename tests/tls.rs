@@ -27,7 +27,7 @@ async fn roundtrip_tls() {
     let local = "roundtrip_tls";
 
     let (tx, rx) = sync::mpsc::channel();
-    let mut c = ConsumerBuilder::default();
+    let mut c = WorkerBuilder::default();
 
     c.hostname("tester".to_string()).wid(local.to_string());
     c.register_runner(local, fixtures::JobHandler::new(tx));

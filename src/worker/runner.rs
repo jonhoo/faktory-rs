@@ -1,17 +1,20 @@
 use crate::Job;
 use std::future::Future;
 
-/// Implementations of this trait can be registered to run jobs in a `Consumer`.
+#[cfg(doc)]
+use super::Worker;
+
+/// Implementations of this trait can be registered to run jobs in a [`Worker`](Worker).
 ///
 /// # Example
 ///
 /// Create a worker with all default options, register a single handler (for the `foo` job
 /// type), connect to the Faktory server, and start accepting jobs.
-/// The handler is a struct that implements `JobRunner`.
+/// The handler is a struct that implements [`JobRunner`].
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// use faktory::{ConsumerBuilder, JobRunner, Job};
+/// use faktory::{WorkerBuilder, JobRunner, Job};
 /// use std::io;
 ///
 /// struct MyHandler {
@@ -28,13 +31,13 @@ use std::future::Future;
 ///   }
 /// }
 ///
-/// let mut c = ConsumerBuilder::default();
+/// let mut w = WorkerBuilder::default();
 /// let handler = MyHandler {
 ///    config: "bar".to_string(),
 /// };
-/// c.register_runner("foo", handler);
-/// let mut c = c.connect(None).await.unwrap();
-/// if let Err(e) = c.run(&["default"]).await {
+/// w.register_runner("foo", handler);
+/// let mut w = w.connect(None).await.unwrap();
+/// if let Err(e) = w.run(&["default"]).await {
 ///     println!("worker failed: {}", e);
 /// }
 /// });

@@ -13,7 +13,7 @@ const QUEUES: &[&str] = &["queue0", "queue1", "queue2", "queue3", "queue4"];
 async fn main() {
     let matches = Command::new("My Super Program (Async)")
         .version("0.1")
-        .about("Benchmark the performance of Rust Faktory async consumers and producers")
+        .about("Benchmark the performance of Rust Faktory async workers and client")
         .arg(
             Arg::new("jobs")
                 .help("Number of jobs to run")
@@ -23,7 +23,7 @@ async fn main() {
         )
         .arg(
             Arg::new("threads")
-                .help("Number of consumers/producers to run")
+                .help("Number of workers/clients to run")
                 .value_parser(value_parser!(usize))
                 .index(2)
                 .default_value("10"),
@@ -56,7 +56,7 @@ async fn main() {
             tokio::spawn(async move {
                 // make producer and consumer
                 let mut p = Client::connect(None).await.unwrap();
-                let mut c = ConsumerBuilder::default();
+                let mut c = WorkerBuilder::default();
                 c.register("SomeJob", |_| {
                     Box::pin(async move {
                         let mut rng = rand::thread_rng();

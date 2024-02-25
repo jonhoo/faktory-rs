@@ -52,7 +52,7 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// [`Client::enqueue`](Client::enqueue). The most important part of a `Job`
 /// is its `kind`; this field dictates how workers will execute the job when they receive it. The
 /// string provided here must match a handler registered on the worker using
-/// [`ConsumerBuilder::register`](struct.ConsumerBuilder.html#method.register) (or the equivalent
+/// [`WorkerBuilder::register`](struct.WorkerBuilder.html#method.register) (or the equivalent
 /// handler registration method in workers written in other languages).
 ///
 /// Since Faktory workers do not all need to be the same (you could have some written in Rust for
@@ -60,7 +60,7 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// given job can only be executed by some workers (e.g., if they job type is not registered at
 /// others). To allow for this, Faktory includes a `labels` field with each job. Jobs will only be
 /// sent to workers whose labels (see
-/// [`ConsumerBuilder::labels`](struct.ConsumerBuilder.html#method.labels)) match those set in
+/// [`WorkerBuilder::labels`](struct.WorkerBuilder.html#method.labels)) match those set in
 /// `Job::labels`.
 ///
 /// # Examples

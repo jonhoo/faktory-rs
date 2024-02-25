@@ -20,18 +20,18 @@
 //!
 //! In this crate, you will find bindings both for submitting jobs (clients that *produce* jobs)
 //! and for executing jobs (workers that *consume* jobs). The former can be done by making a
-//! `Producer`, whereas the latter is done with a `Consumer`. See the documentation for each for
+//! `Client`, whereas the latter is done with a `Worker`. See the documentation for each for
 //! more details on how to use them.
 //!
 //! # Encrypted connections (TLS)
 //!
 //! To connect to a Faktory server hosted over TLS, add the `tls` feature, and see the
-//! documentation for `TlsStream`, which can be supplied to `Producer::connect_with` and
-//! `Consumer::connect_with`.
+//! documentation for `TlsStream`, which can be supplied to [`Client::connect_with`] and
+//! [`WorkerBuilder::connect_with`].
 //!
 //! # Examples
 //!
-//! If you want to **submit** jobs to Faktory, use `Producer`.
+//! If you want to **submit** jobs to Faktory, use `Client`.
 //!
 //! ```no_run
 //! # tokio_test::block_on(async {
@@ -44,19 +44,19 @@
 //! assert_eq!(errors, None);
 //! });
 //! ```
-//! If you want to **accept** jobs from Faktory, use `Consumer`.
+//! If you want to **accept** jobs from Faktory, use `Worker`.
 //!
 //! ```no_run
 //! # tokio_test::block_on(async {
-//! use faktory::ConsumerBuilder;
+//! use faktory::WorkerBuilder;
 //! use std::io;
-//! let mut c = ConsumerBuilder::default();
-//! c.register("foobar", |job| Box::pin(async move {
+//! let mut w = WorkerBuilder::default();
+//! w.register("foobar", |job| async move {
 //!     println!("{:?}", job);
 //!     Ok::<(), io::Error>(())
-//! }));
-//! let mut c = c.connect(None).await.unwrap();
-//! if let Err(e) = c.run(&["default"]).await {
+//! });
+//! let mut w = w.connect(None).await.unwrap();
+//! if let Err(e) = w.run(&["default"]).await {
 //!     println!("worker failed: {}", e);
 //! }
 //! # });
@@ -70,12 +70,12 @@ extern crate serde_derive;
 
 pub mod error;
 
-mod consumer;
 mod proto;
+mod worker;
 
-pub use crate::consumer::{Consumer, ConsumerBuilder, JobRunner};
 pub use crate::error::Error;
 pub use crate::proto::{Client, Job, JobBuilder, Reconnect};
+pub use crate::worker::{JobRunner, Worker, WorkerBuilder};
 
 #[cfg(feature = "ent")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]

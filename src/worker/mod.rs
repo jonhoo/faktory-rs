@@ -13,7 +13,7 @@ mod health;
 mod registries;
 mod runner;
 
-pub use builder::ConsumerBuilder;
+pub use builder::WorkerBuilder;
 use registries::{CallbacksRegistry, StatesRegistry};
 pub use runner::JobRunner;
 
@@ -21,21 +21,21 @@ pub(crate) const STATUS_RUNNING: usize = 0;
 pub(crate) const STATUS_QUIET: usize = 1;
 pub(crate) const STATUS_TERMINATING: usize = 2;
 
-/// `Consumer` is used to run a worker that processes jobs provided by Faktory.
+/// `Worker` is used to run a worker that processes jobs provided by Faktory.
 ///
 /// # Building the worker
 ///
 /// Faktory needs a decent amount of information from its workers, such as a unique worker ID, a
 /// hostname for the worker, its process ID, and a set of labels used to identify the worker. In
 /// order to enable setting all these, constructing a worker is a two-step process. You first use a
-/// [`ConsumerBuilder`](struct.ConsumerBuilder.html) (which conveniently implements a sensible
+/// [`WorkerBuilder`] (which conveniently implements a sensible
 /// `Default`) to set the worker metadata, as well as to register any job handlers. You then use
 /// one of the `connect_*` methods to finalize the worker and connect to the Faktory server.
 ///
-/// In most cases, `ConsumerBuilder::default()` will do what you want. You only need to augment it
-/// with calls to [`register`](struct.ConsumerBuilder.html#method.register) to register handlers
+/// In most cases, [`WorkerBuilder::default()`] will do what you want. You only need to augment it
+/// with calls to [`register`](WorkerBuilder::register) to register handlers
 /// for each of your job types, and then you can connect. If you have different *types* of workers,
-/// you may also want to use [`labels`](struct.ConsumerBuilder.html#method.labels) to distinguish
+/// you may also want to use [`labels`](WorkerBuilder::labels) to distinguish
 /// them in the Faktory Web UI. To specify that some jobs should only go to some workers, use
 /// different queues.
 ///
@@ -63,14 +63,14 @@ pub(crate) const STATUS_TERMINATING: usize = 2;
 /// use the last approach and let the library handle the concurrency for you.
 ///
 ///  - You can spin up more worker processes by launching your worker program more than once.
-///  - You can create more than one `Consumer`.
-///  - You can call [`ConsumerBuilder::workers`](struct.ConsumerBuilder.html#method.workers) to set
-///    the number of worker threads you'd like the `Consumer` to use internally.
+///  - You can create more than one `Worker`.
+///  - You can call [`WorkerBuilder::workers`] to set
+///    the number of worker threads you'd like the `Worker` to use internally.
 ///
 /// # Connecting to Faktory
 ///
-/// To fetch jobs, the `Consumer` must first be connected to the Faktory server. Exactly how you do
-/// that depends on your setup. In most cases, you'll want to use `Consumer::connect`, and provide
+/// To fetch jobs, the `Worker` must first be connected to the Faktory server. Exactly how you do
+/// that depends on your setup. In most cases, you'll want to use [`WorkerBuilder::connect`], and provide
 /// a connection URL. If you supply a URL, it must be of the form:
 ///
 /// ```text
@@ -81,7 +81,7 @@ pub(crate) const STATUS_TERMINATING: usize = 2;
 /// their docs for more information) with `localhost:7419` as the fallback default. If you want
 /// this behavior, pass `None` as the URL.
 ///
-/// See the [`Producer` examples](struct.Producer.html#examples) for examples of how to connect to
+/// See the [`Client` examples](struct.Client.html#examples) for examples of how to connect to
 /// different Factory setups.
 ///
 /// # Worker lifecycle
@@ -90,9 +90,9 @@ pub(crate) const STATUS_TERMINATING: usize = 2;
 ///
 /// If all this process is doing is handling jobs, reconnecting on failure, and exiting when told
 /// to by the Faktory server, you should use
-/// [`run_to_completion`](Consumer::run_to_completion). If you want more
+/// [`run_to_completion`](Worker::run_to_completion). If you want more
 /// fine-grained control over the lifetime of your process, you should use
-/// [`run`](Consumer::run). See the documentation for each of these
+/// [`run`](Worker::run). See the documentation for each of these
 /// methods for details.
 ///
 /// # Examples
@@ -102,7 +102,7 @@ pub(crate) const STATUS_TERMINATING: usize = 2;
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// use faktory::{ConsumerBuilder, Job};
+/// use faktory::{WorkerBuilder, Job};
 /// use std::io;
 ///
 /// async fn process_job(job: Job) -> io::Result<()> {
@@ -110,12 +110,12 @@ pub(crate) const STATUS_TERMINATING: usize = 2;
 ///     Ok(())
 /// }
 ///
-/// let mut c = ConsumerBuilder::default();
+/// let mut w = WorkerBuilder::default();
 ///
-/// c.register("foo", process_job);
+/// w.register("foo", process_job);
 ///
-/// let mut c = c.connect(None).await.unwrap();
-/// if let Err(e) = c.run(&["default"]).await {
+/// let mut w = w.connect(None).await.unwrap();
+/// if let Err(e) = w.run(&["default"]).await {
 ///     println!("worker failed: {}", e);
 /// }
 /// # });
@@ -124,34 +124,34 @@ pub(crate) const STATUS_TERMINATING: usize = 2;
 /// Handler can be inlined.
 ///
 /// ```no_run
-/// # use faktory::ConsumerBuilder;
+/// # use faktory::WorkerBuilder;
 /// # use std::io;
-/// let mut c = ConsumerBuilder::default();
-/// c.register("bar", |job| async move {
+/// let mut w = WorkerBuilder::default();
+/// w.register("bar", |job| async move {
 ///     println!("{:?}", job);
 ///     Ok::<(), io::Error>(())
 /// });
 /// ```
 ///
 /// You can also register anything that implements [`JobRunner`] to handle jobs
-/// with [`register_runner`](ConsumerBuilder::register_runner).
+/// with [`register_runner`](WorkerBuilder::register_runner).
 ///
-pub struct Consumer<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> {
+pub struct Worker<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> {
     c: Client<S>,
     worker_states: Arc<StatesRegistry>,
     callbacks: Arc<CallbacksRegistry<E>>,
     terminated: bool,
 }
 
-impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin + Reconnect, E> Consumer<S, E> {
+impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin + Reconnect, E> Worker<S, E> {
     async fn reconnect(&mut self) -> Result<(), Error> {
         self.c.reconnect().await
     }
 }
 
-impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> Consumer<S, E> {
+impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> Worker<S, E> {
     async fn new(c: Client<S>, workers_count: usize, callbacks: CallbacksRegistry<E>) -> Self {
-        Consumer {
+        Worker {
             c,
             callbacks: Arc::new(callbacks),
             worker_states: Arc::new(StatesRegistry::new(workers_count)),
@@ -165,9 +165,7 @@ enum Failed<E: StdError> {
     BadJobType(String),
 }
 
-impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + Send>
-    Consumer<S, E>
-{
+impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + Send> Worker<S, E> {
     async fn run_job(&mut self, job: Job) -> Result<(), Failed<E>> {
         let handler = self
             .callbacks
@@ -186,7 +184,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
 
     async fn report_on_all_workers(&mut self) -> Result<(), Error> {
         let worker_states = Arc::get_mut(&mut self.worker_states)
-            .expect("all workers are scoped to &mut of the user-code-visible Consumer");
+            .expect("all workers are scoped to &mut of the user-code-visible Worker");
 
         // retry delivering notification about our last job result.
         // we know there's no leftover thread at this point, so there's no race on the option.
@@ -281,10 +279,10 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
 impl<
         S: AsyncBufReadExt + AsyncWriteExt + Reconnect + Send + Unpin + 'static,
         E: StdError + 'static + Send,
-    > Consumer<S, E>
+    > Worker<S, E>
 {
     async fn for_worker(&mut self) -> Result<Self, Error> {
-        Ok(Consumer {
+        Ok(Worker {
             c: self.c.connect_again().await?,
             callbacks: Arc::clone(&self.callbacks),
             worker_states: Arc::clone(&self.worker_states),
@@ -320,11 +318,9 @@ impl<
     ///
     /// The value in an `Ok` indicates the number of workers that may still be processing jobs.
     ///
-    /// Note that if the worker fails, [`reconnect()`](struct.Consumer.html#method.reconnect)
-    /// should likely be called before calling `run()` again. If an error occurred while reporting
-    /// a job success or failure, the result will be re-reported to the server without re-executing
-    /// the job. If the worker was terminated (i.e., `run` returns with an `Ok` response), the
-    /// worker should **not** try to resume by calling `run` again. This will cause a panic.
+    /// If an error occurred while reporting a job success or failure, the result will be re-reported to the server
+    /// without re-executing the job. If the worker was terminated (i.e., `run` returns  with an `Ok` response),
+    /// the worker should **not** try to resume by calling `run` again. This will cause a panic.
     pub async fn run<Q>(&mut self, queues: &[Q]) -> Result<usize, Error>
     where
         Q: AsRef<str>,

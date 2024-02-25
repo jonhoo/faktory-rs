@@ -21,7 +21,7 @@ pub(crate) struct ClientOptions {
     pub(crate) password: Option<String>,
 
     /// Whether this client is instatianted for
-    /// a consumer ("worker" in Faktory terms).
+    /// a worker (i.e. to consume jobs).
     pub(crate) is_worker: bool,
 }
 

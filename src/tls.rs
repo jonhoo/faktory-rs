@@ -1,3 +1,6 @@
+#[cfg(doc)]
+use crate::{Client, WorkerBuilder};
+
 use crate::{proto::utils, Error, Reconnect};
 use std::fmt::Debug;
 use std::io;
@@ -11,7 +14,7 @@ use tokio_rustls::TlsConnector;
 
 /// A reconnectable asynchronous stream encrypted with TLS.
 ///
-/// This can be used as an argument to `Consumer::connect_with` and `Producer::connect_with` to
+/// This can be used as an argument to [`WorkerBuilder::connect_with`] and [`Client::connect_with`] to
 /// connect to a TLS-secured Faktory server.
 ///
 /// # Examples

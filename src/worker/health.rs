@@ -1,4 +1,4 @@
-use super::{Consumer, STATUS_QUIET, STATUS_RUNNING, STATUS_TERMINATING};
+use super::{Worker, STATUS_QUIET, STATUS_RUNNING, STATUS_TERMINATING};
 use crate::{proto::HeartbeatStatus, Error, Reconnect};
 use std::{
     error::Error as StdError,
@@ -11,7 +11,7 @@ use tokio::time::sleep as tokio_sleep;
 impl<
         S: AsyncBufReadExt + AsyncWriteExt + Reconnect + Send + Unpin + 'static,
         E: StdError + 'static + Send,
-    > Consumer<S, E>
+    > Worker<S, E>
 {
     pub(crate) async fn listen_for_heartbeats(
         &mut self,

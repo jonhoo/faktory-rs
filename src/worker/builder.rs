@@ -1,9 +1,6 @@
-use super::{runner::Closure, CallbacksRegistry, Client, Consumer};
+use super::{runner::Closure, CallbacksRegistry, Client, Worker};
 use crate::{
-    proto::{
-        utils::{get_env_url, host_from_url, url_parse},
-        ClientOptions,
-    },
+    proto::{utils, ClientOptions},
     Error, Job, JobRunner,
 };
 use std::future::Future;
@@ -12,26 +9,26 @@ use tokio::net::TcpStream as TokioStream;
 
 /// Convenience wrapper for building a Faktory worker.
 ///
-/// See the [`Consumer`] documentation for details.
-pub struct ConsumerBuilder<E> {
+/// See the [`Worker`] documentation for details.
+pub struct WorkerBuilder<E> {
     opts: ClientOptions,
     workers_count: usize,
     callbacks: CallbacksRegistry<E>,
 }
 
-impl<E> ConsumerBuilder<E> {
-    /// Create a builder for asynchronous version of `Consumer`.
-    pub fn default_async() -> ConsumerBuilder<E> {
-        ConsumerBuilder::default()
+impl<E> WorkerBuilder<E> {
+    /// Create a builder for asynchronous version of `Worker`.
+    pub fn default_async() -> WorkerBuilder<E> {
+        WorkerBuilder::default()
     }
 }
 
-impl<E> Default for ConsumerBuilder<E> {
-    /// Create a builder for asynchronous version of `Consumer`.
+impl<E> Default for WorkerBuilder<E> {
+    /// Create a builder for asynchronous version of `ConWorkersumer`.
     ///
-    /// See [`ConsumerBuilder`](struct.ConsumerBuilder.html)
+    /// See [`WorkerBuilder`](struct.WorkerBuilder.html)
     fn default() -> Self {
-        ConsumerBuilder {
+        WorkerBuilder {
             opts: ClientOptions::default(),
             workers_count: 1,
             callbacks: CallbacksRegistry::default(),
@@ -39,7 +36,7 @@ impl<E> Default for ConsumerBuilder<E> {
     }
 }
 
-impl<E: 'static> ConsumerBuilder<E> {
+impl<E: 'static> WorkerBuilder<E> {
     /// Set the hostname to use for this worker.
     ///
     /// Defaults to the machine's hostname as reported by the operating system.
@@ -105,28 +102,25 @@ impl<E: 'static> ConsumerBuilder<E> {
         mut self,
         stream: S,
         pwd: Option<String>,
-    ) -> Result<Consumer<BufStream<S>, E>, Error> {
+    ) -> Result<Worker<BufStream<S>, E>, Error> {
         self.opts.password = pwd;
         self.opts.is_worker = true;
         let buffered = BufStream::new(stream);
         let client = Client::new(buffered, self.opts).await?;
-        Ok(Consumer::new(client, self.workers_count, self.callbacks).await)
+        Ok(Worker::new(client, self.workers_count, self.callbacks).await)
     }
 
     /// Asynchronously connect to a Faktory server.
     ///
-    /// See [`connect`](struct.ConsumerBuilder.html#structmethod.connect).
+    /// See [`connect`](WorkerBuilder::connect).
     pub async fn connect(
         self,
         url: Option<&str>,
-    ) -> Result<Consumer<BufStream<TokioStream>, E>, Error> {
-        let url = match url {
-            Some(url) => url_parse(url),
-            None => url_parse(&get_env_url()),
-        }?;
-        let stream = TokioStream::connect(host_from_url(&url)).await?;
+    ) -> Result<Worker<BufStream<TokioStream>, E>, Error> {
+        let url = utils::parse_provided_or_from_env(url)?;
+        let stream = TokioStream::connect(utils::host_from_url(&url)).await?;
         let buffered = BufStream::new(stream);
         let client = Client::new(buffered, self.opts).await?;
-        Ok(Consumer::new(client, self.workers_count, self.callbacks).await)
+        Ok(Worker::new(client, self.workers_count, self.callbacks).await)
     }
 }
