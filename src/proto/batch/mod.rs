@@ -5,7 +5,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
 mod cmd;
 
-pub use cmd::{GetBatchStatus, OpenBatch};
+pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 
 /// Batch of jobs.
 ///
@@ -211,7 +211,7 @@ impl Clone for BatchBuilder {
 /// Represents a newly started or re-opened batch of jobs.
 pub struct BatchHandle<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> {
     bid: String,
-    prod: &'a mut Client<S>,
+    c: &'a mut Client<S>,
 }
 
 impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> BatchHandle<'a, S> {
@@ -220,8 +220,8 @@ impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> BatchHandle<'a, S> {
         self.bid.as_ref()
     }
 
-    pub(crate) fn new(bid: String, prod: &mut Client<S>) -> BatchHandle<'_, S> {
-        BatchHandle { bid, prod }
+    pub(crate) fn new(bid: String, c: &mut Client<S>) -> BatchHandle<'_, S> {
+        BatchHandle { bid, c }
     }
 
     /// Add the given job to the batch.
@@ -231,13 +231,13 @@ impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> BatchHandle<'a, S> {
     /// returned as `Some(<old value here>)`.
     pub async fn add(&mut self, mut job: Job) -> Result<Option<serde_json::Value>, Error> {
         let bid = job.custom.insert("bid".into(), self.bid.clone().into());
-        self.prod.enqueue(job).await.map(|_| bid)
+        self.c.enqueue(job).await.map(|_| bid)
     }
 
     /// Initiate a child batch of jobs.
     pub async fn start_batch(&mut self, mut batch: Batch) -> Result<BatchHandle<'_, S>, Error> {
         batch.parent_bid = Some(self.bid.clone());
-        self.prod.start_batch(batch).await
+        self.c.start_batch(batch).await
     }
 
     /// Commit this batch.
@@ -247,7 +247,7 @@ impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> BatchHandle<'a, S> {
     /// Once committed, the batch can still be re-opened with [open_batch](Client::open_batch),
     /// and extra jobs can be added to it.
     pub async fn commit(self) -> Result<(), Error> {
-        self.prod.commit_batch(self.bid).await
+        self.c.commit_batch(self.bid).await
     }
 }
 

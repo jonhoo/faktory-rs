@@ -19,7 +19,8 @@ pub use self::single::ent::{JobState, Progress, ProgressUpdate, ProgressUpdateBu
 mod batch;
 #[cfg(feature = "ent")]
 pub use batch::{
-    Batch, BatchBuilder, BatchHandle, BatchStatus, CallbackState, GetBatchStatus, OpenBatch,
+    Batch, BatchBuilder, BatchHandle, BatchStatus, CallbackState, CommitBatch, GetBatchStatus,
+    OpenBatch,
 };
 
 /// A stream that can be re-established after failing.

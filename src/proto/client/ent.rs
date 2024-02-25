@@ -1,5 +1,5 @@
 use super::super::{
-    single, BatchStatus, GetBatchStatus, OpenBatch, Progress, ProgressUpdate, Track,
+    single, BatchStatus, CommitBatch, GetBatchStatus, OpenBatch, Progress, ProgressUpdate, Track,
 };
 use super::{Client, ReadToken};
 use crate::ent::{Batch, BatchHandle};
@@ -41,7 +41,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> Client<S> {
     }
 
     pub(crate) async fn commit_batch(&mut self, bid: String) -> Result<(), Error> {
-        self.issue(&OpenBatch::from(bid)).await?.read_ok().await
+        self.issue(&CommitBatch::from(bid)).await?.read_ok().await
     }
 }
 
