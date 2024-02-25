@@ -55,7 +55,7 @@ async fn roundtrip_tls() {
     };
 
     let mut c = c.connect_with(tls().await, None).await.unwrap();
-    let mut p = Producer::connect_with(tls().await, None).await.unwrap();
+    let mut p = Client::connect_with(tls().await, None).await.unwrap();
     p.enqueue(Job::new(local, vec!["z"]).on_queue(local))
         .await
         .unwrap();

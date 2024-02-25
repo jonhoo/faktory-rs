@@ -40,7 +40,7 @@ async fn main() {
     // ensure that we can actually connect to the server;
     // will create a client, run a handshake with Faktory,
     // and drop the cliet immediately afterwards;
-    if let Err(e) = Producer::connect(None).await {
+    if let Err(e) = Client::connect(None).await {
         println!("{}", e);
         process::exit(1);
     }
@@ -55,7 +55,7 @@ async fn main() {
             let popped = sync::Arc::clone(&popped);
             tokio::spawn(async move {
                 // make producer and consumer
-                let mut p = Producer::connect(None).await.unwrap();
+                let mut p = Client::connect(None).await.unwrap();
                 let mut c = ConsumerBuilder::default();
                 c.register("SomeJob", |_| {
                     Box::pin(async move {

@@ -18,10 +18,10 @@ use tokio_rustls::TlsConnector;
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// use faktory::{Producer, TlsStream};
+/// use faktory::{Client, TlsStream};
 /// let tls = TlsStream::connect(None).await.unwrap();
-/// let p = Producer::connect_with(tls, None).await.unwrap();
-/// # drop(p);
+/// let cl = Client::connect_with(tls, None).await.unwrap();
+/// # drop(cl);
 /// # });
 /// ```
 ///

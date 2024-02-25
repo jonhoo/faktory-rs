@@ -1,21 +1,21 @@
 extern crate faktory;
 
 use crate::skip_check;
-use faktory::{ConsumerBuilder, Job, JobBuilder, Producer};
+use faktory::{Client, ConsumerBuilder, Job, JobBuilder};
 use serde_json::Value;
 use std::{io, sync};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn hello_p() {
     skip_check!();
-    let p = Producer::connect(None).await.unwrap();
+    let p = Client::connect(None).await.unwrap();
     drop(p);
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn enqueue_job() {
     skip_check!();
-    let mut p = Producer::connect(None).await.unwrap();
+    let mut p = Client::connect(None).await.unwrap();
     p.enqueue(JobBuilder::new("order").build()).await.unwrap();
 }
 
@@ -37,7 +37,7 @@ async fn roundtrip() {
         Ok(())
     });
     let mut c = c.connect(None).await.unwrap();
-    let mut p = Producer::connect(None).await.unwrap();
+    let mut p = Client::connect(None).await.unwrap();
     p.enqueue(
         JobBuilder::new("order")
             .jid(&jid)
@@ -74,7 +74,7 @@ async fn multi() {
 
     let mut c = c.connect(None).await.unwrap();
 
-    let mut p = Producer::connect(None).await.unwrap();
+    let mut p = Client::connect(None).await.unwrap();
     p.enqueue(Job::new(local, vec![Value::from(1), Value::from("foo")]).on_queue(local))
         .await
         .unwrap();
@@ -115,7 +115,7 @@ async fn fail() {
 
     let mut c = c.connect(None).await.unwrap();
 
-    let mut p = Producer::connect(None).await.unwrap();
+    let mut p = Client::connect(None).await.unwrap();
 
     // note that *enqueueing* the jobs didn't fail!
     p.enqueue(Job::new(local, vec![Value::from(1), Value::from("foo")]).on_queue(local))
@@ -147,7 +147,7 @@ async fn queue() {
     });
     let mut c = c.connect(None).await.unwrap();
 
-    let mut p = Producer::connect(None).await.unwrap();
+    let mut p = Client::connect(None).await.unwrap();
     p.enqueue(Job::new(local, vec![Value::from(1)]).on_queue(local))
         .await
         .unwrap();
@@ -175,7 +175,7 @@ async fn test_jobs_pushed_in_bulk() {
     let local_3 = "test_jobs_pushed_in_bulk_3";
     let local_4 = "test_jobs_pushed_in_bulk_4";
 
-    let mut p = Producer::connect(None).await.unwrap();
+    let mut p = Client::connect(None).await.unwrap();
     let (enqueued_count, errors) = p
         .enqueue_many(vec![
             Job::builder("common").queue(local_1).build(),
@@ -265,8 +265,8 @@ async fn assert_args_not_empty(j: Job) -> io::Result<()> {
 async fn test_jobs_created_with_builder() {
     skip_check!();
 
-    // prepare a producer ("client" in Faktory terms) and consumer ("worker"):
-    let mut producer = Producer::connect(None).await.unwrap();
+    // prepare a client and a worker:
+    let mut client = Client::connect(None).await.unwrap();
     let mut consumer = ConsumerBuilder::default();
     consumer.register("rebuild_index", assert_args_empty);
     consumer.register("register_order", assert_args_not_empty);
@@ -287,9 +287,9 @@ async fn test_jobs_created_with_builder() {
     job3.queue = "test_jobs_created_with_builder_1".to_string();
 
     // enqueue ...
-    producer.enqueue(job1).await.unwrap();
-    producer.enqueue(job2).await.unwrap();
-    producer.enqueue(job3).await.unwrap();
+    client.enqueue(job1).await.unwrap();
+    client.enqueue(job2).await.unwrap();
+    client.enqueue(job3).await.unwrap();
 
     // ... and execute:
     let had_job = consumer

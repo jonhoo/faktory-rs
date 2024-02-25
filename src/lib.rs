@@ -35,11 +35,11 @@
 //!
 //! ```no_run
 //! # tokio_test::block_on(async {
-//! use faktory::{Producer, Job};
-//! let mut p = Producer::connect(None).await.unwrap();
-//! p.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
+//! use faktory::{Client, Job};
+//! let mut client = Client::connect(None).await.unwrap();
+//! client.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
 //!
-//! let (enqueued_count, errors) = p.enqueue_many([Job::new("foobar", vec!["z"]), Job::new("foobar", vec!["z"])]).await.unwrap();
+//! let (enqueued_count, errors) = client.enqueue_many([Job::new("foobar", vec!["z"]), Job::new("foobar", vec!["z"])]).await.unwrap();
 //! assert_eq!(enqueued_count, 2);
 //! assert_eq!(errors, None);
 //! });
@@ -71,12 +71,10 @@ extern crate serde_derive;
 pub mod error;
 
 mod consumer;
-mod producer;
 mod proto;
 
 pub use crate::consumer::{Consumer, ConsumerBuilder, JobRunner};
 pub use crate::error::Error;
-pub use crate::producer::Producer;
 pub use crate::proto::{Client, Job, JobBuilder, Reconnect};
 
 #[cfg(feature = "ent")]

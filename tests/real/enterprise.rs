@@ -42,8 +42,8 @@ async fn ent_expiring_job() {
     let url = learn_faktory_url();
     let local = "ent_expiring_job";
 
-    // prepare a producer ("client" in Faktory terms) and consumer ("worker"):
-    let mut p = Producer::connect(Some(&url)).await.unwrap();
+    // prepare a client and a worker:
+    let mut p = Client::connect(Some(&url)).await.unwrap();
     let mut c = ConsumerBuilder::default();
     c.register("AnExpiringJob", print_job);
     let mut c = c.connect(Some(&url)).await.unwrap();
@@ -92,7 +92,7 @@ async fn ent_unique_job() {
     let job_type = "order";
 
     // prepare producer and consumer:
-    let mut p = Producer::connect(Some(&url)).await.unwrap();
+    let mut p = Client::connect(Some(&url)).await.unwrap();
     let mut c = ConsumerBuilder::default();
     c.register(job_type, print_job);
     let mut c = c.connect(Some(&url)).await.unwrap();
@@ -208,7 +208,7 @@ async fn ent_unique_job_until_success() {
         // send a job difficulty level as a job's args and the lattter
         // will sleep for a corresponding period of time, pretending
         // to work hard:
-        let mut producer_a = Producer::connect(Some(&url1)).await.unwrap();
+        let mut producer_a = Client::connect(Some(&url1)).await.unwrap();
         let mut consumer_a = ConsumerBuilder::default_async();
         consumer_a.register(job_type, |job| async move {
             let args = job.args().to_owned();
@@ -239,7 +239,7 @@ async fn ent_unique_job_until_success() {
     time::sleep(time::Duration::from_secs(1)).await;
 
     // continue
-    let mut producer_b = Producer::connect(Some(&url)).await.unwrap();
+    let mut producer_b = Client::connect(Some(&url)).await.unwrap();
 
     // this one is a 'duplicate' because the job is still
     // being executed in the spawned thread:
@@ -288,7 +288,7 @@ async fn ent_unique_job_until_start() {
 
     let url1 = url.clone();
     let handle = tokio::spawn(async move {
-        let mut producer_a = Producer::connect(Some(&url1)).await.unwrap();
+        let mut producer_a = Client::connect(Some(&url1)).await.unwrap();
         let mut consumer_a = ConsumerBuilder::default_async();
         consumer_a.register(job_type, |job| async move {
             let args = job.args().to_owned();
@@ -324,7 +324,7 @@ async fn ent_unique_job_until_start() {
     time::sleep(time::Duration::from_secs(1)).await;
 
     // the unique lock has been released by this time, so the job is enqueued successfully:
-    let mut producer_b = Producer::connect(Some(&url)).await.unwrap();
+    let mut producer_b = Client::connect(Some(&url)).await.unwrap();
     producer_b
         .enqueue(
             JobBuilder::new(job_type)
@@ -346,7 +346,7 @@ async fn ent_unique_job_bypass_unique_lock() {
     skip_if_not_enterprise!();
 
     let url = learn_faktory_url();
-    let mut producer = Producer::connect(Some(&url)).await.unwrap();
+    let mut producer = Client::connect(Some(&url)).await.unwrap();
     let queue_name = "ent_unique_job_bypass_unique_lock";
     let job1 = Job::builder("order")
         .queue(queue_name)
@@ -405,7 +405,7 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
             .expect("job progress tracker created successfully"),
     ));
 
-    let mut p = Producer::connect(Some(&url)).await.unwrap();
+    let mut p = Client::connect(Some(&url)).await.unwrap();
 
     let job_tackable = JobBuilder::new("order")
         .args(vec![Value::from("ISBN-13:9781718501850")])
@@ -558,7 +558,7 @@ async fn test_batch_of_jobs_can_be_initiated() {
     skip_if_not_enterprise!();
     let url = learn_faktory_url();
 
-    let mut p = Producer::connect(Some(&url)).await.unwrap();
+    let mut p = Client::connect(Some(&url)).await.unwrap();
     let mut c = ConsumerBuilder::default();
     c.register("thumbnail", |_job| async { Ok::<(), io::Error>(()) });
     c.register("clean_up", |_job| async { Ok(()) });
@@ -695,7 +695,7 @@ async fn test_batches_can_be_nested() {
     let url = learn_faktory_url();
 
     // Set up 'producer', 'consumer', and 'tracker':
-    let mut p = Producer::connect(Some(&url)).await.unwrap();
+    let mut p = Client::connect(Some(&url)).await.unwrap();
     let mut c = ConsumerBuilder::default();
     c.register("jobtype", |_job| async { Ok::<(), io::Error>(()) });
     let mut _c = c.connect(Some(&url)).await.unwrap();
@@ -795,7 +795,7 @@ async fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
     let url = learn_faktory_url();
 
     // prepare a producer, a consumer of 'order' jobs, and a tracker:
-    let mut p = Producer::connect(Some(&url)).await.unwrap();
+    let mut p = Client::connect(Some(&url)).await.unwrap();
     let mut c = ConsumerBuilder::default();
     c.register("order", |_job| async { Ok(()) });
     c.register("order_clean_up", |_job| async { Ok::<(), io::Error>(()) });
@@ -886,7 +886,7 @@ async fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
 
     skip_if_not_enterprise!();
     let url = learn_faktory_url();
-    let mut p = Producer::connect(Some(&url)).await.unwrap();
+    let mut p = Client::connect(Some(&url)).await.unwrap();
     let mut t = Client::connect(Some(&url)).await.unwrap();
     let q_name = "test_callback_will_be_queued_upon_commit_even_if_batch_is_empty";
     let complete_cb_jobtype = "complete_callback_jobtype";
@@ -959,7 +959,7 @@ async fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
 async fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
     skip_if_not_enterprise!();
     let url = learn_faktory_url();
-    let mut p = Producer::connect(Some(&url)).await.unwrap();
+    let mut p = Client::connect(Some(&url)).await.unwrap();
     let mut t = Client::connect(Some(&url)).await.unwrap();
     let mut jobs = some_jobs("order", "test_batch_can_be_reopned_add_extra_jobs_added", 4);
     let mut callbacks = some_jobs(

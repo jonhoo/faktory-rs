@@ -1,16 +1,17 @@
-#[cfg(doc)]
-use crate::{Consumer, Producer};
-
 #[cfg(feature = "ent")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
 mod ent;
 
-use super::utils;
-use super::{single, Reconnect};
+#[cfg(doc)]
+use crate::proto::{BatchStatus, Progress, ProgressUpdate};
+
+use super::{single, Info, Push, QueueAction, QueueControl, Reconnect};
+use super::{utils, PushBulk};
 use crate::error::{self, Error};
 use crate::Job;
-use tokio::io::BufStream;
+use std::collections::HashMap;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
 mod options;
@@ -185,6 +186,21 @@ pub(crate) enum HeartbeatStatus {
     Quiet,
 }
 
+impl<S: AsyncRead + AsyncWrite + Send + Unpin> Client<BufStream<S>> {
+    /// Create new [`Client`] and connect to a Faktory server with a non-standard stream.
+    pub async fn connect_with(
+        stream: S,
+        pwd: Option<String>,
+    ) -> Result<Client<BufStream<S>>, Error> {
+        let buffered = BufStream::new(stream);
+        let opts = ClientOptions {
+            password: pwd,
+            ..Default::default()
+        };
+        Client::new(buffered, opts).await
+    }
+}
+
 impl Client<BufStream<TokioStream>> {
     /// Create new [`Client`] and connect to a Faktory server.
     ///
@@ -200,8 +216,7 @@ impl Client<BufStream<TokioStream>> {
     pub async fn connect(url: Option<&str>) -> Result<Client<BufStream<TokioStream>>, Error> {
         let url = utils::parse_provided_or_from_env(url)?;
         let stream = TokioStream::connect(utils::host_from_url(&url)).await?;
-        let buffered = BufStream::new(stream);
-        Self::connect_with(buffered, url.password().map(|p| p.to_string())).await
+        Self::connect_with(stream, url.password().map(|p| p.to_string())).await
     }
 }
 
@@ -266,15 +281,6 @@ where
         Ok(c)
     }
 
-    /// Create new [`Client`] and connect to a Faktory server with a non-standard stream.
-    pub async fn connect_with(stream: S, pwd: Option<String>) -> Result<Client<S>, Error> {
-        let opts = ClientOptions {
-            password: pwd,
-            ..Default::default()
-        };
-        Client::new(stream, opts).await
-    }
-
     pub(crate) async fn issue<FC: single::FaktoryCommand>(
         &mut self,
         c: &FC,
@@ -290,6 +296,79 @@ where
         self.issue(&single::Fetch::from(queues))
             .await?
             .read_json()
+            .await
+    }
+
+    /// Asynchronously enqueue the given job on the Faktory server.
+    ///
+    /// Returns `Ok` if the job was successfully queued by the Faktory server.
+    pub async fn enqueue(&mut self, job: Job) -> Result<(), Error> {
+        self.issue(&Push::from(job)).await?.read_ok().await
+    }
+
+    /// Enqueue numerous jobs on the Faktory server.
+    ///
+    /// Provided you have numerous jobs to submit, using this method will be more efficient as compared
+    /// to calling [`enqueue`](Client::enqueue) multiple times.
+    ///
+    /// The returned `Ok` result will contain a tuple of enqueued jobs count and an option of a hash map
+    /// with job ids mapped onto error messages. Therefore `Ok(n, None)` will indicate that all n jobs
+    /// have been enqueued without errors.
+    ///
+    /// Note that this is not an all-or-nothing operation: jobs that contain errors will not be enqueued,
+    /// while those that are error-free _will_ be enqueued by the Faktory server.
+    pub async fn enqueue_many<J>(
+        &mut self,
+        jobs: J,
+    ) -> Result<(usize, Option<HashMap<String, String>>), Error>
+    where
+        J: IntoIterator<Item = Job>,
+        J::IntoIter: ExactSizeIterator,
+    {
+        let jobs = jobs.into_iter();
+        let jobs_count = jobs.len();
+        let errors: HashMap<String, String> = self
+            .issue(&PushBulk::from(jobs.collect::<Vec<_>>()))
+            .await?
+            .read_json()
+            .await?
+            .expect("Faktory server sends {} literal when there are no errors");
+        if errors.is_empty() {
+            return Ok((jobs_count, None));
+        }
+        Ok((jobs_count - errors.len(), Some(errors)))
+    }
+
+    /// Retrieve information about the running server.
+    ///
+    /// The returned value is the result of running the `INFO` command on the server.
+    pub async fn info(&mut self) -> Result<serde_json::Value, Error> {
+        self.issue(&Info)
+            .await?
+            .read_json()
+            .await
+            .map(|v| v.expect("info command cannot give empty response"))
+    }
+
+    /// Pause the given queues.
+    pub async fn queue_pause<Q>(&mut self, queues: &[Q]) -> Result<(), Error>
+    where
+        Q: AsRef<str> + Sync,
+    {
+        self.issue(&QueueControl::new(QueueAction::Pause, queues))
+            .await?
+            .read_ok()
+            .await
+    }
+
+    /// Resume the given queues.
+    pub async fn queue_resume<Q: AsRef<str>>(&mut self, queues: &[Q]) -> Result<(), Error>
+    where
+        Q: AsRef<str> + Sync,
+    {
+        self.issue(&QueueControl::new(QueueAction::Resume, queues))
+            .await?
+            .read_ok()
             .await
     }
 

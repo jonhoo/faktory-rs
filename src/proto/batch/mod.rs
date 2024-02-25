@@ -1,14 +1,11 @@
-#[cfg(doc)]
-use crate::Client;
-
-use crate::{Error, Job, Producer};
+use crate::{Client, Error, Job};
 use chrono::{DateTime, Utc};
 use derive_builder::Builder;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
 mod cmd;
 
-pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
+pub use cmd::{GetBatchStatus, OpenBatch};
 
 /// Batch of jobs.
 ///
@@ -29,9 +26,9 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// ```no_run
 /// # tokio_test::block_on(async {
 /// # use faktory::Error;
-/// use faktory::{Producer, Job, ent::Batch};
+/// use faktory::{Client, Job, ent::Batch};
 ///
-/// let mut prod = Producer::connect(None).await?;
+/// let mut cl = Client::connect(None).await?;
 /// let job1 = Job::builder("job_type").build();
 /// let job2 = Job::builder("job_type").build();
 /// let job_cb = Job::builder("callback_job_type").build();
@@ -40,7 +37,7 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 ///     .description("Batch description")
 ///     .with_complete_callback(job_cb);
 ///
-/// let mut batch = prod.start_batch(batch).await?;
+/// let mut batch = cl.start_batch(batch).await?;
 /// batch.add(job1).await?;
 /// batch.add(job2).await?;
 /// batch.commit().await?;
@@ -52,9 +49,9 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// Nested batches are also supported:
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// # use faktory::{Producer, Job, Error};
+/// # use faktory::{Client, Job, Error};
 /// # use faktory::ent::Batch;
-/// # let mut prod = Producer::connect(None).await?;
+/// # let mut cl = Client::connect(None).await?;
 /// let parent_job1 = Job::builder("job_type").build();
 /// let parent_job2 = Job::builder("another_job_type").build();
 /// let parent_cb = Job::builder("callback_job_type").build();
@@ -70,7 +67,7 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 ///     .description("Child batch description")
 ///     .with_success_callback(child_cb);
 ///
-/// let mut parent = prod.start_batch(parent_batch).await?;
+/// let mut parent = cl.start_batch(parent_batch).await?;
 /// parent.add(parent_job1).await?;
 /// parent.add(parent_job2).await?;
 /// let mut child = parent.start_batch(child_batch).await?;
@@ -91,17 +88,17 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// You can retieve the batch status using a [`Client`]:
 /// ```no_run
 /// # use faktory::Error;
-/// # use faktory::{Producer, Job, Client};
+/// # use faktory::{Job, Client};
 /// # use faktory::ent::{Batch, CallbackState};
 /// # tokio_test::block_on(async {
-/// let mut prod = Producer::connect(None).await?;
+/// let mut cl = Client::connect(None).await?;
 /// let job = Job::builder("job_type").build();
 /// let cb_job = Job::builder("callback_job_type").build();
 /// let b = Batch::builder()
 ///     .description("Batch description")
 ///     .with_complete_callback(cb_job);
 ///
-/// let mut b = prod.start_batch(b).await?;
+/// let mut b = cl.start_batch(b).await?;
 /// let bid = b.id().to_string();
 /// b.add(job).await?;
 /// b.commit().await?;
@@ -214,7 +211,7 @@ impl Clone for BatchBuilder {
 /// Represents a newly started or re-opened batch of jobs.
 pub struct BatchHandle<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> {
     bid: String,
-    prod: &'a mut Producer<S>,
+    prod: &'a mut Client<S>,
 }
 
 impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> BatchHandle<'a, S> {
@@ -223,7 +220,7 @@ impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> BatchHandle<'a, S> {
         self.bid.as_ref()
     }
 
-    pub(crate) fn new(bid: String, prod: &mut Producer<S>) -> BatchHandle<'_, S> {
+    pub(crate) fn new(bid: String, prod: &mut Client<S>) -> BatchHandle<'_, S> {
         BatchHandle { bid, prod }
     }
 
@@ -247,7 +244,7 @@ impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> BatchHandle<'a, S> {
     ///
     /// The Faktory server will not queue any callbacks, unless the batch is committed.
     /// Committing an empty batch will make the server queue the callback(s) right away.
-    /// Once committed, the batch can still be re-opened with [open_batch](Producer::open_batch),
+    /// Once committed, the batch can still be re-opened with [open_batch](Client::open_batch),
     /// and extra jobs can be added to it.
     pub async fn commit(self) -> Result<(), Error> {
         self.prod.commit_batch(self.bid).await
@@ -331,10 +328,10 @@ pub struct BatchStatus {
 impl<'a> BatchStatus {
     /// Open the batch for which this `BatchStatus` has been retrieved.
     ///
-    /// See [`open_batch`](Producer::open_batch).
+    /// See [`open_batch`](Client::open_batch).
     pub async fn open<S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send>(
         &self,
-        prod: &'a mut Producer<S>,
+        prod: &'a mut Client<S>,
     ) -> Result<Option<BatchHandle<'a, S>>, Error> {
         prod.open_batch(self.bid.clone()).await
     }

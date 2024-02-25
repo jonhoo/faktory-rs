@@ -1,5 +1,8 @@
-use super::super::{single, BatchStatus, GetBatchStatus, Progress, ProgressUpdate, Track};
+use super::super::{
+    single, BatchStatus, GetBatchStatus, OpenBatch, Progress, ProgressUpdate, Track,
+};
 use super::{Client, ReadToken};
+use crate::ent::{Batch, BatchHandle};
 use crate::error::Error;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
@@ -20,6 +23,25 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> Client<S> {
     pub async fn get_batch_status(&mut self, bid: String) -> Result<Option<BatchStatus>, Error> {
         let cmd = GetBatchStatus::from(bid);
         self.issue(&cmd).await?.read_json().await
+    }
+
+    /// Initiate a new batch of jobs.
+    pub async fn start_batch(&mut self, batch: Batch) -> Result<BatchHandle<'_, S>, Error> {
+        let bid = self.issue(&batch).await?.read_bid().await?;
+        Ok(BatchHandle::new(bid, self))
+    }
+
+    /// Open an already existing batch of jobs.
+    ///
+    /// This will not error if a batch with the provided `bid` does not exist,
+    /// rather `Ok(None)` will be returned.
+    pub async fn open_batch(&mut self, bid: String) -> Result<Option<BatchHandle<'_, S>>, Error> {
+        let bid = self.issue(&OpenBatch::from(bid)).await?.maybe_bid().await?;
+        Ok(bid.map(|bid| BatchHandle::new(bid, self)))
+    }
+
+    pub(crate) async fn commit_batch(&mut self, bid: String) -> Result<(), Error> {
+        self.issue(&OpenBatch::from(bid)).await?.read_ok().await
     }
 }
 
