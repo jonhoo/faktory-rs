@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use tokio::io::{AsyncBufRead, AsyncWriteExt};
 
 mod cmd;
+mod id;
 mod resp;
 mod utils;
 
@@ -12,8 +13,9 @@ mod utils;
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
 pub mod ent;
 
-pub use self::cmd::*;
-pub use self::resp::*;
+pub use cmd::*;
+pub use id::JobId;
+pub use resp::*;
 
 pub(crate) use self::utils::gen_random_wid;
 
@@ -66,8 +68,8 @@ const JOB_DEFAULT_BACKTRACE: usize = 0;
 )]
 pub struct Job {
     /// The job's unique identifier.
-    #[builder(default = "utils::gen_random_jid()")]
-    pub(crate) jid: String,
+    #[builder(default = "JobId::random()")]
+    pub(crate) jid: JobId,
 
     /// The queue this job belongs to. Usually `default`.
     #[builder(default = "JOB_DEFAULT_QUEUE.into()")]
@@ -236,7 +238,7 @@ impl Job {
     }
 
     /// This job's id.
-    pub fn id(&self) -> &str {
+    pub fn id(&self) -> &JobId {
         &self.jid
     }
 
@@ -284,7 +286,7 @@ mod test {
         let job_args = vec!["ISBN-13:9781718501850"];
         let job = JobBuilder::new(job_kind).args(job_args.clone()).build();
 
-        assert!(job.jid != "".to_owned());
+        assert!(job.jid != "".into());
         assert!(job.queue == JOB_DEFAULT_QUEUE.to_string());
         assert_eq!(job.kind, job_kind);
         assert_eq!(job.args, job_args);
