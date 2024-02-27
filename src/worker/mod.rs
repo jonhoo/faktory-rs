@@ -1,7 +1,7 @@
 use super::proto::{Client, Reconnect};
 use crate::{
     proto::{Ack, Fail},
-    Error, Job,
+    Error, Job, JobId,
 };
 use std::sync::{atomic, Arc};
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
@@ -178,8 +178,8 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
         self.c.issue(f).await?.read_ok().await
     }
 
-    async fn report_success_to_server(&mut self, jid: impl Into<String>) -> Result<(), Error> {
-        self.c.issue(&Ack::new(jid)).await?.read_ok().await
+    async fn report_success_to_server(&mut self, jid: JobId) -> Result<(), Error> {
+        self.c.issue(&Ack::from(&jid)).await?.read_ok().await
     }
 
     async fn report_on_all_workers(&mut self) -> Result<(), Error> {
@@ -192,7 +192,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
             let wstate = wstate.get_mut().unwrap();
             if let Some(res) = wstate.last_job_result.take() {
                 let r = match res {
-                    Ok(ref jid) => self.c.issue(&Ack::new(jid)).await,
+                    Ok(ref jid) => self.c.issue(&Ack::from(jid)).await,
                     Err(ref fail) => self.c.issue(fail).await,
                 };
 
@@ -230,7 +230,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
             let may_be_jid = wstate.lock().unwrap().running_job.take();
             if let Some(jid) = may_be_jid {
                 running += 1;
-                let f = Fail::new(&*jid, "unknown", "terminated");
+                let f = Fail::new(jid, "unknown", "terminated");
                 let _ = match self.c.issue(&f).await {
                     Ok(r) => r.read_ok().await,
                     Err(_) => continue,

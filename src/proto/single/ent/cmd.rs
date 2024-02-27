@@ -1,12 +1,12 @@
 use super::ProgressUpdate;
 use crate::error::Error;
-use crate::proto::single::FaktoryCommand;
+use crate::proto::{single::FaktoryCommand, JobId};
 use tokio::io::AsyncWriteExt;
 
 #[derive(Debug, Clone)]
 pub enum Track {
     Set(ProgressUpdate),
-    Get(String),
+    Get(JobId),
 }
 
 #[async_trait::async_trait]

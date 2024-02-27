@@ -102,8 +102,8 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// use faktory::{Client, ent::JobState};
-/// let job_id = String::from("W8qyVle9vXzUWQOf");
+/// use faktory::{Client, JobId, ent::JobState};
+/// let job_id = JobId::from("W8qyVle9vXzUWQOf");
 /// let mut cl = Client::connect(None).await?;
 /// if let Some(progress) = cl.get_progress(job_id).await? {
 ///     if let JobState::Success = progress.state {
@@ -120,10 +120,10 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// use faktory::{Client, ent::ProgressUpdateBuilder};
-/// let jid = String::from("W8qyVle9vXzUWQOf");
+/// use faktory::{Client, JobId, ent::ProgressUpdateBuilder};
+/// let jid = JobId::from("W8qyVle9vXzUWQOf");
 /// let mut cl = Client::connect(None).await?;
-/// let progress = ProgressUpdateBuilder::new(&jid)
+/// let progress = ProgressUpdateBuilder::new(jid)
 ///     .desc("Almost done...".to_owned())
 ///     .percent(99)
 ///     .build();

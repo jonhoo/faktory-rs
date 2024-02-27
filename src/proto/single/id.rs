@@ -39,10 +39,4 @@ impl DerefMut for JobId {
     }
 }
 
-impl Into<String> for JobId {
-    fn into(self) -> String {
-        self.0
-    }
-}
-
 // -----------------------------------------------------

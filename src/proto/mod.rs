@@ -9,7 +9,9 @@ pub(crate) use client::{ClientOptions, HeartbeatStatus, EXPECTED_PROTOCOL_VERSIO
 
 mod single;
 
-pub use single::{Ack, Fail, Info, Job, JobBuilder, Push, PushBulk, QueueAction, QueueControl};
+pub use single::{
+    Ack, Fail, Info, Job, JobBuilder, JobId, Push, PushBulk, QueueAction, QueueControl,
+};
 pub(crate) mod utils;
 
 #[cfg(feature = "ent")]

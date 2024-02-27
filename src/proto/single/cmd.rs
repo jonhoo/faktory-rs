@@ -1,4 +1,5 @@
-use crate::{error::Error, Job};
+use crate::error::Error;
+use crate::proto::{Job, JobId};
 use std::error::Error as StdError;
 use tokio::io::AsyncWriteExt;
 
@@ -53,13 +54,13 @@ impl FaktoryCommand for Info {
 #[derive(Serialize)]
 pub struct Ack {
     #[serde(rename = "jid")]
-    job_id: String,
+    job_id: JobId,
 }
 
-impl Ack {
-    pub fn new<S: Into<String>>(job_id: S) -> Ack {
+impl From<&JobId> for Ack {
+    fn from(job_id: &JobId) -> Self {
         Ack {
-            job_id: job_id.into(),
+            job_id: job_id.to_owned(),
         }
     }
 }
@@ -86,7 +87,7 @@ self_to_cmd!(Heartbeat, "BEAT");
 #[derive(Serialize, Clone)]
 pub struct Fail {
     #[serde(rename = "jid")]
-    job_id: String,
+    job_id: JobId,
     #[serde(rename = "errtype")]
     kind: String,
     message: String,
@@ -95,13 +96,9 @@ pub struct Fail {
 }
 
 impl Fail {
-    pub fn new<S1: Into<String>, S2: Into<String>, S3: Into<String>>(
-        job_id: S1,
-        kind: S2,
-        message: S3,
-    ) -> Self {
+    pub fn new(job_id: JobId, kind: impl Into<String>, message: impl Into<String>) -> Self {
         Fail {
-            job_id: job_id.into(),
+            job_id,
             kind: kind.into(),
             message: message.into(),
             backtrace: Vec::new(),
@@ -109,7 +106,7 @@ impl Fail {
     }
 
     // "unknown" is the errtype used by the go library too
-    pub fn generic<S1: Into<String>, S2: Into<String>>(job_id: S1, message: S2) -> Self {
+    pub fn generic<S: Into<String>>(job_id: JobId, message: S) -> Self {
         Fail::new(job_id, "unknown", message)
     }
 
@@ -117,7 +114,7 @@ impl Fail {
         self.backtrace = lines;
     }
 
-    pub fn generic_with_backtrace<E>(jid: String, e: E) -> Self
+    pub fn generic_with_backtrace<E>(jid: JobId, e: E) -> Self
     where
         E: StdError,
     {

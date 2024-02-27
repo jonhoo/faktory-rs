@@ -441,7 +441,7 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
                 // 'an internal server error occurred: tracking subsystem is only available in Faktory Enterprise'
                 assert!(t
                     .set_progress(
-                        ProgressUpdate::builder(&job_id.clone())
+                        ProgressUpdate::builder(job_id.clone())
                             .desc("Still processing...".to_owned())
                             .percent(32)
                             .build(),
@@ -450,7 +450,7 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
                     .is_ok());
                 // Let's update the progress once again, to check the 'set_progress' shortcut:
                 assert!(t
-                    .set_progress(ProgressUpdate::set(&job_id.clone(), 33))
+                    .set_progress(ProgressUpdate::set(job_id.clone(), 33))
                     .await
                     .is_ok());
 

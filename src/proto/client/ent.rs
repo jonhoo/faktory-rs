@@ -1,5 +1,6 @@
 use super::super::{
-    single, BatchStatus, CommitBatch, GetBatchStatus, OpenBatch, Progress, ProgressUpdate, Track,
+    single, BatchStatus, CommitBatch, GetBatchStatus, JobId, OpenBatch, Progress, ProgressUpdate,
+    Track,
 };
 use super::{Client, ReadToken};
 use crate::ent::{Batch, BatchHandle};
@@ -14,7 +15,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> Client<S> {
     }
 
     /// Fetch information on a job's execution progress from Faktory.
-    pub async fn get_progress(&mut self, jid: String) -> Result<Option<Progress>, Error> {
+    pub async fn get_progress(&mut self, jid: JobId) -> Result<Option<Progress>, Error> {
         let cmd = Track::Get(jid);
         self.issue(&cmd).await?.read_json().await
     }

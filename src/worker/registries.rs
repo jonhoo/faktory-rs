@@ -1,5 +1,5 @@
 use super::runner::BoxedJobRunner;
-use crate::proto::Fail;
+use crate::proto::{Fail, JobId};
 use fnv::FnvHashMap;
 use std::{
     ops::{Deref, DerefMut},
@@ -33,8 +33,8 @@ impl<E> Default for CallbacksRegistry<E> {
 
 #[derive(Default)]
 pub(crate) struct WorkerState {
-    pub(crate) last_job_result: Option<Result<String, Fail>>,
-    pub(crate) running_job: Option<String>,
+    pub(crate) last_job_result: Option<Result<JobId, Fail>>,
+    pub(crate) running_job: Option<JobId>,
 }
 
 pub(crate) struct StatesRegistry(Vec<Mutex<WorkerState>>);
@@ -57,11 +57,11 @@ impl StatesRegistry {
         Self((0..workers_count).map(|_| Default::default()).collect())
     }
 
-    pub(crate) fn register_running(&self, worker: usize, jid: String) {
+    pub(crate) fn register_running(&self, worker: usize, jid: JobId) {
         self[worker].lock().expect("lock acquired").running_job = Some(jid);
     }
 
-    pub(crate) fn register_success(&self, worker: usize, jid: String) {
+    pub(crate) fn register_success(&self, worker: usize, jid: JobId) {
         self[worker].lock().expect("lock acquired").last_job_result = Some(Ok(jid));
     }
 
