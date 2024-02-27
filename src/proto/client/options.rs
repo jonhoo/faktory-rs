@@ -1,3 +1,5 @@
+use crate::proto::WorkerId;
+
 #[derive(Clone)]
 pub(crate) struct ClientOptions {
     /// Hostname to advertise to server.
@@ -10,7 +12,7 @@ pub(crate) struct ClientOptions {
 
     /// Worker ID to advertise to server.
     /// Defaults to a GUID.
-    pub(crate) wid: Option<String>,
+    pub(crate) wid: Option<WorkerId>,
 
     /// Labels to advertise to se/// A stream that can be re-established after failing.rver.
     /// Defaults to ["rust"].

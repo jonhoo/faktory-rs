@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::proto::{Job, JobId};
+use crate::proto::{Job, JobId, WorkerId};
 use std::error::Error as StdError;
 use tokio::io::AsyncWriteExt;
 
@@ -71,11 +71,11 @@ self_to_cmd!(Ack, "ACK");
 
 #[derive(Serialize)]
 pub struct Heartbeat {
-    wid: String,
+    wid: WorkerId,
 }
 
 impl Heartbeat {
-    pub fn new<S: Into<String>>(wid: S) -> Heartbeat {
+    pub fn new<S: Into<WorkerId>>(wid: S) -> Heartbeat {
         Heartbeat { wid: wid.into() }
     }
 }
@@ -180,7 +180,7 @@ pub struct Hello {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hostname: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub wid: Option<String>,
+    pub wid: Option<WorkerId>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pid: Option<usize>,
     #[serde(skip_serializing_if = "Vec::is_empty")]

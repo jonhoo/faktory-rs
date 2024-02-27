@@ -10,7 +10,7 @@ pub(crate) use client::{ClientOptions, HeartbeatStatus, EXPECTED_PROTOCOL_VERSIO
 mod single;
 
 pub use single::{
-    Ack, Fail, Info, Job, JobBuilder, JobId, Push, PushBulk, QueueAction, QueueControl,
+    Ack, Fail, Info, Job, JobBuilder, JobId, Push, PushBulk, QueueAction, QueueControl, WorkerId,
 };
 pub(crate) mod utils;
 

@@ -14,10 +14,8 @@ mod utils;
 pub mod ent;
 
 pub use cmd::*;
-pub use id::JobId;
+pub use id::{JobId, WorkerId};
 pub use resp::*;
-
-pub(crate) use self::utils::gen_random_wid;
 
 const JOB_DEFAULT_QUEUE: &str = "default";
 const JOB_DEFAULT_RESERVED_FOR_SECS: usize = 600;

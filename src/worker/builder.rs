@@ -1,7 +1,7 @@
 use super::{runner::Closure, CallbacksRegistry, Client, Worker};
 use crate::{
     proto::{utils, ClientOptions},
-    Error, Job, JobRunner,
+    Error, Job, JobRunner, WorkerId,
 };
 use std::future::Future;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream};
@@ -48,7 +48,7 @@ impl<E: 'static> WorkerBuilder<E> {
     /// Set a unique identifier for this worker.
     ///
     /// Defaults to a randomly generated 32-char ASCII string.
-    pub fn wid(&mut self, wid: String) -> &mut Self {
+    pub fn wid(&mut self, wid: WorkerId) -> &mut Self {
         self.opts.wid = Some(wid);
         self
     }

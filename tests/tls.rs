@@ -29,7 +29,7 @@ async fn roundtrip_tls() {
     let (tx, rx) = sync::mpsc::channel();
     let mut c = WorkerBuilder::default();
 
-    c.hostname("tester".to_string()).wid(local.to_string());
+    c.hostname("tester".to_string()).wid(local.into());
     c.register_runner(local, fixtures::JobHandler::new(tx));
 
     let tls = || async {

@@ -62,7 +62,7 @@ async fn multi() {
     let (tx, rx) = sync::mpsc::channel();
     let tx = sync::Arc::new(sync::Mutex::new(tx));
     let mut c = WorkerBuilder::default_async();
-    c.hostname("tester".to_string()).wid(local.to_string());
+    c.hostname("tester".to_string()).wid(local.into());
 
     c.register(local, move |j| {
         let tx = sync::Arc::clone(&tx);
@@ -103,7 +103,7 @@ async fn fail() {
     let (tx, rx) = sync::mpsc::channel();
     let tx = sync::Arc::new(sync::Mutex::new(tx));
     let mut c = WorkerBuilder::default();
-    c.hostname("tester".to_string()).wid(local.to_string());
+    c.hostname("tester".to_string()).wid(local.into());
 
     c.register(local, move |j| {
         let tx = sync::Arc::clone(&tx);
@@ -140,7 +140,7 @@ async fn queue() {
     let tx = sync::Arc::new(sync::Mutex::new(tx));
 
     let mut c = WorkerBuilder::default();
-    c.hostname("tester".to_string()).wid(local.to_string());
+    c.hostname("tester".to_string()).wid(local.into());
     c.register(local, move |_job| {
         let tx = sync::Arc::clone(&tx);
         Box::pin(async move { tx.lock().unwrap().send(true) })
@@ -234,7 +234,7 @@ async fn test_jobs_pushed_in_bulk() {
     // have _really_ been enqueued, i.e. that `enqueue_many`
     // is not an  all-or-nothing operation:
     let mut c = WorkerBuilder::default();
-    c.hostname("tester".to_string()).wid(local_3.to_string());
+    c.hostname("tester".to_string()).wid(local_3.into());
     c.register("very_special", move |_job| async {
         Ok::<(), io::Error>(())
     });

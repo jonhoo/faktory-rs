@@ -8,7 +8,7 @@ use crate::proto::{BatchStatus, Progress, ProgressUpdate};
 use super::{single, Info, Push, QueueAction, QueueControl, Reconnect};
 use super::{utils, PushBulk};
 use crate::error::{self, Error};
-use crate::Job;
+use crate::{Job, WorkerId};
 use std::collections::HashMap;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tokio::io::{AsyncRead, AsyncWrite, BufStream};
@@ -254,7 +254,7 @@ where
             self.opts.hostname = Some(hostname);
             let pid = self.opts.pid.unwrap_or_else(|| std::process::id() as usize);
             self.opts.pid = Some(pid);
-            let wid = self.opts.wid.clone().unwrap_or_else(single::gen_random_wid);
+            let wid = self.opts.wid.clone().unwrap_or_else(WorkerId::random);
             self.opts.wid = Some(wid);
 
             hello.hostname = Some(self.opts.hostname.clone().unwrap());
@@ -375,7 +375,7 @@ where
     pub(crate) async fn heartbeat(&mut self) -> Result<HeartbeatStatus, Error> {
         single::write_command(
             &mut self.stream,
-            &single::Heartbeat::new(&**self.opts.wid.as_ref().unwrap()),
+            &single::Heartbeat::new(self.opts.wid.as_ref().unwrap().clone()),
         )
         .await?;
 
