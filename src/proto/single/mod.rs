@@ -9,13 +9,17 @@ mod id;
 mod resp;
 mod utils;
 
+pub use cmd::*;
+pub use id::{JobId, WorkerId};
+pub use resp::*;
+
 #[cfg(feature = "ent")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
 pub mod ent;
 
-pub use cmd::*;
-pub use id::{JobId, WorkerId};
-pub use resp::*;
+#[cfg(feature = "ent")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
+pub use id::BatchId;
 
 const JOB_DEFAULT_QUEUE: &str = "default";
 const JOB_DEFAULT_RESERVED_FOR_SECS: usize = 600;

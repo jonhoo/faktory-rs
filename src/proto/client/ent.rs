@@ -3,7 +3,7 @@ use super::super::{
     Track,
 };
 use super::{Client, ReadToken};
-use crate::ent::{Batch, BatchHandle};
+use crate::ent::{Batch, BatchHandle, BatchId};
 use crate::error::Error;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
@@ -21,7 +21,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> Client<S> {
     }
 
     /// Fetch information on a batch of jobs execution progress.
-    pub async fn get_batch_status(&mut self, bid: String) -> Result<Option<BatchStatus>, Error> {
+    pub async fn get_batch_status(&mut self, bid: BatchId) -> Result<Option<BatchStatus>, Error> {
         let cmd = GetBatchStatus::from(bid);
         self.issue(&cmd).await?.read_json().await
     }
@@ -36,22 +36,22 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> Client<S> {
     ///
     /// This will not error if a batch with the provided `bid` does not exist,
     /// rather `Ok(None)` will be returned.
-    pub async fn open_batch(&mut self, bid: String) -> Result<Option<BatchHandle<'_, S>>, Error> {
+    pub async fn open_batch(&mut self, bid: BatchId) -> Result<Option<BatchHandle<'_, S>>, Error> {
         let bid = self.issue(&OpenBatch::from(bid)).await?.maybe_bid().await?;
         Ok(bid.map(|bid| BatchHandle::new(bid, self)))
     }
 
-    pub(crate) async fn commit_batch(&mut self, bid: String) -> Result<(), Error> {
+    pub(crate) async fn commit_batch(&mut self, bid: BatchId) -> Result<(), Error> {
         self.issue(&CommitBatch::from(bid)).await?.read_ok().await
     }
 }
 
 impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> ReadToken<'a, S> {
-    pub(crate) async fn read_bid(self) -> Result<String, Error> {
+    pub(crate) async fn read_bid(self) -> Result<BatchId, Error> {
         single::read_bid(&mut self.0.stream).await
     }
 
-    pub(crate) async fn maybe_bid(self) -> Result<Option<String>, Error> {
+    pub(crate) async fn maybe_bid(self) -> Result<Option<BatchId>, Error> {
         use crate::error;
 
         let bid_read_res = single::read_bid(&mut self.0.stream).await;

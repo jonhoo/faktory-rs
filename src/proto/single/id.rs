@@ -68,3 +68,19 @@ impl WorkerId {
 string_wrapper_impls!(WorkerId);
 
 // -----------------------------------------------------
+
+/// Batch identifier.
+///
+/// This is a wrapper over the string identifier issued by the Faktory server.
+/// Only used for operations with [`Batch`](struct.Batch.html) in Enterprise Faktory.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BatchId(String);
+
+string_wrapper_impls!(BatchId);
+
+use serde_json::Value;
+impl From<BatchId> for Value {
+    fn from(value: BatchId) -> Self {
+        value.0.into()
+    }
+}

@@ -82,7 +82,7 @@ pub use crate::worker::{JobRunner, Worker, WorkerBuilder};
 /// Constructs only available with the enterprise version of Faktory.
 pub mod ent {
     pub use crate::proto::{
-        Batch, BatchBuilder, BatchHandle, BatchStatus, CallbackState, JobState, Progress,
+        Batch, BatchBuilder, BatchHandle, BatchId, BatchStatus, CallbackState, JobState, Progress,
         ProgressUpdate, ProgressUpdateBuilder,
     };
 }

@@ -1,3 +1,6 @@
+#[cfg(feature = "ent")]
+use crate::ent::BatchId;
+
 use crate::error::{self, Error};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt};
 
@@ -62,7 +65,7 @@ pub async fn read_json<R: AsyncBufReadExt + Unpin, T: serde::de::DeserializeOwne
 // ----------------------------------------------
 
 #[cfg(feature = "ent")]
-pub async fn read_bid<R: AsyncBufReadExt + Unpin>(r: R) -> Result<String, Error> {
+pub async fn read_bid<R: AsyncBufReadExt + Unpin>(r: R) -> Result<BatchId, Error> {
     match read(r).await? {
         RawResponse::Blob(ref b) if b.is_empty() => Err(error::Protocol::BadType {
             expected: "non-empty blob representation of batch id",

@@ -136,8 +136,8 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// use faktory::Client;
-/// let bid = String::from("W8qyVle9vXzUWQOg");
+/// use faktory::{Client, ent::BatchId};
+/// let bid = BatchId::from("W8qyVle9vXzUWQOg");
 /// let mut cl = Client::connect(None).await?;
 /// if let Some(status) = cl.get_batch_status(bid).await? {
 ///     println!("This batch created at {}", status.created_at);

@@ -1,7 +1,7 @@
 #[cfg(doc)]
 use crate::Client;
 
-use crate::Job;
+use crate::proto::{BatchId, Job};
 use derive_builder::Builder;
 
 mod cmd;
@@ -104,7 +104,7 @@ pub use status::{BatchStatus, CallbackState};
 ///     .with_complete_callback(cb_job);
 ///
 /// let mut b = cl.start_batch(b).await?;
-/// let bid = b.id().to_string();
+/// let bid = b.id().to_owned();
 /// b.add(job).await?;
 /// b.commit().await?;
 ///
@@ -131,7 +131,7 @@ pub use status::{BatchStatus, CallbackState};
 pub struct Batch {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[builder(setter(skip))]
-    parent_bid: Option<String>,
+    parent_bid: Option<BatchId>,
 
     /// Batch description for Faktory WEB UI.
     #[serde(skip_serializing_if = "Option::is_none")]

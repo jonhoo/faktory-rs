@@ -18,6 +18,9 @@ pub(crate) mod utils;
 pub use self::single::ent::{JobState, Progress, ProgressUpdate, ProgressUpdateBuilder, Track};
 
 #[cfg(feature = "ent")]
+pub use self::single::BatchId;
+
+#[cfg(feature = "ent")]
 mod batch;
 #[cfg(feature = "ent")]
 pub use batch::{

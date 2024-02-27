@@ -2,7 +2,8 @@
 use super::Batch;
 
 use super::BatchHandle;
-use crate::{Client, Error};
+use crate::error::Error;
+use crate::proto::{BatchId, Client};
 use chrono::{DateTime, Utc};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
@@ -43,7 +44,7 @@ pub struct BatchStatus {
     // Fields "bid", "created_at", "description", "total", "pending", and "failed"
     // are described in the docs: https://github.com/contribsys/faktory/wiki/Ent-Batches#status
     /// Id of this batch.
-    pub bid: String,
+    pub bid: BatchId,
 
     /// Batch creation date and time.
     pub created_at: DateTime<Utc>,
@@ -63,7 +64,7 @@ pub struct BatchStatus {
     // The official golang client also mentions "parent_bid', "complete_st", and "success_st":
     // https://github.com/contribsys/faktory/blob/main/client/batch.go#L8-L22
     /// Id of the parent batch, provided this batch is a child ("nested") batch.
-    pub parent_bid: Option<String>,
+    pub parent_bid: Option<BatchId>,
 
     /// State of the `complete` callback.
     ///

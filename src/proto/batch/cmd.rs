@@ -1,6 +1,5 @@
-use crate::ent::Batch;
-use crate::proto::single::FaktoryCommand;
-use crate::Error;
+use crate::error::Error;
+use crate::proto::{single::FaktoryCommand, Batch, BatchId};
 use tokio::io::AsyncWriteExt;
 
 #[async_trait::async_trait]
@@ -15,8 +14,8 @@ impl FaktoryCommand for Batch {
 
 macro_rules! batch_cmd {
     ($structure:ident, $cmd:expr) => {
-        impl From<String> for $structure {
-            fn from(value: String) -> Self {
+        impl From<BatchId> for $structure {
+            fn from(value: BatchId) -> Self {
                 $structure(value)
             }
         }
@@ -33,11 +32,11 @@ macro_rules! batch_cmd {
     };
 }
 
-pub struct CommitBatch(String);
+pub struct CommitBatch(BatchId);
 batch_cmd!(CommitBatch, "COMMIT");
 
-pub struct GetBatchStatus(String);
+pub struct GetBatchStatus(BatchId);
 batch_cmd!(GetBatchStatus, "STATUS");
 
-pub struct OpenBatch(String);
+pub struct OpenBatch(BatchId);
 batch_cmd!(OpenBatch, "OPEN");

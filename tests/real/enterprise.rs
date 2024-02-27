@@ -594,7 +594,7 @@ async fn test_batch_of_jobs_can_be_initiated() {
     let mut b = p.start_batch(batch).await.unwrap();
 
     // let's remember batch id:
-    let bid = b.id().to_string();
+    let bid = b.id().to_owned();
 
     assert!(b.add(job_1).await.unwrap().is_none());
     assert!(b.add(job_2).await.unwrap().is_none());
@@ -822,7 +822,7 @@ async fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
         )
         .await
         .unwrap();
-    let bid = b.id().to_string();
+    let bid = b.id().to_owned();
 
     // push 3 jobs onto this batch, but DO NOT commit the batch:
     for _ in 0..3 {
@@ -989,7 +989,7 @@ async fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
         .with_success_callback(callbacks.next().unwrap());
 
     let mut b = p.start_batch(b).await.unwrap();
-    let bid = b.id().to_string();
+    let bid = b.id().to_owned();
     b.add(jobs.next().unwrap()).await.unwrap(); // 1 job
     b.add(jobs.next().unwrap()).await.unwrap(); // 2 jobs
 
@@ -1000,7 +1000,7 @@ async fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
     // ############################## SUBTEST 0 ##########################################
     // Let's try to open/reopen a batch we have never declared:
     let b = p
-        .open_batch(String::from("non-existent-batch-id"))
+        .open_batch(BatchId::from("non-existent-batch-id"))
         .await
         .unwrap();
     // The server will error back on this, with "No such batch <provided batch id>", but
@@ -1067,7 +1067,7 @@ async fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
             nested_callbacks.next().unwrap(),
         );
     let nested_batch = b.start_batch(nested_batch_declaration).await.unwrap();
-    let nested_bid = nested_batch.id().to_string();
+    let nested_bid = nested_batch.id().to_owned();
     // committing the nested batch without any jobs
     // since those are just not relevant for this test:
     nested_batch.commit().await.unwrap();
