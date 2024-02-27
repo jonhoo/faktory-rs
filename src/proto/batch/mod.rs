@@ -1,11 +1,16 @@
-use crate::{Client, Error, Job};
-use chrono::{DateTime, Utc};
+#[cfg(doc)]
+use crate::Client;
+
+use crate::Job;
 use derive_builder::Builder;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
 mod cmd;
+mod handle;
+mod status;
 
 pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
+pub use handle::BatchHandle;
+pub use status::{BatchStatus, CallbackState};
 
 /// Batch of jobs.
 ///
@@ -205,135 +210,6 @@ impl Clone for BatchBuilder {
             success: self.success.clone(),
             complete: self.complete.clone(),
         }
-    }
-}
-
-/// Represents a newly started or re-opened batch of jobs.
-pub struct BatchHandle<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> {
-    bid: String,
-    c: &'a mut Client<S>,
-}
-
-impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> BatchHandle<'a, S> {
-    /// ID issued by the Faktory server to this batch.
-    pub fn id(&self) -> &str {
-        self.bid.as_ref()
-    }
-
-    pub(crate) fn new(bid: String, c: &mut Client<S>) -> BatchHandle<'_, S> {
-        BatchHandle { bid, c }
-    }
-
-    /// Add the given job to the batch.
-    ///
-    /// Should the submitted job - for whatever reason - already have a `bid` key present in its custom hash,
-    /// this value will be overwritten by the ID of the batch this job is being added to with the old value
-    /// returned as `Some(<old value here>)`.
-    pub async fn add(&mut self, mut job: Job) -> Result<Option<serde_json::Value>, Error> {
-        let bid = job.custom.insert("bid".into(), self.bid.clone().into());
-        self.c.enqueue(job).await.map(|_| bid)
-    }
-
-    /// Initiate a child batch of jobs.
-    pub async fn start_batch(&mut self, mut batch: Batch) -> Result<BatchHandle<'_, S>, Error> {
-        batch.parent_bid = Some(self.bid.clone());
-        self.c.start_batch(batch).await
-    }
-
-    /// Commit this batch.
-    ///
-    /// The Faktory server will not queue any callbacks, unless the batch is committed.
-    /// Committing an empty batch will make the server queue the callback(s) right away.
-    /// Once committed, the batch can still be re-opened with [open_batch](Client::open_batch),
-    /// and extra jobs can be added to it.
-    pub async fn commit(self) -> Result<(), Error> {
-        self.c.commit_batch(self.bid).await
-    }
-}
-
-// Not documented, but existing de fakto and also mentioned in the official client
-// https://github.com/contribsys/faktory/blob/main/client/batch.go#L17-L19
-/// State of a `callback` job of a [`Batch`].
-#[derive(Copy, Clone, Debug, Deserialize, Eq, PartialEq)]
-#[non_exhaustive]
-pub enum CallbackState {
-    /// Not enqueued yet.
-    #[serde(rename = "")]
-    Pending,
-    /// Enqueued by the server, because the jobs belonging to this batch have finished executing.
-    /// If a callback has been consumed, it's status is still `Enqueued`.
-    /// If a callback has finished with failure, it's status remains `Enqueued`.
-    #[serde(rename = "1")]
-    Enqueued,
-    /// The enqueued callback job has been consumed and successfully executed.
-    #[serde(rename = "2")]
-    FinishedOk,
-}
-
-impl std::fmt::Display for CallbackState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use CallbackState::*;
-        let s = match self {
-            Pending => "Pending",
-            Enqueued => "Enqueued",
-            FinishedOk => "FinishedOk",
-        };
-        write!(f, "{}", s)
-    }
-}
-
-/// Batch status retrieved from Faktory server.
-#[derive(Deserialize, Debug)]
-pub struct BatchStatus {
-    // Fields "bid", "created_at", "description", "total", "pending", and "failed"
-    // are described in the docs: https://github.com/contribsys/faktory/wiki/Ent-Batches#status
-    /// Id of this batch.
-    pub bid: String,
-
-    /// Batch creation date and time.
-    pub created_at: DateTime<Utc>,
-
-    /// Batch description, if any.
-    pub description: Option<String>,
-
-    /// Number of jobs in this batch.
-    pub total: usize,
-
-    /// Number of pending jobs.
-    pub pending: usize,
-
-    /// Number of failed jobs.
-    pub failed: usize,
-
-    // The official golang client also mentions "parent_bid', "complete_st", and "success_st":
-    // https://github.com/contribsys/faktory/blob/main/client/batch.go#L8-L22
-    /// Id of the parent batch, provided this batch is a child ("nested") batch.
-    pub parent_bid: Option<String>,
-
-    /// State of the `complete` callback.
-    ///
-    /// See [with_complete_callback](struct.BatchBuilder.html#method.with_complete_callback).
-    #[serde(rename = "complete_st")]
-    pub complete_callback_state: CallbackState,
-
-    /// State of the `success` callback.
-    ///
-    /// See [with_success_callback](struct.BatchBuilder.html#method.with_success_callback).
-    #[serde(rename = "success_st")]
-    pub success_callback_state: CallbackState,
-}
-
-#[cfg(feature = "ent")]
-#[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
-impl<'a> BatchStatus {
-    /// Open the batch for which this `BatchStatus` has been retrieved.
-    ///
-    /// See [`open_batch`](Client::open_batch).
-    pub async fn open<S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send>(
-        &self,
-        prod: &'a mut Client<S>,
-    ) -> Result<Option<BatchHandle<'a, S>>, Error> {
-        prod.open_batch(self.bid.clone()).await
     }
 }
 
