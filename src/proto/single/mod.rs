@@ -71,7 +71,7 @@ const JOB_DEFAULT_BACKTRACE: usize = 0;
 pub struct Job {
     /// The job's unique identifier.
     #[builder(default = "JobId::random()")]
-    pub(crate) jid: JobId,
+    pub jid: JobId,
 
     /// The queue this job belongs to. Usually `default`.
     #[builder(default = "JOB_DEFAULT_QUEUE.into()")]
@@ -80,11 +80,11 @@ pub struct Job {
     /// The job's type. Called `kind` because `type` is reserved.
     #[serde(rename = "jobtype")]
     #[builder(setter(custom))]
-    pub(crate) kind: String,
+    pub kind: String,
 
     /// The arguments provided for this job.
     #[builder(setter(custom), default = "Vec::new()")]
-    pub(crate) args: Vec<serde_json::Value>,
+    pub args: Vec<serde_json::Value>,
 
     /// When this job was created.
     // note that serializing works correctly here since the default chrono serialization
