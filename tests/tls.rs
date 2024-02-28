@@ -72,7 +72,7 @@ mod fixtures {
     pub use tls::TestServerCertVerifier;
 
     mod handler {
-        use faktory::*;
+        use faktory::{async_trait::async_trait, Job, JobRunner};
 
         use std::{
             io,
@@ -100,7 +100,7 @@ mod fixtures {
             }
         }
 
-        #[async_trait::async_trait]
+        #[async_trait]
         impl JobRunner for JobHandler {
             type Error = io::Error;
 

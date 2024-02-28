@@ -1,8 +1,8 @@
-use crate::Job;
-use std::future::Future;
-
 #[cfg(doc)]
 use super::Worker;
+
+use crate::Job;
+use std::future::Future;
 
 /// Implementations of this trait can be registered to run jobs in a [`Worker`](Worker).
 ///
@@ -14,14 +14,14 @@ use super::Worker;
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// use faktory::{WorkerBuilder, JobRunner, Job};
+/// use faktory::{async_trait::async_trait, Job, JobRunner, WorkerBuilder};
 /// use std::io;
 ///
 /// struct MyHandler {
 ///     config: String,
 /// }
 ///
-/// #[async_trait::async_trait]
+/// #[async_trait]
 /// impl JobRunner for MyHandler {
 ///    type Error = io::Error;
 ///    async fn run(&self, job: Job) -> Result<(), Self::Error> {
