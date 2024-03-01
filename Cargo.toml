@@ -29,7 +29,6 @@ chrono = { version = "0.4", features = [
 derive_builder = "0.12.0"
 fnv = "1.0.5"
 hostname = "0.3"
-libc = "0.2"
 pin-project = { version = "1.1.4", optional = true }
 rand = "0.8"
 serde = "1.0"
@@ -40,7 +39,6 @@ thiserror = "1.0.30"
 tokio = { version = "1.35.1", features = [
     "io-util",
     "net",
-    "rt",
     "time",
     "macros",
     "rt-multi-thread",
