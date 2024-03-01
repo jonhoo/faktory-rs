@@ -1,13 +1,12 @@
 #![cfg(feature = "tls")]
 
-use faktory::*;
+use faktory::rustls::{ClientConfig, SignatureScheme};
+use faktory::{Client, Job, TlsStream, WorkerBuilder};
 use serde_json::Value;
 use std::{
     env,
     sync::{self, Arc},
 };
-use tokio_rustls::rustls::ClientConfig;
-use tokio_rustls::rustls::SignatureScheme;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn roundtrip_tls() {
