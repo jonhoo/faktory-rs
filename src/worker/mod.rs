@@ -1,8 +1,7 @@
 use super::proto::{Client, Reconnect};
-use crate::{
-    proto::{Ack, Fail},
-    Error, Job, JobId,
-};
+use crate::error::Error;
+use crate::proto::{Ack, Fail, Job, JobId};
+use fnv::FnvHashMap;
 use std::sync::{atomic, Arc};
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
@@ -10,16 +9,17 @@ use tokio::task::JoinHandle;
 
 mod builder;
 mod health;
-mod registries;
 mod runner;
+mod state;
 
 pub use builder::WorkerBuilder;
-use registries::{CallbacksRegistry, StatesRegistry};
 pub use runner::JobRunner;
 
 pub(crate) const STATUS_RUNNING: usize = 0;
 pub(crate) const STATUS_QUIET: usize = 1;
 pub(crate) const STATUS_TERMINATING: usize = 2;
+
+type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
 
 /// `Worker` is used to run a worker that processes jobs provided by Faktory.
 ///
@@ -138,7 +138,7 @@ pub(crate) const STATUS_TERMINATING: usize = 2;
 ///
 pub struct Worker<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> {
     c: Client<S>,
-    worker_states: Arc<StatesRegistry>,
+    worker_states: Arc<state::WorkerStatesRegistry>,
     callbacks: Arc<CallbacksRegistry<E>>,
     terminated: bool,
 }
@@ -154,7 +154,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> Worker<S, E> {
         Worker {
             c,
             callbacks: Arc::new(callbacks),
-            worker_states: Arc::new(StatesRegistry::new(workers_count)),
+            worker_states: Arc::new(state::WorkerStatesRegistry::new(workers_count)),
             terminated: false,
         }
     }
@@ -190,7 +190,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
         // we know there's no leftover thread at this point, so there's no race on the option.
         for wstate in worker_states.iter_mut() {
             let wstate = wstate.get_mut().unwrap();
-            if let Some(res) = wstate.last_job_result.take() {
+            if let Some(res) = wstate.take_last_result() {
                 let r = match res {
                     Ok(ref jid) => self.c.issue(&Ack::from(jid)).await,
                     Err(ref fail) => self.c.issue(fail).await,
@@ -199,7 +199,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
                 let r = match r {
                     Ok(r) => r,
                     Err(e) => {
-                        wstate.last_job_result = Some(res);
+                        wstate.save_last_result(res);
                         return Err(e);
                     }
                 };
@@ -210,7 +210,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
                     // when re-sending the job response. this should not count as critical. other
                     // errors, however, should!
                     if let Error::IO(_) = e {
-                        wstate.last_job_result = Some(res);
+                        wstate.save_last_result(res);
                         return Err(e);
                     }
                 }
@@ -227,7 +227,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
     async fn force_fail_all_workers(&mut self) -> usize {
         let mut running = 0;
         for wstate in self.worker_states.iter() {
-            let may_be_jid = wstate.lock().unwrap().running_job.take();
+            let may_be_jid = wstate.lock().unwrap().take_cuurently_running();
             if let Some(jid) = may_be_jid {
                 running += 1;
                 let f = Fail::new(jid, "unknown", "terminated");
