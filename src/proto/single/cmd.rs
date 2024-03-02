@@ -252,7 +252,7 @@ impl FaktoryCommand for Push {
     }
 }
 
-// ---------------------- QUEUE -------------------
+// ---------------------- PUSHB -------------------
 
 pub struct PushBulk(Vec<Job>);
 
@@ -272,7 +272,7 @@ impl FaktoryCommand for PushBulk {
     }
 }
 
-// ----------------------------------------------
+// ---------------------- QUEUE -------------------
 
 pub enum QueueAction {
     Pause,
