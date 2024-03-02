@@ -71,7 +71,7 @@ mod fixtures {
     pub use tls::TestServerCertVerifier;
 
     mod handler {
-        use faktory::{async_trait::async_trait, Job, JobRunner};
+        use faktory::{async_trait, Job, JobRunner};
 
         use std::{
             io,

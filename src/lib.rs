@@ -76,8 +76,6 @@ mod worker;
 pub use crate::error::Error;
 pub use crate::proto::{Client, Job, JobBuilder, JobId, Reconnect, WorkerId};
 pub use crate::worker::{JobRunner, Worker, WorkerBuilder};
-pub use async_trait;
-pub use tokio::main;
 
 #[cfg(feature = "ent")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
@@ -96,6 +94,9 @@ mod tls;
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use tls::TlsStream;
 
+// 3rd-party libs re-exports
+pub use async_trait::async_trait;
+pub use tokio::main;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use tokio_rustls::rustls;

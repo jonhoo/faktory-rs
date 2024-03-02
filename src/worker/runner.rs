@@ -14,7 +14,7 @@ use std::future::Future;
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// use faktory::{async_trait::async_trait, Job, JobRunner, WorkerBuilder};
+/// use faktory::{async_trait, Job, JobRunner, WorkerBuilder};
 /// use std::io;
 ///
 /// struct MyHandler {
