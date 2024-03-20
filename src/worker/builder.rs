@@ -107,11 +107,12 @@ impl<E: 'static> WorkerBuilder<E> {
     ///
     /// See [`connect`](WorkerBuilder::connect).
     pub async fn connect(
-        self,
+        mut self,
         url: Option<&str>,
     ) -> Result<Worker<BufStream<TokioStream>, E>, Error> {
         let url = utils::parse_provided_or_from_env(url)?;
         let stream = TokioStream::connect(utils::host_from_url(&url)).await?;
+        self.opts.is_worker = true;
         let buffered = BufStream::new(stream);
         let client = Client::new(buffered, self.opts).await?;
         Ok(Worker::new(client, self.workers_count, self.callbacks).await)
