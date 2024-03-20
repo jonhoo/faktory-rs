@@ -257,7 +257,7 @@ mod test {
     use super::{read, RawResponse};
 
     use crate::error::{self, Error};
-    use serde_json::{self, Map, Value};
+    use serde_json::{Map, Value};
     use std::io::Cursor;
     use tokio::io::AsyncBufReadExt;
 

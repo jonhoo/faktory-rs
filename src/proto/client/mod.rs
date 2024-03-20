@@ -260,7 +260,7 @@ where
             hello.hostname = Some(self.opts.hostname.clone().unwrap());
             hello.wid = Some(self.opts.wid.clone().unwrap());
             hello.pid = Some(self.opts.pid.unwrap());
-            hello.labels = self.opts.labels.clone();
+            hello.labels.clone_from(&self.opts.labels);
         }
 
         if hi.salt.is_some() {
@@ -362,7 +362,7 @@ where
     }
 
     /// Resume the given queues.
-    pub async fn queue_resume<Q: AsRef<str>>(&mut self, queues: &[Q]) -> Result<(), Error>
+    pub async fn queue_resume<Q>(&mut self, queues: &[Q]) -> Result<(), Error>
     where
         Q: AsRef<str> + Sync,
     {
