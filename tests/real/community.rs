@@ -61,7 +61,7 @@ async fn multi() {
 
     let (tx, rx) = sync::mpsc::channel();
     let tx = sync::Arc::new(sync::Mutex::new(tx));
-    let mut c = WorkerBuilder::default_async();
+    let mut c = WorkerBuilder::default();
     c.hostname("tester".to_string()).wid(local.into());
 
     c.register(local, move |j| {

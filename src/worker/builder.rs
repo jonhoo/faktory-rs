@@ -16,15 +16,8 @@ pub struct WorkerBuilder<E> {
     callbacks: CallbacksRegistry<E>,
 }
 
-impl<E> WorkerBuilder<E> {
-    /// Create a builder for asynchronous version of `Worker`.
-    pub fn default_async() -> WorkerBuilder<E> {
-        WorkerBuilder::default()
-    }
-}
-
 impl<E> Default for WorkerBuilder<E> {
-    /// Create a builder for asynchronous version of `ConWorkersumer`.
+    /// Create a builder for asynchronous version of `Worker`.
     ///
     /// See [`WorkerBuilder`](struct.WorkerBuilder.html)
     fn default() -> Self {

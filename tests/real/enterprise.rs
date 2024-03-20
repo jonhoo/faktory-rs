@@ -209,7 +209,7 @@ async fn ent_unique_job_until_success() {
         // will sleep for a corresponding period of time, pretending
         // to work hard:
         let mut client_a = Client::connect(Some(&url1)).await.unwrap();
-        let mut worker_a = WorkerBuilder::default_async();
+        let mut worker_a = WorkerBuilder::default();
         worker_a.register(job_type, |job| async move {
             let args = job.args().to_owned();
             let mut args = args.iter();
@@ -289,7 +289,7 @@ async fn ent_unique_job_until_start() {
     let url1 = url.clone();
     let handle = tokio::spawn(async move {
         let mut client_a = Client::connect(Some(&url1)).await.unwrap();
-        let mut worker_a = WorkerBuilder::default_async();
+        let mut worker_a = WorkerBuilder::default();
         worker_a.register(job_type, |job| async move {
             let args = job.args().to_owned();
             let mut args = args.iter();
@@ -379,7 +379,7 @@ async fn ent_unique_job_bypass_unique_lock() {
 
     // let's consume three times from the queue to verify that the first two jobs
     // have been enqueued for real, while the last one has not.
-    let mut c = WorkerBuilder::default_async();
+    let mut c = WorkerBuilder::default();
     c.register("order", print_job);
     let mut c = c.connect(Some(&url)).await.unwrap();
 
