@@ -1,86 +1,93 @@
-use crate::{error::Error, Job};
-use std::io::prelude::*;
+use crate::error::Error;
+use crate::proto::{Job, JobId, WorkerId};
+use std::error::Error as StdError;
+use tokio::io::AsyncWriteExt;
 
+#[async_trait::async_trait]
 pub trait FaktoryCommand {
-    fn issue<W: Write>(&self, w: &mut W) -> Result<(), Error>;
+    async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error>;
+}
+
+macro_rules! self_to_cmd {
+    ($struct:ident, $cmd:expr) => {
+        #[async_trait::async_trait]
+        impl FaktoryCommand for $struct {
+            async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+                let c = format!("{} ", $cmd);
+                w.write_all(c.as_bytes()).await?;
+                let r = serde_json::to_vec(self).map_err(Error::Serialization)?;
+                w.write_all(&r).await?;
+                Ok(w.write_all(b"\r\n").await?)
+            }
+        }
+    };
 }
 
 /// Write queues as part of a command. They are written with a leading space
 /// followed by space separated queue names.
-fn write_queues<W, S>(w: &mut W, queues: &[S]) -> Result<(), Error>
+async fn write_queues<W, S>(w: &mut W, queues: &[S]) -> Result<(), Error>
 where
-    W: Write,
+    W: AsyncWriteExt + Unpin + Send,
     S: AsRef<str>,
 {
     for q in queues {
-        w.write_all(b" ")?;
-        w.write_all(q.as_ref().as_bytes())?;
+        w.write_all(b" ").await?;
+        w.write_all(q.as_ref().as_bytes()).await?;
     }
 
     Ok(())
 }
 
-// ----------------------------------------------
+// -------------------- INFO ----------------------
 
 pub struct Info;
 
+#[async_trait::async_trait]
 impl FaktoryCommand for Info {
-    fn issue<W: Write>(&self, w: &mut W) -> Result<(), Error> {
-        Ok(w.write_all(b"INFO\r\n")?)
+    async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+        Ok(w.write_all(b"INFO\r\n").await?)
     }
 }
 
-// ----------------------------------------------
+// -------------------- ACK ----------------------
 
 #[derive(Serialize)]
 pub struct Ack {
     #[serde(rename = "jid")]
-    job_id: String,
+    job_id: JobId,
 }
 
-impl FaktoryCommand for Ack {
-    fn issue<W: Write>(&self, w: &mut W) -> Result<(), Error> {
-        w.write_all(b"ACK ")?;
-        serde_json::to_writer(&mut *w, self).map_err(Error::Serialization)?;
-        Ok(w.write_all(b"\r\n")?)
-    }
-}
-
-impl Ack {
-    pub fn new<S: Into<String>>(job_id: S) -> Ack {
+impl From<&JobId> for Ack {
+    fn from(job_id: &JobId) -> Self {
         Ack {
-            job_id: job_id.into(),
+            job_id: job_id.to_owned(),
         }
     }
 }
 
-// ----------------------------------------------
+self_to_cmd!(Ack, "ACK");
+
+// -------------------- BEAT ------------------
 
 #[derive(Serialize)]
 pub struct Heartbeat {
-    wid: String,
-}
-
-impl FaktoryCommand for Heartbeat {
-    fn issue<W: Write>(&self, w: &mut W) -> Result<(), Error> {
-        w.write_all(b"BEAT ")?;
-        serde_json::to_writer(&mut *w, self).map_err(Error::Serialization)?;
-        Ok(w.write_all(b"\r\n")?)
-    }
+    wid: WorkerId,
 }
 
 impl Heartbeat {
-    pub fn new<S: Into<String>>(wid: S) -> Heartbeat {
+    pub fn new<S: Into<WorkerId>>(wid: S) -> Heartbeat {
         Heartbeat { wid: wid.into() }
     }
 }
 
-// ----------------------------------------------
+self_to_cmd!(Heartbeat, "BEAT");
+
+// -------------------- FAIL ---------------------
 
 #[derive(Serialize, Clone)]
 pub struct Fail {
     #[serde(rename = "jid")]
-    job_id: String,
+    job_id: JobId,
     #[serde(rename = "errtype")]
     kind: String,
     message: String,
@@ -88,65 +95,72 @@ pub struct Fail {
     backtrace: Vec<String>,
 }
 
-impl FaktoryCommand for Fail {
-    fn issue<W: Write>(&self, w: &mut W) -> Result<(), Error> {
-        w.write_all(b"FAIL ")?;
-        serde_json::to_writer(&mut *w, self).map_err(Error::Serialization)?;
-        Ok(w.write_all(b"\r\n")?)
-    }
-}
-
 impl Fail {
-    pub fn new<S1: Into<String>, S2: Into<String>, S3: Into<String>>(
-        job_id: S1,
-        kind: S2,
-        message: S3,
-    ) -> Self {
+    pub fn new(job_id: JobId, kind: impl Into<String>, message: impl Into<String>) -> Self {
         Fail {
-            job_id: job_id.into(),
+            job_id,
             kind: kind.into(),
             message: message.into(),
             backtrace: Vec::new(),
         }
     }
 
+    // "unknown" is the errtype used by the go library too
+    pub fn generic<S: Into<String>>(job_id: JobId, message: S) -> Self {
+        Fail::new(job_id, "unknown", message)
+    }
+
     pub fn set_backtrace(&mut self, lines: Vec<String>) {
         self.backtrace = lines;
     }
-}
 
-// ----------------------------------------------
-
-pub struct End;
-
-impl FaktoryCommand for End {
-    fn issue<W: Write>(&self, w: &mut W) -> Result<(), Error> {
-        Ok(w.write_all(b"END\r\n")?)
+    pub fn generic_with_backtrace<E>(jid: JobId, e: E) -> Self
+    where
+        E: StdError,
+    {
+        let mut f = Fail::generic(jid, format!("{}", e));
+        let mut root = e.source();
+        let mut lines = Vec::new();
+        while let Some(r) = root.take() {
+            lines.push(format!("{}", r));
+            root = r.source();
+        }
+        f.set_backtrace(lines);
+        f
     }
 }
 
-// ----------------------------------------------
+self_to_cmd!(Fail, "FAIL");
+
+// ---------------------- END --------------------
+
+pub struct End;
+
+#[async_trait::async_trait]
+impl FaktoryCommand for End {
+    async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+        Ok(w.write_all(b"END\r\n").await?)
+    }
+}
+
+// --------------------- FETCH --------------------
 
 pub struct Fetch<'a, S>
 where
     S: AsRef<str>,
 {
-    queues: &'a [S],
+    pub(crate) queues: &'a [S],
 }
 
-impl<'a, S> FaktoryCommand for Fetch<'a, S>
+#[async_trait::async_trait]
+impl<'a, Q> FaktoryCommand for Fetch<'a, Q>
 where
-    S: AsRef<str>,
+    Q: AsRef<str> + Sync,
 {
-    fn issue<W: Write>(&self, w: &mut W) -> Result<(), Error> {
-        if self.queues.is_empty() {
-            w.write_all(b"FETCH\r\n")?;
-        } else {
-            w.write_all(b"FETCH")?;
-            write_queues::<W, _>(w, self.queues)?;
-            w.write_all(b"\r\n")?;
-        }
-        Ok(())
+    async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+        w.write_all(b"FETCH").await?;
+        write_queues(w, self.queues).await?;
+        Ok(w.write_all(b"\r\n").await?)
     }
 }
 
@@ -159,14 +173,14 @@ where
     }
 }
 
-// ----------------------------------------------
+// --------------------- HELLO --------------------
 
 #[derive(Serialize)]
 pub struct Hello {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hostname: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub wid: Option<String>,
+    pub wid: Option<WorkerId>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pid: Option<usize>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -208,15 +222,9 @@ impl Hello {
     }
 }
 
-impl FaktoryCommand for Hello {
-    fn issue<W: Write>(&self, w: &mut W) -> Result<(), Error> {
-        w.write_all(b"HELLO ")?;
-        serde_json::to_writer(&mut *w, self).map_err(Error::Serialization)?;
-        Ok(w.write_all(b"\r\n")?)
-    }
-}
+self_to_cmd!(Hello, "HELLO");
 
-// ----------------------------------------------
+// --------------------- PUSH --------------------
 
 pub struct Push(Job);
 
@@ -234,15 +242,17 @@ impl From<Job> for Push {
     }
 }
 
+#[async_trait::async_trait]
 impl FaktoryCommand for Push {
-    fn issue<W: Write>(&self, w: &mut W) -> Result<(), Error> {
-        w.write_all(b"PUSH ")?;
-        serde_json::to_writer(&mut *w, &**self).map_err(Error::Serialization)?;
-        Ok(w.write_all(b"\r\n")?)
+    async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+        w.write_all(b"PUSH ").await?;
+        let r = serde_json::to_vec(&**self).map_err(Error::Serialization)?;
+        w.write_all(&r).await?;
+        Ok(w.write_all(b"\r\n").await?)
     }
 }
 
-// ----------------------------------------------
+// ---------------------- PUSHB -------------------
 
 pub struct PushBulk(Vec<Job>);
 
@@ -252,15 +262,17 @@ impl From<Vec<Job>> for PushBulk {
     }
 }
 
+#[async_trait::async_trait]
 impl FaktoryCommand for PushBulk {
-    fn issue<W: Write>(&self, w: &mut W) -> Result<(), Error> {
-        w.write_all(b"PUSHB ")?;
-        serde_json::to_writer(&mut *w, &self.0).map_err(Error::Serialization)?;
-        Ok(w.write_all(b"\r\n")?)
+    async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+        w.write_all(b"PUSHB ").await?;
+        let r = serde_json::to_vec(&self.0).map_err(Error::Serialization)?;
+        w.write_all(&r).await?;
+        Ok(w.write_all(b"\r\n").await?)
     }
 }
 
-// ----------------------------------------------
+// ---------------------- QUEUE -------------------
 
 pub enum QueueAction {
     Pause,
@@ -275,19 +287,21 @@ where
     pub queues: &'a [S],
 }
 
-impl<S: AsRef<str>> FaktoryCommand for QueueControl<'_, S> {
-    fn issue<W: Write>(&self, w: &mut W) -> Result<(), Error> {
+#[async_trait::async_trait]
+impl<Q> FaktoryCommand for QueueControl<'_, Q>
+where
+    Q: AsRef<str> + Sync,
+{
+    async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
         let command = match self.action {
             QueueAction::Pause => b"QUEUE PAUSE".as_ref(),
             QueueAction::Resume => b"QUEUE RESUME".as_ref(),
         };
-
-        w.write_all(command)?;
-        write_queues::<W, _>(w, self.queues)?;
-        Ok(w.write_all(b"\r\n")?)
+        w.write_all(command).await?;
+        write_queues(w, self.queues).await?;
+        Ok(w.write_all(b"\r\n").await?)
     }
 }
-
 impl<'a, S: AsRef<str>> QueueControl<'a, S> {
     pub fn new(action: QueueAction, queues: &'a [S]) -> Self {
         Self { action, queues }

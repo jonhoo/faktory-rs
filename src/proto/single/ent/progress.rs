@@ -1,3 +1,5 @@
+use crate::proto::single::JobId;
+
 use super::utils;
 use chrono::{DateTime, Utc};
 use derive_builder::Builder;
@@ -15,7 +17,7 @@ use derive_builder::Builder;
 pub struct ProgressUpdate {
     /// Id of the tracked job.
     #[builder(setter(custom))]
-    pub jid: String,
+    pub jid: JobId,
 
     /// Percentage of the job's completion.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -38,7 +40,7 @@ pub struct ProgressUpdate {
 
 impl ProgressUpdate {
     /// Create an instance of `ProgressUpdate` for the job with this ID specifying its completion percentage.
-    pub fn set(jid: impl Into<String>, percent: u8) -> ProgressUpdate {
+    pub fn set(jid: JobId, percent: u8) -> ProgressUpdate {
         ProgressUpdate::builder(jid).percent(percent).build()
     }
 
@@ -46,7 +48,7 @@ impl ProgressUpdate {
     ///
     /// Equivalent to creating a [new](struct.ProgressUpdateBuilder.html#method.new)
     /// `ProgressUpdateBuilder`.
-    pub fn builder(jid: impl Into<String>) -> ProgressUpdateBuilder {
+    pub fn builder(jid: JobId) -> ProgressUpdateBuilder {
         ProgressUpdateBuilder::new(jid)
     }
 }
@@ -59,9 +61,9 @@ impl ProgressUpdateBuilder {
     }
 
     /// Create a new instance of `JobBuilder`
-    pub fn new(jid: impl Into<String>) -> ProgressUpdateBuilder {
+    pub fn new(jid: JobId) -> ProgressUpdateBuilder {
         ProgressUpdateBuilder {
-            jid: Some(jid.into()),
+            jid: Some(jid),
             ..ProgressUpdateBuilder::create_empty()
         }
     }
@@ -120,7 +122,7 @@ impl std::fmt::Display for JobState {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Progress {
     /// Id of the tracked job.
-    pub jid: String,
+    pub jid: JobId,
 
     /// Job's state.
     pub state: JobState,
@@ -141,7 +143,7 @@ impl Progress {
     ///
     /// This will copy the [`desc`](Progress::desc) from the `Progress` (retrieved) over to `ProgressUpdate` (to be sent).
     pub fn update_percent(&self, percent: u8) -> ProgressUpdate {
-        ProgressUpdate::builder(&self.jid)
+        ProgressUpdate::builder(self.jid.clone())
             .desc(self.desc.clone())
             .percent(percent)
             .build()
@@ -149,6 +151,6 @@ impl Progress {
 
     /// Create an instance of `ProgressUpdateBuilder` for the job.
     pub fn update_builder(&self) -> ProgressUpdateBuilder {
-        ProgressUpdateBuilder::new(&self.jid)
+        ProgressUpdateBuilder::new(self.jid.clone())
     }
 }

@@ -19,60 +19,64 @@ jobs. A client enqueues a job, Faktory sends the job to an available worker (and
 they're all busy), the worker executes the job, and eventually reports back to Faktory that the
 job has completed.
 
-Jobs are self-contained, and consist of a job *type* (a string), arguments for the job, and
+Jobs are self-contained, and consist of a job _type_ (a string), arguments for the job, and
 bits and pieces of metadata. When a job is scheduled for execution, the worker is given this
 information, and uses the job type to figure out how to execute the job. You can think of job
 execution as a remote function call (or RPC) where the job type is the name of the function,
 and the job arguments are, perhaps unsuprisingly, the arguments to the function.
 
-In this crate, you will find bindings both for submitting jobs (clients that *produce* jobs)
-and for executing jobs (workers that *consume* jobs). The former can be done by making a
-`Producer`, whereas the latter is done with a `Consumer`. See the documentation for each for
+In this crate, you will find bindings both for submitting jobs (clients that _produce_ jobs)
+and for executing jobs (workers that _consume_ jobs). The former can be done by making a
+`Client`, whereas the latter is done with a `Worker`. See the documentation for each for
 more details on how to use them.
 
 ## Encrypted connections (TLS)
 
 To connect to a Faktory server hosted over TLS, add the `tls` feature, and see the
-documentation for `TlsStream`, which can be supplied to `Producer::connect_with` and
-`Consumer::connect_with`.
+documentation for `TlsStream`, which can be supplied to `Client::connect_with` and
+`WorkerBuilder::connect_with`.
 
 ## Examples
 
-If you want to **submit** jobs to Faktory, use `Producer`.
+If you want to **submit** jobs to Faktory, use `Client`.
 
 ```rust
-use faktory::{Producer, Job};
-let mut p = Producer::connect(None).unwrap();
-p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
+use faktory::{Client, Job};
+let mut c = Client::connect(None).await.unwrap();
+c.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
 ```
 
-If you want to **accept** jobs from Faktory, use `Consumer`.
+If you want to **accept** jobs from Faktory, use `Worker`.
 
 ```rust
-use faktory::ConsumerBuilder;
+use faktory::WorkerBuilder;
 use std::io;
-let mut c = ConsumerBuilder::default();
-c.register("foobar", |job| -> io::Result<()> {
-    println!("{:?}", job);
-    Ok(())
+let mut w = WorkerBuilder::default();
+w.register("foobar", |job| async move {
+     println!("{:?}", job);
+     Ok::<(), io::Error>(())
 });
-let mut c = c.connect(None).unwrap();
-if let Err(e) = c.run(&["default"]) {
+let mut w = w.connect(None).await.unwrap();
+if let Err(e) = w.run(&["default"]).await {
     println!("worker failed: {}", e);
 }
 ```
 
 ## Run test suite locally
 
-First ensure the "Factory" service is running and accepting connections on your machine. 
+First ensure the "Factory" service is running and accepting connections on your machine.
 To launch it a [Factory](https://hub.docker.com/r/contribsys/faktory/) container with [docker](https://docs.docker.com/engine/install/), run:
+
 ```bash
 docker run --rm -it -v faktory-data:/var/lib/faktory -p 127.0.0.1:7419:7419 -p 127.0.0.1:7420:7420 contribsys/faktory:latest /faktory -b :7419 -w :7420
 ```
+
 After that run the tests:
+
 ```bash
 FAKTORY_URL=tcp://127.0.0.1:7419 cargo test --all-features --locked --all-targets
 ```
+
 Please note that setting "FAKTORY_URL" environment variable is required for e2e tests to not be skipped.
 
 Provided you have [make](https://www.gnu.org/software/make/#download) installed and `docker` daemon running,
