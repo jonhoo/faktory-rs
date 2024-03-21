@@ -177,7 +177,7 @@ async fn well_behaved() {
             }\r\n",
     );
 
-    let jh = spawn(async move { c.run(&["default"]).await });
+    let jh = spawn(async move { c.run(&["default"], None).await });
 
     // the running thread won't return for a while. the heartbeat thingy is going to eventually
     // send a heartbeat, and we want to respond to that with a "quiet" to make it not accept any
@@ -242,7 +242,7 @@ async fn no_first_job() {
             }\r\n",
     );
 
-    let jh = spawn(async move { c.run(&["default"]).await });
+    let jh = spawn(async move { c.run(&["default"], None).await });
 
     // the running thread won't return for a while. the heartbeat thingy is going to eventually
     // send a heartbeat, and we want to respond to that with a "quiet" to make it not accept any
@@ -316,7 +316,7 @@ async fn well_behaved_many() {
         );
     }
 
-    let jh = spawn(async move { c.run(&["default"]).await });
+    let jh = spawn(async move { c.run(&["default"], None).await });
 
     // the running thread won't return for a while. the heartbeat thingy is going to eventually
     // send a heartbeat, and we want to respond to that with a "quiet" to make it not accept any
@@ -383,7 +383,7 @@ async fn terminate() {
         }\r\n",
     );
 
-    let jh = spawn(async move { c.run(&["default"]).await });
+    let jh = spawn(async move { c.run(&["default"], None).await });
 
     // the running thread won't ever return, because the job never exits. the heartbeat thingy is
     // going to eventually send a heartbeat, and we want to respond to that with a "terminate"

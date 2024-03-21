@@ -6,6 +6,7 @@ use std::process;
 use std::sync::{atomic, Arc};
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::sleep as tokio_sleep;
 use tokio::time::Duration as TokioDuration;
@@ -119,7 +120,7 @@ type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
 /// w.register("foo", process_job);
 ///
 /// let mut w = w.connect(None).await.unwrap();
-/// if let Err(e) = w.run(&["default"]).await {
+/// if let Err(e) = w.run(&["default"], None).await {
 ///     println!("worker failed: {}", e);
 /// }
 /// # });
@@ -328,7 +329,11 @@ impl<
     /// If an error occurred while reporting a job success or failure, the result will be re-reported to the server
     /// without re-executing the job. If the worker was terminated (i.e., `run` returns  with an `Ok` response),
     /// the worker should **not** try to resume by calling `run` again. This will cause a panic.
-    pub async fn run<Q>(&mut self, queues: &[Q]) -> Result<usize, Error>
+    pub async fn run<Q>(
+        &mut self,
+        queues: &[Q],
+        channel: Option<Arc<Mutex<mpsc::Receiver<bool>>>>,
+    ) -> Result<usize, Error>
     where
         Q: AsRef<str>,
     {
@@ -368,6 +373,14 @@ impl<
                     }
                 }
             },
+            _ = async {
+                let ch = channel.unwrap();
+                let mut ch = ch.lock().await;
+                ch.recv().await
+            }, if channel.is_some() => {
+                todo!()
+            },
+
             exit = self.listen_for_heartbeats(&statuses) => {
                 // there are a couple of cases here:
                 //  - we got TERMINATE, so we should just return, even if a worker is still running
@@ -407,7 +420,7 @@ impl<
         Q: AsRef<str>,
     {
         self.forever = true;
-        while self.run(queues).await.is_err() {
+        while self.run(queues, None).await.is_err() {
             if self.reconnect().await.is_err() {
                 break;
             }

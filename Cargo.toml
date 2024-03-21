@@ -16,7 +16,7 @@ exclude = [".github", "docker", ".gitignore", "Makefile"]
 [features]
 default = []
 tls = ["dep:tokio-native-tls", "dep:pin-project"]
-binaries = ["dep:clap", "tokio/macros"]
+binaries = ["dep:clap"]
 ent = []
 
 [dependencies]
@@ -38,8 +38,10 @@ sha2 = "0.10.0"
 thiserror = "1.0.30"
 tokio = { version = "1.35.1", features = [
     "io-util",
+    "macros",
     "net",
     "rt",
+    "sync",
     "time",
     "signal",
     "rt-multi-thread",

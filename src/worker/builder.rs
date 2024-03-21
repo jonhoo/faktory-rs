@@ -100,7 +100,8 @@ impl<E: 'static> WorkerBuilder<E> {
         self.opts.is_worker = true;
         let buffered = BufStream::new(stream);
         let client = Client::new(buffered, self.opts).await?;
-        Ok(Worker::new(client, self.workers_count, self.callbacks).await)
+        let worker = Worker::new(client, self.workers_count, self.callbacks).await;
+        Ok(worker)
     }
 
     /// Asynchronously connect to a Faktory server.
@@ -115,6 +116,7 @@ impl<E: 'static> WorkerBuilder<E> {
         self.opts.is_worker = true;
         let buffered = BufStream::new(stream);
         let client = Client::new(buffered, self.opts).await?;
-        Ok(Worker::new(client, self.workers_count, self.callbacks).await)
+        let worker = Worker::new(client, self.workers_count, self.callbacks).await;
+        Ok(worker)
     }
 }
