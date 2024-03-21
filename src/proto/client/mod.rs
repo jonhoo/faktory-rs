@@ -373,6 +373,7 @@ where
     }
 
     pub(crate) async fn heartbeat(&mut self) -> Result<HeartbeatStatus, Error> {
+        // println!()
         single::write_command(
             &mut self.stream,
             &single::Heartbeat::new(self.opts.wid.as_ref().unwrap().clone()),

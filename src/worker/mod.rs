@@ -2,10 +2,13 @@ use super::proto::{Client, Reconnect};
 use crate::error::Error;
 use crate::proto::{Ack, Fail, Job, JobId};
 use fnv::FnvHashMap;
+use std::process;
 use std::sync::{atomic, Arc};
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tokio::task::JoinHandle;
+use tokio::time::sleep as tokio_sleep;
+use tokio::time::Duration as TokioDuration;
 
 mod builder;
 mod health;
@@ -18,6 +21,7 @@ pub use runner::JobRunner;
 pub(crate) const STATUS_RUNNING: usize = 0;
 pub(crate) const STATUS_QUIET: usize = 1;
 pub(crate) const STATUS_TERMINATING: usize = 2;
+pub(crate) const GRACEFUL_SHUDOWN_PERIOD_MILLIS: u64 = 5_000;
 
 type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
 
@@ -141,6 +145,7 @@ pub struct Worker<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> {
     worker_states: Arc<state::WorkerStatesRegistry>,
     callbacks: Arc<CallbacksRegistry<E>>,
     terminated: bool,
+    forever: bool,
 }
 
 impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin + Reconnect, E> Worker<S, E> {
@@ -156,6 +161,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> Worker<S, E> {
             callbacks: Arc::new(callbacks),
             worker_states: Arc::new(state::WorkerStatesRegistry::new(workers_count)),
             terminated: false,
+            forever: false,
         }
     }
 }
@@ -224,13 +230,13 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
     // Returns the number of workers that may still be processing jobs.
     // We are ignoring any FAIL command issue errors, since this is already
     // an "emergency" case.
-    async fn force_fail_all_workers(&mut self) -> usize {
+    async fn force_fail_all_workers(&mut self, reason: &str) -> usize {
         let mut running = 0;
         for wstate in self.worker_states.iter() {
-            let may_be_jid = wstate.lock().unwrap().take_cuurently_running();
+            let may_be_jid = wstate.lock().unwrap().take_currently_running();
             if let Some(jid) = may_be_jid {
                 running += 1;
-                let f = Fail::new(jid, "unknown", "terminated");
+                let f = Fail::new(jid, "unknown", reason);
                 let _ = match self.c.issue(&f).await {
                     Ok(r) => r.read_ok().await,
                     Err(_) => continue,
@@ -287,6 +293,7 @@ impl<
             callbacks: Arc::clone(&self.callbacks),
             worker_states: Arc::clone(&self.worker_states),
             terminated: self.terminated,
+            forever: self.forever,
         })
     }
 
@@ -328,49 +335,68 @@ impl<
         assert!(!self.terminated, "do not re-run a terminated worker");
         self.report_on_all_workers().await?;
 
-        let workers_count = self.worker_states.len();
+        let nworkers = self.worker_states.len();
 
         // keep track of the current status of each worker
-        let statuses: Vec<_> = (0..workers_count)
+        let statuses: Vec<_> = (0..nworkers)
             .map(|_| Arc::new(atomic::AtomicUsize::new(STATUS_RUNNING)))
             .collect();
 
-        let mut workers = Vec::with_capacity(workers_count);
-        for (worker, status) in statuses.iter().enumerate().take(workers_count) {
+        let mut workers = Vec::with_capacity(nworkers);
+        for (worker, status) in statuses.iter().enumerate().take(nworkers) {
             let handle = self
                 .spawn_worker(Arc::clone(status), worker, queues)
                 .await?;
             workers.push(handle)
         }
 
-        let exit = self.listen_for_heartbeats(&statuses).await;
+        let report = tokio::select! {
+            _ = tokio::signal::ctrl_c(), if self.forever => {
+                tracing::info!("SIGINT received, shutting down gracefully.");
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {
+                        tracing::info!("Another SIGINT received, exiting right now.");
+                        process::exit(0);
+                    },
+                    _ = tokio_sleep(TokioDuration::from_millis(GRACEFUL_SHUDOWN_PERIOD_MILLIS)) => {
+                        tracing::warn!("Graceful shutdown period of {}ms exceeded, exiting right now.", GRACEFUL_SHUDOWN_PERIOD_MILLIS);
+                        process::exit(0);
+                    },
+                    nrunning = self.force_fail_all_workers("SIGTERM received") => {
+                        tracing::info!("Number of workers that were still running: {}.", nrunning);
+                        process::exit(0);
+                    }
+                }
+            },
+            exit = self.listen_for_heartbeats(&statuses) => {
+                // there are a couple of cases here:
+                //  - we got TERMINATE, so we should just return, even if a worker is still running
+                //  - we got TERMINATE and all workers has exited
+                //  - we got an error from heartbeat()
+                self.terminated = exit.is_ok();
 
-        // there are a couple of cases here:
-        //
-        //  - we got TERMINATE, so we should just return, even if a worker is still running
-        //  - we got TERMINATE and all workers has exited
-        //  - we got an error from heartbeat()
-        //
-        self.terminated = exit.is_ok();
+                if let Ok(true) = exit {
+                    let running = self.force_fail_all_workers("terminated").await;
+                    if running != 0 {
+                        return Ok(running);
+                    }
+                }
 
-        if let Ok(true) = exit {
-            let running = self.force_fail_all_workers().await;
-            if running != 0 {
-                return Ok(running);
-            }
-        }
+                // we want to expose worker errors, or otherwise the heartbeat error
+                let mut results = Vec::with_capacity(nworkers);
+                for w in workers {
+                    results.push(w.await.expect("joined ok"));
+                }
+                let aggregated = results.into_iter().collect::<Result<Vec<_>, _>>();
 
-        // we want to expose worker errors, or otherwise the heartbeat error
-        let mut results = Vec::with_capacity(workers_count);
-        for w in workers {
-            results.push(w.await.expect("joined ok"));
-        }
-        let result = results.into_iter().collect::<Result<Vec<_>, _>>();
+                match exit {
+                    Ok(_) => aggregated.map(|_| 0),
+                    Err(e) => aggregated.and(Err(e)),
+                }
+            },
+        };
 
-        match exit {
-            Ok(_) => result.map(|_| 0),
-            Err(e) => result.and(Err(e)),
-        }
+        report
     }
 
     /// Run this worker until the server tells us to exit or a connection cannot be re-established.
@@ -380,7 +406,7 @@ impl<
     where
         Q: AsRef<str>,
     {
-        use std::process;
+        self.forever = true;
         while self.run(queues).await.is_err() {
             if self.reconnect().await.is_err() {
                 break;
