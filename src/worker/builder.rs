@@ -7,6 +7,8 @@ use std::future::Future;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
+pub(crate) const GRACEFUL_SHUTDOWN_PERIOD_MILLIS: u64 = 5_000;
+
 /// Convenience wrapper for building a Faktory worker.
 ///
 /// See the [`Worker`] documentation for details.
@@ -14,6 +16,7 @@ pub struct WorkerBuilder<E> {
     opts: ClientOptions,
     workers_count: usize,
     callbacks: CallbacksRegistry<E>,
+    shutdown_timeout: u64,
 }
 
 impl<E> Default for WorkerBuilder<E> {
@@ -25,6 +28,7 @@ impl<E> Default for WorkerBuilder<E> {
             opts: ClientOptions::default(),
             workers_count: 1,
             callbacks: CallbacksRegistry::default(),
+            shutdown_timeout: GRACEFUL_SHUTDOWN_PERIOD_MILLIS,
         }
     }
 }
@@ -59,6 +63,16 @@ impl<E: 'static> WorkerBuilder<E> {
     /// Defaults to 1.
     pub fn workers(&mut self, w: usize) -> &mut Self {
         self.workers_count = w;
+        self
+    }
+
+    /// Set the graceful shutdown period in milliseconds.
+    ///
+    /// This will be used once the worker is sent a termination signal whether
+    /// it is at the application (see [`Worker::run`](Worker::run)) or OS level
+    /// (via Ctrl-C signal, see docs for [`Worker::run_to_completion`](Worker::run_to_completion)).
+    pub fn graceful_shutdown_period(&mut self, millis: u64) -> &mut Self {
+        self.shutdown_timeout = millis;
         self
     }
 
@@ -100,7 +114,13 @@ impl<E: 'static> WorkerBuilder<E> {
         self.opts.is_worker = true;
         let buffered = BufStream::new(stream);
         let client = Client::new(buffered, self.opts).await?;
-        let worker = Worker::new(client, self.workers_count, self.callbacks).await;
+        let worker = Worker::new(
+            client,
+            self.workers_count,
+            self.callbacks,
+            self.shutdown_timeout,
+        )
+        .await;
         Ok(worker)
     }
 
@@ -116,7 +136,13 @@ impl<E: 'static> WorkerBuilder<E> {
         self.opts.is_worker = true;
         let buffered = BufStream::new(stream);
         let client = Client::new(buffered, self.opts).await?;
-        let worker = Worker::new(client, self.workers_count, self.callbacks).await;
+        let worker = Worker::new(
+            client,
+            self.workers_count,
+            self.callbacks,
+            self.shutdown_timeout,
+        )
+        .await;
         Ok(worker)
     }
 }
