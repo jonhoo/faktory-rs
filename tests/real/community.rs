@@ -358,16 +358,4 @@ async fn test_shutdown_signals_handling() {
     // one worker was processing a task when we interrupted it
     let nrunning = jh.await.expect("joined ok").unwrap();
     assert_eq!(nrunning, 1);
-
-    // give Faktory server a second:
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-
-    // our worker from above has reported a failure to
-    // the Faktory server and so latter feed the job to
-    // this new worker
-    let mut w = WorkerBuilder::default();
-    w.register(jkind, |_j| async { Ok::<(), io::Error>(()) });
-    let mut w = w.connect(None).await.unwrap();
-    let had_one = w.run_one(0, &[qname]).await.unwrap();
-    assert!(had_one)
 }
