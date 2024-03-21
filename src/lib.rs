@@ -75,7 +75,7 @@ mod worker;
 
 pub use crate::error::Error;
 pub use crate::proto::{Client, Job, JobBuilder, JobId, Reconnect, WorkerId};
-pub use crate::worker::{JobRunner, Worker, WorkerBuilder};
+pub use crate::worker::{channel, JobRunner, Message, Worker, WorkerBuilder};
 
 #[cfg(feature = "ent")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]

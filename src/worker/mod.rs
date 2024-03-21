@@ -6,23 +6,24 @@ use std::process;
 use std::sync::{atomic, Arc};
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio::time::sleep as tokio_sleep;
 use tokio::time::Duration as TokioDuration;
 
 mod builder;
+mod channel;
 mod health;
 mod runner;
 mod state;
 
 pub use builder::WorkerBuilder;
+pub use channel::{channel, Message};
 pub use runner::JobRunner;
 
 pub(crate) const STATUS_RUNNING: usize = 0;
 pub(crate) const STATUS_QUIET: usize = 1;
 pub(crate) const STATUS_TERMINATING: usize = 2;
-pub(crate) const GRACEFUL_SHUDOWN_PERIOD_MILLIS: u64 = 5_000;
 
 type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
 
@@ -147,6 +148,7 @@ pub struct Worker<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> {
     callbacks: Arc<CallbacksRegistry<E>>,
     terminated: bool,
     forever: bool,
+    shutdown_timeout: u64,
 }
 
 impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin + Reconnect, E> Worker<S, E> {
@@ -156,13 +158,19 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin + Reconnect, E> Worker<S,
 }
 
 impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> Worker<S, E> {
-    async fn new(c: Client<S>, workers_count: usize, callbacks: CallbacksRegistry<E>) -> Self {
+    async fn new(
+        c: Client<S>,
+        workers_count: usize,
+        callbacks: CallbacksRegistry<E>,
+        shutdown_timeout: u64,
+    ) -> Self {
         Worker {
             c,
             callbacks: Arc::new(callbacks),
             worker_states: Arc::new(state::WorkerStatesRegistry::new(workers_count)),
             terminated: false,
             forever: false,
+            shutdown_timeout,
         }
     }
 }
@@ -295,6 +303,7 @@ impl<
             worker_states: Arc::clone(&self.worker_states),
             terminated: self.terminated,
             forever: self.forever,
+            shutdown_timeout: self.shutdown_timeout,
         })
     }
 
@@ -322,17 +331,20 @@ impl<
     }
 
     /// Run this worker on the given `queues` until an I/O error occurs (`Err` is returned), or
-    /// until the server tells the worker to disengage (`Ok` is returned).
+    /// until the server tells the worker to disengage or [`Message::ReturnControl`] is sent (`Ok` is returned).
     ///
-    /// The value in an `Ok` indicates the number of workers that may still be processing jobs.
+    /// The value in an `Ok` indicates the number of workers that may still be processing jobs, but `0` can also
+    /// indicate the [graceful shutdown period](WorkerBuilder::graceful_shutdown_period) has been exceeded.
     ///
     /// If an error occurred while reporting a job success or failure, the result will be re-reported to the server
     /// without re-executing the job. If the worker was terminated (i.e., `run` returns  with an `Ok` response),
     /// the worker should **not** try to resume by calling `run` again. This will cause a panic.
+    ///
+    /// In order to terminate the worker process for good (as opposed to returning control to your app), use [`Message::ExitProcess`].
     pub async fn run<Q>(
         &mut self,
         queues: &[Q],
-        channel: Option<Arc<Mutex<mpsc::Receiver<bool>>>>,
+        channel: Option<mpsc::Receiver<Message>>,
     ) -> Result<usize, Error>
     where
         Q: AsRef<str>,
@@ -356,6 +368,7 @@ impl<
         }
 
         let report = tokio::select! {
+            // SIGTERM received:
             _ = tokio::signal::ctrl_c(), if self.forever => {
                 tracing::info!("SIGINT received, shutting down gracefully.");
                 tokio::select! {
@@ -363,8 +376,8 @@ impl<
                         tracing::info!("Another SIGINT received, exiting right now.");
                         process::exit(0);
                     },
-                    _ = tokio_sleep(TokioDuration::from_millis(GRACEFUL_SHUDOWN_PERIOD_MILLIS)) => {
-                        tracing::warn!("Graceful shutdown period of {}ms exceeded, exiting right now.", GRACEFUL_SHUDOWN_PERIOD_MILLIS);
+                    _ = tokio_sleep(TokioDuration::from_millis(self.shutdown_timeout)) => {
+                        tracing::warn!("Graceful shutdown period of {}ms exceeded, exiting right now.", self.shutdown_timeout);
                         process::exit(0);
                     },
                     nrunning = self.force_fail_all_workers("SIGTERM received") => {
@@ -373,14 +386,24 @@ impl<
                     }
                 }
             },
-            _ = async {
-                let ch = channel.unwrap();
-                let mut ch = ch.lock().await;
-                ch.recv().await
-            }, if channel.is_some() => {
-                todo!()
+            // Message from userland received:
+            Some(msg) = async { let mut ch = channel.unwrap(); ch.recv().await }, if channel.is_some() => {
+                let nrunning = tokio::select! {
+                    _ = tokio_sleep(TokioDuration::from_millis(self.shutdown_timeout)) => {
+                        tracing::warn!("Graceful shutdown period of {}ms exceeded.", self.shutdown_timeout);
+                        0
+                    },
+                    nrunning = self.force_fail_all_workers("termination signal received over channel") => {
+                        tracing::info!("Number of workers that were still running: {}.", nrunning);
+                        nrunning
+                    }
+                };
+                match msg {
+                    Message::ExitProcess => process::exit(0),
+                    Message::ReturnControl => return Ok(nrunning),
+                }
             },
-
+            // Instruction from Faktory received or error occurred:
             exit = self.listen_for_heartbeats(&statuses) => {
                 // there are a couple of cases here:
                 //  - we got TERMINATE, so we should just return, even if a worker is still running
@@ -414,7 +437,8 @@ impl<
 
     /// Run this worker until the server tells us to exit or a connection cannot be re-established.
     ///
-    /// This function never returns. When the worker decides to exit, the process is terminated.
+    /// This function never returns. When the worker decides to exit or SIGTERM is received,
+    /// the process is terminated within the [shutdown period](WorkerBuilder::graceful_shutdown_period).
     pub async fn run_to_completion<Q>(mut self, queues: &[Q]) -> !
     where
         Q: AsRef<str>,

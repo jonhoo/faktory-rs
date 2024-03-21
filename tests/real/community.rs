@@ -319,3 +319,20 @@ async fn test_jobs_created_with_builder() {
         .unwrap();
     assert!(had_job);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_shutdown() {
+    use faktory::{channel, Message};
+    skip_check!();
+
+    let mut w = WorkerBuilder::default();
+    w.register("job_kind", process_order);
+    let mut w = w.connect(None).await.unwrap();
+
+    let (tx, rx) = channel();
+    let jh = tokio::spawn(async move { w.run(&["default"], Some(rx)).await });
+    tx.send(Message::ReturnControl).await.expect("sent ok");
+
+    let nrunning = jh.await.expect("joined ok").unwrap();
+    assert_eq!(nrunning, 0);
+}
