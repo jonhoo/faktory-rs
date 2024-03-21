@@ -340,7 +340,42 @@ impl<
     /// without re-executing the job. If the worker was terminated (i.e., `run` returns  with an `Ok` response),
     /// the worker should **not** try to resume by calling `run` again. This will cause a panic.
     ///
-    /// In order to terminate the worker process for good (as opposed to returning control to your app), use [`Message::ExitProcess`].
+    /// In order to terminate the worker process for good (as opposed to returning control to your app), use [`Message::Exit`].
+    ///
+    /// ```no_run
+    /// # tokio_test::block_on(async {
+    /// use faktory::{Client, Job, Message, WorkerBuilder, channel};
+    ///
+    /// let mut cl = Client::connect(None).await.unwrap();
+    /// cl.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
+    ///
+    /// let mut w = WorkerBuilder::default();
+    /// w.graceful_shutdown_period(5_000);
+    /// w.register("foobar", |_j| async { Ok::<(), std::io::Error>(()) });
+    /// let mut w = w.connect(None).await.unwrap();
+    ///
+    /// let (tx, rx) = channel();
+    /// let _handle = tokio::spawn(async move { w.run(&["qname"], Some(rx)).await });
+    /// tx.send(Message::Exit(0)).await.expect("sent ok");
+    /// # });
+    /// ```
+    ///
+    /// In case you have no intention to send termination signals, the example from above
+    /// can be layed out as follows:
+    /// ```no_run
+    /// # tokio_test::block_on(async {
+    /// use faktory::{Client, Job, WorkerBuilder};
+    ///
+    /// let mut cl = Client::connect(None).await.unwrap();
+    /// cl.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
+    ///
+    /// let mut w = WorkerBuilder::default();
+    /// w.register("foobar", |_j| async { Ok::<(), std::io::Error>(()) });
+    /// let mut w = w.connect(None).await.unwrap();
+    ///
+    /// let _handle = tokio::spawn(async move { w.run(&["qname"], None).await });
+    /// # });
+    /// ```
     pub async fn run<Q>(
         &mut self,
         queues: &[Q],
@@ -388,6 +423,14 @@ impl<
             },
             // Message from userland received:
             Some(msg) = async { let mut ch = channel.unwrap(); ch.recv().await }, if channel.is_some() => {
+                if let Message::ExitNow(code) = msg {
+                    tracing::info!("Received signal to immediately exit with status {}.", code);
+                    process::exit(code);
+                }
+                if let Message::ReturnControlNow = msg {
+                    tracing::info!("Received signal to immediately return control. Returning without clean-up.");
+                    return Ok(0)
+                }
                 let nrunning = tokio::select! {
                     _ = tokio_sleep(TokioDuration::from_millis(self.shutdown_timeout)) => {
                         tracing::warn!("Graceful shutdown period of {}ms exceeded.", self.shutdown_timeout);
@@ -399,8 +442,9 @@ impl<
                     }
                 };
                 match msg {
-                    Message::ExitProcess => process::exit(0),
+                    Message::Exit(code) => process::exit(code),
                     Message::ReturnControl => return Ok(nrunning),
+                    _ => unreachable!("ExitNow and ReturnControlNow variants are already handled above.")
                 }
             },
             // Instruction from Faktory received or error occurred:

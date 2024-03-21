@@ -321,18 +321,59 @@ async fn test_jobs_created_with_builder() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_shutdown() {
+async fn test_shutdown_signals_handling() {
     use faktory::{channel, Message};
     skip_check!();
 
+    let qname = "test_shutdown_signals_handling";
+    let jkind = "heavy";
+    let shutdown_timeout = 500;
+
+    // get a client and a job to enqueue
+    let mut cl = Client::connect(None).await.unwrap();
+    let j = JobBuilder::new(jkind)
+        .queue(qname)
+        // task will be being processed for at least 1 second
+        .args(vec![1000])
+        .build();
+
+    let (tx, mut rx_for_test_purposes) = tokio::sync::mpsc::channel::<bool>(1);
+    let tx = sync::Arc::new(tx);
+
+    // get a connected worker
     let mut w = WorkerBuilder::default();
-    w.register("job_kind", process_order);
+    w.graceful_shutdown_period(shutdown_timeout);
+    w.register(jkind, move |j| {
+        let tx = sync::Arc::clone(&tx);
+        Box::pin(async move {
+            let complexity = j.args().iter().next().unwrap().as_u64().unwrap();
+            tx.send(true).await.unwrap(); // inform that we are now starting to process the job
+            tokio::time::sleep(tokio::time::Duration::from_millis(complexity)).await;
+            Ok::<(), io::Error>(())
+        })
+    });
     let mut w = w.connect(None).await.unwrap();
 
+    // start consuming
     let (tx, rx) = channel();
-    let jh = tokio::spawn(async move { w.run(&["default"], Some(rx)).await });
+    let jh = tokio::spawn(async move { w.run(&[qname], Some(rx)).await });
+
+    // enqueue the job and wait for a message from the handler and ...
+    cl.enqueue(j).await.unwrap();
+    rx_for_test_purposes.recv().await;
+    // ... immediately signal to return control
     tx.send(Message::ReturnControl).await.expect("sent ok");
 
+    // one worker was processing a task when we interrupted it
     let nrunning = jh.await.expect("joined ok").unwrap();
-    assert_eq!(nrunning, 0);
+    assert_eq!(nrunning, 1);
+
+    // our worker from above has reported a failure to
+    // the Faktory server and so latter feed the job to
+    // this new worker
+    let mut w = WorkerBuilder::default();
+    w.register(jkind, |_j| async { Ok::<(), io::Error>(()) });
+    let mut w = w.connect(None).await.unwrap();
+    let had_one = w.run_one(0, &[qname]).await.unwrap();
+    assert!(had_one)
 }
