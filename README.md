@@ -68,10 +68,10 @@ Also see some usage examples in `examples` directory in the project's root. You 
 cargo run --example example_name
 ```
 
-For instance, to run a `forever` example in release mode, hit:
+For instance, to run a `run_to_completion` example in release mode, hit:
 
 ```bash
-cargo run --example forever --release
+cargo run --example run_to_completion --release
 ```
 Make sure you've got Faktory server up-and-running. See [instructions](#run-test-suite-locally) on how to spin up Faktory locally.
 
