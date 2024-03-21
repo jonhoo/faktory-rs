@@ -17,8 +17,8 @@ doc:
 faktory:
 	docker run --rm -d \
 	-v faktory-data:/var/lib/faktory \
-	-p ${FAKTORY_HOST}:${FAKTORY_PORT}:7419 \
-	-p ${FAKTORY_HOST}:${FAKTORY_PORT_UI}:7420 \
+	-p 127.0.0.1:${FAKTORY_PORT}:7419 \
+	-p 127.0.0.1:${FAKTORY_PORT_UI}:7420 \
 	--name faktory \
 	contribsys/faktory:latest \
 	/faktory -b :7419 -w :7420
