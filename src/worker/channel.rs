@@ -1,5 +1,5 @@
 #[cfg(doc)]
-use super::Worker;
+use super::{Worker, WorkerBuilder};
 
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
@@ -7,11 +7,24 @@ use tokio::sync::mpsc::{self, Receiver, Sender};
 ///
 /// See documentation to [`Worker::run`](Worker::run)
 pub enum Message {
-    /// Kill the process.
-    ExitProcess,
+    /// Ternimate the process with the provided status code.
+    Exit(i32),
 
-    /// Return control to the userland.
+    /// Ternimate the process with the provided status code right away.
+    ///
+    /// Analogue of sending Ctrl+C signal twice on TTY.
+    /// Normally, though, you will want to use [`Message::Exit`], which allows for
+    /// graceful shutdown.
+    ExitNow(i32),
+
+    /// Return control to the calling site after performing the clean-up logic.
     ReturnControl,
+
+    /// Return control to the calling site right away.
+    ///
+    /// Normally, though, you will want to use [`Message::ReturnControl`], which allows for
+    /// clean-up within the specified [`time-out`](WorkerBuilder::graceful_shutdown_period).
+    ReturnControlNow,
 }
 
 /// Returns multiple producers and a singler consumer of a [`Message`].
