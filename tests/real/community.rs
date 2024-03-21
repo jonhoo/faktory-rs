@@ -368,6 +368,9 @@ async fn test_shutdown_signals_handling() {
     let nrunning = jh.await.expect("joined ok").unwrap();
     assert_eq!(nrunning, 1);
 
+    // give Faktory server a second:
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
     // our worker from above has reported a failure to
     // the Faktory server and so latter feed the job to
     // this new worker
