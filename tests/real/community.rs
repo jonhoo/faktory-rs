@@ -3,7 +3,7 @@ extern crate faktory;
 use crate::skip_check;
 use faktory::{Client, Job, JobBuilder, WorkerBuilder};
 use serde_json::Value;
-use std::{io, sync};
+use std::{future::Future, io, sync};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn hello_p() {
@@ -311,6 +311,27 @@ async fn test_jobs_created_with_builder() {
     assert!(had_job);
 }
 
+use faktory::mpsc;
+use std::pin::Pin;
+fn process_hard_task(
+    sender: sync::Arc<mpsc::Sender<bool>>,
+) -> Box<
+    dyn Fn(Job) -> Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send>>
+        + Send
+        + Sync
+        + 'static,
+> {
+    return Box::new(move |j: Job| {
+        let sender = sync::Arc::clone(&sender);
+        Box::pin(async move {
+            let complexity = j.args().iter().next().unwrap().as_u64().unwrap();
+            sender.send(true).await.unwrap(); // inform that we are now starting to process the job
+            tokio::time::sleep(tokio::time::Duration::from_millis(complexity)).await;
+            Ok::<(), io::Error>(())
+        })
+    });
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn test_shutdown_signals_handling() {
     use faktory::{channel, Message};
@@ -334,15 +355,7 @@ async fn test_shutdown_signals_handling() {
     // get a connected worker
     let mut w = WorkerBuilder::default();
     w.graceful_shutdown_period(shutdown_timeout);
-    w.register(jkind, move |j| {
-        let tx = sync::Arc::clone(&tx);
-        Box::pin(async move {
-            let complexity = j.args().iter().next().unwrap().as_u64().unwrap();
-            tx.send(true).await.unwrap(); // inform that we are now starting to process the job
-            tokio::time::sleep(tokio::time::Duration::from_millis(complexity)).await;
-            Ok::<(), io::Error>(())
-        })
-    });
+    w.register(jkind, process_hard_task(tx));
     let mut w = w.connect(None).await.unwrap();
 
     // start consuming
@@ -358,4 +371,24 @@ async fn test_shutdown_signals_handling() {
     // one worker was processing a task when we interrupted it
     let nrunning = jh.await.expect("joined ok").unwrap();
     assert_eq!(nrunning, 1);
+
+    // let's repeat the same actions with a little tweak:
+    // we will signal to return control right away.
+    let (tx, mut rx_for_test_purposes) = tokio::sync::mpsc::channel::<bool>(1);
+    let tx = sync::Arc::new(tx);
+    let mut w = WorkerBuilder::default();
+    w.graceful_shutdown_period(shutdown_timeout);
+    w.register(jkind, process_hard_task(tx));
+    let mut w = w.connect(None).await.unwrap();
+    let (tx, rx) = channel();
+    let jh = tokio::spawn(async move { w.run(&[qname], Some(rx)).await });
+    cl.enqueue(JobBuilder::new(jkind).queue(qname).args(vec![1000]).build())
+        .await
+        .unwrap();
+    rx_for_test_purposes.recv().await;
+    // signalling to yield immediately
+    tx.send(Message::ReturnControlNow).await.expect("sent ok");
+    let nrunning = jh.await.expect("joined ok").unwrap();
+    // we did not even have a change to examine the current workers state
+    assert_eq!(nrunning, 0);
 }
