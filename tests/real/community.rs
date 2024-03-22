@@ -320,7 +320,7 @@ async fn test_jobs_created_with_builder() {
     assert!(had_job);
 }
 
-use faktory::mpsc;
+use tokio::sync::mpsc;
 use std::pin::Pin;
 fn process_hard_task(
     sender: sync::Arc<mpsc::Sender<bool>>,
