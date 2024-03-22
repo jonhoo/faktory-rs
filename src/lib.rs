@@ -96,7 +96,8 @@ pub use tls::TlsStream;
 
 // 3rd-party libs re-exports
 pub use async_trait::async_trait;
-pub use tokio::{main, sync::mpsc};
+pub use tokio;
+pub use tokio::main;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use tokio_rustls::rustls;
