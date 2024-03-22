@@ -66,7 +66,7 @@ impl<E: 'static> WorkerBuilder<E> {
         self
     }
 
-    /// Set the graceful shutdown period in milliseconds.
+    /// Set the graceful shutdown period in milliseconds. Defaults to 5000.
     ///
     /// This will be used once the worker is sent a termination signal whether
     /// it is at the application (see [`Worker::run`](Worker::run)) or OS level
@@ -104,13 +104,10 @@ impl<E: 'static> WorkerBuilder<E> {
         self
     }
 
-    /// Asynchronously connect to a Faktory server with a non-standard stream.
-    pub async fn connect_with<S: AsyncRead + AsyncWrite + Send + Unpin>(
+    async fn connect_worker<S: AsyncRead + AsyncWrite + Send + Unpin>(
         mut self,
         stream: S,
-        pwd: Option<String>,
     ) -> Result<Worker<BufStream<S>, E>, Error> {
-        self.opts.password = pwd;
         self.opts.is_worker = true;
         let buffered = BufStream::new(stream);
         let client = Client::new(buffered, self.opts).await?;
@@ -124,25 +121,25 @@ impl<E: 'static> WorkerBuilder<E> {
         Ok(worker)
     }
 
+    /// Asynchronously connect to a Faktory server with a non-standard stream.
+    pub async fn connect_with<S: AsyncRead + AsyncWrite + Send + Unpin>(
+        mut self,
+        stream: S,
+        pwd: Option<String>,
+    ) -> Result<Worker<BufStream<S>, E>, Error> {
+        self.opts.password = pwd;
+        self.connect_worker(stream).await
+    }
+
     /// Asynchronously connect to a Faktory server.
     ///
     /// See [`connect`](WorkerBuilder::connect).
     pub async fn connect(
-        mut self,
+        self,
         url: Option<&str>,
     ) -> Result<Worker<BufStream<TokioStream>, E>, Error> {
         let url = utils::parse_provided_or_from_env(url)?;
         let stream = TokioStream::connect(utils::host_from_url(&url)).await?;
-        self.opts.is_worker = true;
-        let buffered = BufStream::new(stream);
-        let client = Client::new(buffered, self.opts).await?;
-        let worker = Worker::new(
-            client,
-            self.workers_count,
-            self.callbacks,
-            self.shutdown_timeout,
-        )
-        .await;
-        Ok(worker)
+        self.connect_worker(stream).await
     }
 }
