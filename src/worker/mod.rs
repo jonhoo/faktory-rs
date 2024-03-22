@@ -429,7 +429,8 @@ impl<
                 }
                 if let Message::ReturnControlNow = msg {
                     tracing::info!("Received signal to immediately return control. Returning without clean-up.");
-                    return Ok(0)
+                    self.terminated = true;
+                    return Ok(0);
                 }
                 let nrunning = tokio::select! {
                     _ = tokio_sleep(TokioDuration::from_millis(self.shutdown_timeout)) => {
@@ -443,7 +444,10 @@ impl<
                 };
                 match msg {
                     Message::Exit(code) => process::exit(code),
-                    Message::ReturnControl => return Ok(nrunning),
+                    Message::ReturnControl => {
+                        self.terminated = true;
+                        return Ok(nrunning);
+                    },
                     _ => unreachable!("ExitNow and ReturnControlNow variants are already handled above.")
                 }
             },
