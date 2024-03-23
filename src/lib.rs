@@ -56,7 +56,7 @@
 //!     Ok::<(), io::Error>(())
 //! });
 //! let mut w = w.connect(None).await.unwrap();
-//! if let Err(e) = w.run(&["default"]).await {
+//! if let Err(e) = w.run(&["default"], None).await {
 //!     println!("worker failed: {}", e);
 //! }
 //! # });
@@ -75,7 +75,7 @@ mod worker;
 
 pub use crate::error::Error;
 pub use crate::proto::{Client, Job, JobBuilder, JobId, Reconnect, WorkerId};
-pub use crate::worker::{JobRunner, Worker, WorkerBuilder};
+pub use crate::worker::{channel, JobRunner, Message, Worker, WorkerBuilder};
 
 #[cfg(feature = "ent")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
@@ -96,6 +96,7 @@ pub use tls::TlsStream;
 
 // 3rd-party libs re-exports
 pub use async_trait::async_trait;
+pub use tokio;
 pub use tokio::main;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]

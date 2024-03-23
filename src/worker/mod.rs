@@ -2,17 +2,23 @@ use super::proto::{Client, Reconnect};
 use crate::error::Error;
 use crate::proto::{Ack, Fail, Job, JobId};
 use fnv::FnvHashMap;
+use std::process;
 use std::sync::{atomic, Arc};
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
+use tokio::time::sleep as tokio_sleep;
+use tokio::time::Duration as TokioDuration;
 
 mod builder;
+mod channel;
 mod health;
 mod runner;
 mod state;
 
 pub use builder::WorkerBuilder;
+pub use channel::{channel, Message};
 pub use runner::JobRunner;
 
 pub(crate) const STATUS_RUNNING: usize = 0;
@@ -115,7 +121,7 @@ type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
 /// w.register("foo", process_job);
 ///
 /// let mut w = w.connect(None).await.unwrap();
-/// if let Err(e) = w.run(&["default"]).await {
+/// if let Err(e) = w.run(&["default"], None).await {
 ///     println!("worker failed: {}", e);
 /// }
 /// # });
@@ -141,6 +147,8 @@ pub struct Worker<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> {
     worker_states: Arc<state::WorkerStatesRegistry>,
     callbacks: Arc<CallbacksRegistry<E>>,
     terminated: bool,
+    forever: bool,
+    shutdown_timeout: u64,
 }
 
 impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin + Reconnect, E> Worker<S, E> {
@@ -150,12 +158,19 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin + Reconnect, E> Worker<S,
 }
 
 impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> Worker<S, E> {
-    async fn new(c: Client<S>, workers_count: usize, callbacks: CallbacksRegistry<E>) -> Self {
+    async fn new(
+        c: Client<S>,
+        workers_count: usize,
+        callbacks: CallbacksRegistry<E>,
+        shutdown_timeout: u64,
+    ) -> Self {
         Worker {
             c,
             callbacks: Arc::new(callbacks),
             worker_states: Arc::new(state::WorkerStatesRegistry::new(workers_count)),
             terminated: false,
+            forever: false,
+            shutdown_timeout,
         }
     }
 }
@@ -224,13 +239,13 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
     // Returns the number of workers that may still be processing jobs.
     // We are ignoring any FAIL command issue errors, since this is already
     // an "emergency" case.
-    async fn force_fail_all_workers(&mut self) -> usize {
+    async fn force_fail_all_workers(&mut self, reason: &str) -> usize {
         let mut running = 0;
         for wstate in self.worker_states.iter() {
-            let may_be_jid = wstate.lock().unwrap().take_cuurently_running();
+            let may_be_jid = wstate.lock().unwrap().take_currently_running();
             if let Some(jid) = may_be_jid {
                 running += 1;
-                let f = Fail::new(jid, "unknown", "terminated");
+                let f = Fail::new(jid, "unknown", reason);
                 let _ = match self.c.issue(&f).await {
                     Ok(r) => r.read_ok().await,
                     Err(_) => continue,
@@ -287,6 +302,8 @@ impl<
             callbacks: Arc::clone(&self.callbacks),
             worker_states: Arc::clone(&self.worker_states),
             terminated: self.terminated,
+            forever: self.forever,
+            shutdown_timeout: self.shutdown_timeout,
         })
     }
 
@@ -314,74 +331,171 @@ impl<
     }
 
     /// Run this worker on the given `queues` until an I/O error occurs (`Err` is returned), or
-    /// until the server tells the worker to disengage (`Ok` is returned).
+    /// until the server tells the worker to disengage or [`Message::ReturnControl`] is sent (`Ok` is returned).
     ///
-    /// The value in an `Ok` indicates the number of workers that may still be processing jobs.
+    /// The value in an `Ok` indicates the number of workers that may still be processing jobs, but `0` can also
+    /// indicate the [graceful shutdown period](WorkerBuilder::graceful_shutdown_period) has been exceeded.
     ///
     /// If an error occurred while reporting a job success or failure, the result will be re-reported to the server
     /// without re-executing the job. If the worker was terminated (i.e., `run` returns  with an `Ok` response),
     /// the worker should **not** try to resume by calling `run` again. This will cause a panic.
-    pub async fn run<Q>(&mut self, queues: &[Q]) -> Result<usize, Error>
+    ///
+    /// In order to terminate the worker process for good (as opposed to returning control to your app), use [`Message::Exit`].
+    ///
+    /// ```no_run
+    /// # tokio_test::block_on(async {
+    /// use faktory::{Client, Job, Message, WorkerBuilder, channel};
+    ///
+    /// let mut cl = Client::connect(None).await.unwrap();
+    /// cl.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
+    ///
+    /// let mut w = WorkerBuilder::default();
+    /// w.graceful_shutdown_period(5_000);
+    /// w.register("foobar", |_j| async { Ok::<(), std::io::Error>(()) });
+    /// let mut w = w.connect(None).await.unwrap();
+    ///
+    /// let (tx, rx) = channel();
+    /// let _handle = tokio::spawn(async move { w.run(&["qname"], Some(rx)).await });
+    /// tx.send(Message::Exit(0)).await.expect("sent ok");
+    /// # });
+    /// ```
+    ///
+    /// In case you have no intention to send termination signals, the example from above
+    /// can be layed out as follows:
+    /// ```no_run
+    /// # tokio_test::block_on(async {
+    /// use faktory::{Client, Job, WorkerBuilder};
+    ///
+    /// let mut cl = Client::connect(None).await.unwrap();
+    /// cl.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
+    ///
+    /// let mut w = WorkerBuilder::default();
+    /// w.register("foobar", |_j| async { Ok::<(), std::io::Error>(()) });
+    /// let mut w = w.connect(None).await.unwrap();
+    ///
+    /// let _handle = tokio::spawn(async move { w.run(&["qname"], None).await });
+    /// # });
+    /// ```
+    pub async fn run<Q>(
+        &mut self,
+        queues: &[Q],
+        channel: Option<mpsc::Receiver<Message>>,
+    ) -> Result<usize, Error>
     where
         Q: AsRef<str>,
     {
         assert!(!self.terminated, "do not re-run a terminated worker");
         self.report_on_all_workers().await?;
 
-        let workers_count = self.worker_states.len();
+        let nworkers = self.worker_states.len();
 
         // keep track of the current status of each worker
-        let statuses: Vec<_> = (0..workers_count)
+        let statuses: Vec<_> = (0..nworkers)
             .map(|_| Arc::new(atomic::AtomicUsize::new(STATUS_RUNNING)))
             .collect();
 
-        let mut workers = Vec::with_capacity(workers_count);
-        for (worker, status) in statuses.iter().enumerate().take(workers_count) {
+        let mut workers = Vec::with_capacity(nworkers);
+        for (worker, status) in statuses.iter().enumerate().take(nworkers) {
             let handle = self
                 .spawn_worker(Arc::clone(status), worker, queues)
                 .await?;
             workers.push(handle)
         }
 
-        let exit = self.listen_for_heartbeats(&statuses).await;
+        let report = tokio::select! {
+            // SIGTERM received:
+            _ = tokio::signal::ctrl_c(), if self.forever => {
+                tracing::info!("SIGINT received, shutting down gracefully.");
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {
+                        tracing::info!("Another SIGINT received, exiting right now.");
+                        process::exit(0);
+                    },
+                    _ = tokio_sleep(TokioDuration::from_millis(self.shutdown_timeout)) => {
+                        tracing::warn!("Graceful shutdown period of {}ms exceeded, exiting right now.", self.shutdown_timeout);
+                        process::exit(0);
+                    },
+                    nrunning = self.force_fail_all_workers("SIGTERM received") => {
+                        tracing::info!("Number of workers that were still running: {}.", nrunning);
+                        process::exit(0);
+                    }
+                }
+            },
+            // Message from userland received:
+            Some(msg) = async { let mut ch = channel.unwrap(); ch.recv().await }, if channel.is_some() => {
+                if let Message::ExitNow(code) = msg {
+                    tracing::info!("Received signal to immediately exit with status {}.", code);
+                    process::exit(code);
+                }
+                if let Message::ReturnControlNow = msg {
+                    tracing::info!("Received signal to immediately return control. Returning without clean-up.");
+                    self.terminated = true;
+                    return Ok(0);
+                }
 
-        // there are a couple of cases here:
-        //
-        //  - we got TERMINATE, so we should just return, even if a worker is still running
-        //  - we got TERMINATE and all workers has exited
-        //  - we got an error from heartbeat()
-        //
-        self.terminated = exit.is_ok();
+                tracing::info!("Received termination signal: {:?}. Cleaning up...", msg);
 
-        if let Ok(true) = exit {
-            let running = self.force_fail_all_workers().await;
-            if running != 0 {
-                return Ok(running);
-            }
-        }
+                let nrunning = tokio::select! {
+                    _ = tokio_sleep(TokioDuration::from_millis(self.shutdown_timeout)) => {
+                        tracing::warn!("Graceful shutdown period of {}ms exceeded.", self.shutdown_timeout);
+                        0
+                    },
+                    nrunning = self.force_fail_all_workers("termination signal received over channel") => {
+                        tracing::info!("Number of workers that were still running: {}.", nrunning);
+                        nrunning
+                    }
+                };
+                match msg {
+                    Message::Exit(code) => process::exit(code),
+                    Message::ReturnControl => {
+                        self.terminated = true;
+                        return Ok(nrunning);
+                    },
+                    _ => unreachable!("ExitNow and ReturnControlNow variants are already handled above.")
+                }
+            },
+            // Instruction from Faktory received or error occurred:
+            exit = self.listen_for_heartbeats(&statuses) => {
+                // there are a couple of cases here:
+                //  - we got TERMINATE, so we should just return, even if a worker is still running
+                //  - we got TERMINATE and all workers has exited
+                //  - we got an error from heartbeat()
+                self.terminated = exit.is_ok();
 
-        // we want to expose worker errors, or otherwise the heartbeat error
-        let mut results = Vec::with_capacity(workers_count);
-        for w in workers {
-            results.push(w.await.expect("joined ok"));
-        }
-        let result = results.into_iter().collect::<Result<Vec<_>, _>>();
+                if let Ok(true) = exit {
+                    let running = self.force_fail_all_workers("terminated").await;
+                    if running != 0 {
+                        return Ok(running);
+                    }
+                }
 
-        match exit {
-            Ok(_) => result.map(|_| 0),
-            Err(e) => result.and(Err(e)),
-        }
+                // we want to expose worker errors, or otherwise the heartbeat error
+                let mut results = Vec::with_capacity(nworkers);
+                for w in workers {
+                    results.push(w.await.expect("joined ok"));
+                }
+                let aggregated = results.into_iter().collect::<Result<Vec<_>, _>>();
+
+                match exit {
+                    Ok(_) => aggregated.map(|_| 0),
+                    Err(e) => aggregated.and(Err(e)),
+                }
+            },
+        };
+
+        report
     }
 
     /// Run this worker until the server tells us to exit or a connection cannot be re-established.
     ///
-    /// This function never returns. When the worker decides to exit, the process is terminated.
+    /// This function never returns. When the worker decides to exit or SIGTERM is received,
+    /// the process is terminated within the [shutdown period](WorkerBuilder::graceful_shutdown_period).
     pub async fn run_to_completion<Q>(mut self, queues: &[Q]) -> !
     where
         Q: AsRef<str>,
     {
-        use std::process;
-        while self.run(queues).await.is_err() {
+        self.forever = true;
+        while self.run(queues, None).await.is_err() {
             if self.reconnect().await.is_err() {
                 break;
             }

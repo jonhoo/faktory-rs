@@ -15,7 +15,7 @@ impl WorkerState {
         self.last_job_result.take()
     }
 
-    pub(crate) fn take_cuurently_running(&mut self) -> Option<JobId> {
+    pub(crate) fn take_currently_running(&mut self) -> Option<JobId> {
         self.running_job.take()
     }
 

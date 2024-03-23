@@ -57,13 +57,25 @@ w.register("foobar", |job| async move {
      Ok::<(), io::Error>(())
 });
 let mut w = w.connect(None).await.unwrap();
-if let Err(e) = w.run(&["default"]).await {
+if let Err(e) = w.run(&["default"], None).await {
     println!("worker failed: {}", e);
 }
 ```
 
-## Run test suite locally
+Also see some usage examples in `examples` directory in the project's root. You can run an example with:
 
+```bash
+cargo run --example example_name
+```
+
+For instance, to run a `run_to_completion` example in release mode, hit:
+
+```bash
+cargo run --example run_to_completion --release
+```
+Make sure you've got Faktory server up-and-running. See [instructions](#run-test-suite-locally) on how to spin up Faktory locally.
+
+## Run test suite locally
 First ensure the "Factory" service is running and accepting connections on your machine.
 To launch it a [Factory](https://hub.docker.com/r/contribsys/faktory/) container with [docker](https://docs.docker.com/engine/install/), run:
 
