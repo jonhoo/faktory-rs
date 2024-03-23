@@ -432,6 +432,9 @@ impl<
                     self.terminated = true;
                     return Ok(0);
                 }
+
+                tracing::info!("Received termination signal: {:?}. Cleaning up...", msg);
+
                 let nrunning = tokio::select! {
                     _ = tokio_sleep(TokioDuration::from_millis(self.shutdown_timeout)) => {
                         tracing::warn!("Graceful shutdown period of {}ms exceeded.", self.shutdown_timeout);
