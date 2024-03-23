@@ -5,9 +5,13 @@ use tokio::sync::mpsc::{self, Receiver, Sender};
 
 /// Message sent to running worker.
 ///
-/// See documentation to [`Worker::run`](Worker::run)
+/// See documentation to [`Worker::run`](Worker::run),
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Message {
     /// Ternimate the process with the provided status code.
+    ///
+    /// Analogue of hitting Ctrl+C in [`Worker::run_to_completion`].
     Exit(i32),
 
     /// Ternimate the process with the provided status code right away.
