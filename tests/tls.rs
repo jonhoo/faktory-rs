@@ -56,7 +56,8 @@ mod fixtures {
     pub use handler::JobHandler;
 
     mod handler {
-        use faktory::{async_trait, Job, JobRunner};
+        use async_trait::async_trait;
+        use faktory::{Job, JobRunner};
         use std::{
             io,
             sync::{mpsc::Sender, Arc, Mutex},

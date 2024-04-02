@@ -9,7 +9,7 @@ use std::time;
 
 const QUEUES: &[&str] = &["queue0", "queue1", "queue2", "queue3", "queue4"];
 
-#[faktory::main]
+#[tokio::main]
 async fn main() {
     let matches = Command::new("My Super Program (Async)")
         .version("0.1")
