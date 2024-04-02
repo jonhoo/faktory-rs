@@ -41,6 +41,12 @@ pub enum Error {
     /// These generally indicate a mismatch between what the client expects and what the server provided.
     #[error("serialization")]
     Serialization(#[source] serde_json::Error),
+
+    /// Indicates an error in the underlying TLS stream.
+    #[cfg(feature = "tls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
+    #[error("underlying tls stream")]
+    TlsStream(#[source] tokio_native_tls::native_tls::Error),
 }
 
 /// Errors specific to connection logic.
