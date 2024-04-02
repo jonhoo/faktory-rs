@@ -1,3 +1,4 @@
+FAKTORY_IP=127.0.0.1
 FAKTORY_HOST=localhost
 FAKTORY_PORT=7419
 FAKTORY_PORT_SECURE=17419
@@ -17,8 +18,8 @@ doc:
 faktory:
 	docker run --rm -d \
 	-v faktory-data:/var/lib/faktory \
-	-p ${FAKTORY_HOST}:${FAKTORY_PORT}:7419 \
-	-p ${FAKTORY_HOST}:${FAKTORY_PORT_UI}:7420 \
+	-p ${FAKTORY_IP}:${FAKTORY_PORT}:7419 \
+	-p ${FAKTORY_IP}:${FAKTORY_PORT_UI}:7420 \
 	--name faktory \
 	contribsys/faktory:latest \
 	/faktory -b :7419 -w :7420

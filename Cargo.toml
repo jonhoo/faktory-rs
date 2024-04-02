@@ -15,7 +15,7 @@ exclude = [".github", "docker", ".gitignore", "Makefile"]
 
 [features]
 default = []
-tls = ["tokio-rustls", "pin-project"]
+tls = ["dep:tokio-rustls", "tokio/net", "tokio/io-util", "dep:pin-project"]
 binaries = ["clap"]
 ent = []
 
@@ -37,8 +37,7 @@ serde_json = "1.0"
 sha2 = "0.10.0"
 thiserror = "1.0.30"
 tokio = { version = "1.35.1", features = [
-    "io-util",
-    "net",
+    "rt",
     "time",
     "macros",
     "rt-multi-thread",
