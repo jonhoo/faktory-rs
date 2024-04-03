@@ -49,7 +49,6 @@ where
     S: AsyncRead + AsyncWrite + Reconnect + Send + Sync,
 {
     async fn reconnect(&mut self) -> io::Result<Self> {
-        // let addr = &self.get_ref().peer_addr().expect("socket address");
         let stream = self.get_mut().reconnect().await?;
         Ok(Self::new(stream))
     }
