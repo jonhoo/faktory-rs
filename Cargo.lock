@@ -439,6 +439,7 @@ dependencies = [
  "hostname",
  "num-bigint",
  "oid-registry",
+ "openssl",
  "pin-project",
  "rand",
  "rustls",
