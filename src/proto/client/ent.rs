@@ -1,5 +1,5 @@
-use super::super::batch::{CommitBatch, GetBatchStatus};
-use super::super::{single, BatchStatus, JobId, OpenBatch, Progress, ProgressUpdate, Track};
+use super::super::batch::{CommitBatch, GetBatchStatus, OpenBatch};
+use super::super::{single, BatchStatus, JobId, Progress, ProgressUpdate, Track};
 use super::{Client, ReadToken};
 use crate::ent::{Batch, BatchHandle, BatchId};
 use crate::error::Error;

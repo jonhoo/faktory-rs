@@ -39,5 +39,5 @@ batch_cmd!(CommitBatch, "COMMIT");
 pub(crate) struct GetBatchStatus(BatchId);
 batch_cmd!(GetBatchStatus, "STATUS");
 
-pub struct OpenBatch(BatchId);
+pub(crate) struct OpenBatch(BatchId);
 batch_cmd!(OpenBatch, "OPEN");
