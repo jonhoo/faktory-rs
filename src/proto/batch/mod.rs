@@ -8,11 +8,11 @@ mod cmd;
 mod handle;
 mod status;
 
-pub use cmd::{GetBatchStatus, OpenBatch};
+pub use cmd::OpenBatch;
 pub use handle::BatchHandle;
 pub use status::{BatchStatus, CallbackState};
 
-pub(crate) use cmd::CommitBatch;
+pub(crate) use cmd::{CommitBatch, GetBatchStatus};
 
 /// Batch of jobs.
 ///

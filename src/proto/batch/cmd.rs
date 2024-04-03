@@ -36,7 +36,7 @@ macro_rules! batch_cmd {
 pub(crate) struct CommitBatch(BatchId);
 batch_cmd!(CommitBatch, "COMMIT");
 
-pub struct GetBatchStatus(BatchId);
+pub(crate) struct GetBatchStatus(BatchId);
 batch_cmd!(GetBatchStatus, "STATUS");
 
 pub struct OpenBatch(BatchId);

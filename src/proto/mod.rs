@@ -23,9 +23,7 @@ pub use self::single::BatchId;
 #[cfg(feature = "ent")]
 mod batch;
 #[cfg(feature = "ent")]
-pub use batch::{
-    Batch, BatchBuilder, BatchHandle, BatchStatus, CallbackState, GetBatchStatus, OpenBatch,
-};
+pub use batch::{Batch, BatchBuilder, BatchHandle, BatchStatus, CallbackState, OpenBatch};
 
 /// A stream that can be re-established after failing.
 #[async_trait::async_trait]
