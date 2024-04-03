@@ -23,8 +23,9 @@ macro_rules! batch_cmd {
         #[async_trait::async_trait]
         impl FaktoryCommand for $structure {
             async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
-                let c = format!("BATCH {} ", $cmd);
-                w.write_all(c.as_bytes()).await?;
+                w.write_all(b"BATCH ").await?;
+                w.write_all($cmd.as_bytes()).await?;
+                w.write_all(b" ").await?;
                 w.write_all(self.0.as_bytes()).await?;
                 Ok(w.write_all(b"\r\n").await?)
             }
@@ -32,7 +33,7 @@ macro_rules! batch_cmd {
     };
 }
 
-pub struct CommitBatch(BatchId);
+pub(crate) struct CommitBatch(BatchId);
 batch_cmd!(CommitBatch, "COMMIT");
 
 pub struct GetBatchStatus(BatchId);

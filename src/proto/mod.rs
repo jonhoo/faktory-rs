@@ -24,8 +24,7 @@ pub use self::single::BatchId;
 mod batch;
 #[cfg(feature = "ent")]
 pub use batch::{
-    Batch, BatchBuilder, BatchHandle, BatchStatus, CallbackState, CommitBatch, GetBatchStatus,
-    OpenBatch,
+    Batch, BatchBuilder, BatchHandle, BatchStatus, CallbackState, GetBatchStatus, OpenBatch,
 };
 
 /// A stream that can be re-established after failing.
