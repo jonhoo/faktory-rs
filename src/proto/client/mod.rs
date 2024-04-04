@@ -288,6 +288,36 @@ where
             .await
     }
 
+    pub(crate) async fn heartbeat(&mut self) -> Result<HeartbeatStatus, Error> {
+        single::write_command(
+            &mut self.stream,
+            &single::Heartbeat::new(self.opts.wid.as_ref().unwrap().clone()),
+        )
+        .await?;
+
+        match single::read_json::<_, serde_json::Value>(&mut self.stream).await? {
+            None => Ok(HeartbeatStatus::Ok),
+            Some(s) => match s
+                .as_object()
+                .and_then(|m| m.get("state"))
+                .and_then(|s| s.as_str())
+            {
+                Some("terminate") => Ok(HeartbeatStatus::Terminate),
+                Some("quiet") => Ok(HeartbeatStatus::Quiet),
+                _ => Err(error::Protocol::BadType {
+                    expected: "heartbeat response",
+                    received: format!("{}", s),
+                }
+                .into()),
+            },
+        }
+    }
+}
+
+impl<S> Client<S>
+where
+    S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send,
+{
     /// Asynchronously enqueue the given job on the Faktory server.
     ///
     /// Returns `Ok` if the job was successfully queued by the Faktory server.
@@ -359,31 +389,6 @@ where
             .await?
             .read_ok()
             .await
-    }
-
-    pub(crate) async fn heartbeat(&mut self) -> Result<HeartbeatStatus, Error> {
-        single::write_command(
-            &mut self.stream,
-            &single::Heartbeat::new(self.opts.wid.as_ref().unwrap().clone()),
-        )
-        .await?;
-
-        match single::read_json::<_, serde_json::Value>(&mut self.stream).await? {
-            None => Ok(HeartbeatStatus::Ok),
-            Some(s) => match s
-                .as_object()
-                .and_then(|m| m.get("state"))
-                .and_then(|s| s.as_str())
-            {
-                Some("terminate") => Ok(HeartbeatStatus::Terminate),
-                Some("quiet") => Ok(HeartbeatStatus::Quiet),
-                _ => Err(error::Protocol::BadType {
-                    expected: "heartbeat response",
-                    received: format!("{}", s),
-                }
-                .into()),
-            },
-        }
     }
 }
 
