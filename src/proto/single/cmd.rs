@@ -53,15 +53,12 @@ impl FaktoryCommand for Info {
 
 #[derive(Serialize)]
 pub struct Ack {
-    #[serde(rename = "jid")]
-    job_id: JobId,
+    jid: JobId,
 }
 
-impl From<&JobId> for Ack {
-    fn from(job_id: &JobId) -> Self {
-        Ack {
-            job_id: job_id.to_owned(),
-        }
+impl Ack {
+    pub fn new<J: Into<JobId>>(jid: J) -> Ack {
+        Ack { jid: jid.into() }
     }
 }
 

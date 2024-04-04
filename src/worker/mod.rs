@@ -179,7 +179,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
     }
 
     async fn report_success_to_server(&mut self, jid: JobId) -> Result<(), Error> {
-        self.c.issue(&Ack::from(&jid)).await?.read_ok().await
+        self.c.issue(&Ack::new(jid)).await?.read_ok().await
     }
 
     async fn report_on_all_workers(&mut self) -> Result<(), Error> {
@@ -192,7 +192,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
             let wstate = wstate.get_mut().unwrap();
             if let Some(res) = wstate.take_last_result() {
                 let r = match res {
-                    Ok(ref jid) => self.c.issue(&Ack::from(jid)).await,
+                    Ok(ref jid) => self.c.issue(&Ack::new(jid.clone())).await,
                     Err(ref fail) => self.c.issue(fail).await,
                 };
 
