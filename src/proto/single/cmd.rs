@@ -40,7 +40,7 @@ where
 
 // -------------------- INFO ----------------------
 
-pub struct Info;
+pub(crate) struct Info;
 
 #[async_trait::async_trait]
 impl FaktoryCommand for Info {
@@ -52,7 +52,7 @@ impl FaktoryCommand for Info {
 // -------------------- ACK ----------------------
 
 #[derive(Serialize)]
-pub struct Ack {
+pub(crate) struct Ack {
     jid: JobId,
 }
 
@@ -67,7 +67,7 @@ self_to_cmd!(Ack, "ACK");
 // -------------------- BEAT ------------------
 
 #[derive(Serialize)]
-pub struct Heartbeat {
+pub(crate) struct Heartbeat {
     wid: WorkerId,
 }
 
@@ -82,7 +82,7 @@ self_to_cmd!(Heartbeat, "BEAT");
 // -------------------- FAIL ---------------------
 
 #[derive(Serialize, Clone)]
-pub struct Fail {
+pub(crate) struct Fail {
     #[serde(rename = "jid")]
     job_id: JobId,
     #[serde(rename = "errtype")]
@@ -136,7 +136,7 @@ self_to_cmd!(Fail, "FAIL");
 
 // ---------------------- END --------------------
 
-pub struct End;
+pub(crate) struct End;
 
 #[async_trait::async_trait]
 impl FaktoryCommand for End {
@@ -147,7 +147,7 @@ impl FaktoryCommand for End {
 
 // --------------------- FETCH --------------------
 
-pub struct Fetch<'a, S>
+pub(crate) struct Fetch<'a, S>
 where
     S: AsRef<str>,
 {
@@ -178,7 +178,7 @@ where
 // --------------------- HELLO --------------------
 
 #[derive(Serialize)]
-pub struct Hello {
+pub(crate) struct Hello {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hostname: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -228,7 +228,7 @@ self_to_cmd!(Hello, "HELLO");
 
 // --------------------- PUSH --------------------
 
-pub struct Push(Job);
+pub(crate) struct Push(Job);
 
 use std::ops::Deref;
 impl Deref for Push {
@@ -256,7 +256,7 @@ impl FaktoryCommand for Push {
 
 // ---------------------- PUSHB -------------------
 
-pub struct PushBulk(Vec<Job>);
+pub(crate) struct PushBulk(Vec<Job>);
 
 impl From<Vec<Job>> for PushBulk {
     fn from(jobs: Vec<Job>) -> Self {
@@ -276,12 +276,12 @@ impl FaktoryCommand for PushBulk {
 
 // ---------------------- QUEUE -------------------
 
-pub enum QueueAction {
+pub(crate) enum QueueAction {
     Pause,
     Resume,
 }
 
-pub struct QueueControl<'a, S>
+pub(crate) struct QueueControl<'a, S>
 where
     S: AsRef<str>,
 {
