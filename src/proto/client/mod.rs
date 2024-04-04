@@ -228,6 +228,7 @@ where
         let hi = single::read_hi(&mut self.stream).await?;
         check_protocols_match(hi.version)?;
 
+        // fill in any missing options, and remember them for re-connect
         let mut hello = single::Hello::default();
 
         // prepare password hash, if one expected by 'Faktory'
@@ -239,12 +240,8 @@ where
             }
         }
 
-        // fill in any missing options, and remember them for re-connect
-        let mut hello = single::Hello::default();
-
         if self.opts.is_worker {
             // fill in any missing options, and remember them for re-connect
-
             let hostname = self
                 .opts
                 .hostname
@@ -261,14 +258,6 @@ where
             hello.wid = Some(self.opts.wid.clone().unwrap());
             hello.pid = Some(self.opts.pid.unwrap());
             hello.labels.clone_from(&self.opts.labels);
-        }
-
-        if hi.salt.is_some() {
-            if let Some(ref pwd) = self.opts.password {
-                hello.set_password(&hi, pwd);
-            } else {
-                return Err(error::Connect::AuthenticationNeeded.into());
-            }
         }
 
         single::write_command_and_await_ok(&mut self.stream, &hello).await?;
