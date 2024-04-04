@@ -93,7 +93,7 @@ pub struct Fail {
 }
 
 impl Fail {
-    pub fn new(job_id: JobId, kind: impl Into<String>, message: impl Into<String>) -> Self {
+    pub(crate) fn new(job_id: JobId, kind: impl Into<String>, message: impl Into<String>) -> Self {
         Fail {
             job_id,
             kind: kind.into(),
@@ -102,16 +102,21 @@ impl Fail {
         }
     }
 
-    // "unknown" is the errtype used by the go library too
-    pub fn generic<S: Into<String>>(job_id: JobId, message: S) -> Self {
+    // Used for all kind of errors not related to domain logic, e.g. missing handler for this type of job (i.e.
+    // the worker consumed a job from a specified queue, but has no tool to process it).
+    // Note that "unknown" is the error type used by the Go library in such cases too.
+    pub(crate) fn generic<S: Into<String>>(job_id: JobId, message: S) -> Self {
         Fail::new(job_id, "unknown", message)
     }
 
-    pub fn set_backtrace(&mut self, lines: Vec<String>) {
+    pub(crate) fn set_backtrace(&mut self, lines: Vec<String>) {
         self.backtrace = lines;
     }
 
-    pub fn generic_with_backtrace<E>(jid: JobId, e: E) -> Self
+    // For any application errors (all kind of errors that could happen in userland when handling the job)
+    // we want to send backtrace (split into lines) to the Faktory server so that whoever is interested in
+    // the job result could follow the trace (for debugging essentially).
+    pub(crate) fn generic_with_backtrace<E>(jid: JobId, e: E) -> Self
     where
         E: StdError,
     {
