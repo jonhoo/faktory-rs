@@ -13,8 +13,8 @@ macro_rules! self_to_cmd {
         #[async_trait::async_trait]
         impl FaktoryCommand for $struct {
             async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
-                let c = format!("{} ", $cmd);
-                w.write_all(c.as_bytes()).await?;
+                w.write_all($cmd.as_bytes()).await?;
+                w.write_all(b" ").await?;
                 let r = serde_json::to_vec(self).map_err(Error::Serialization)?;
                 w.write_all(&r).await?;
                 Ok(w.write_all(b"\r\n").await?)
