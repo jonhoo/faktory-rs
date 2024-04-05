@@ -30,38 +30,36 @@ async fn enqueue_job() {
     p.enqueue(JobBuilder::new("order").build()).await.unwrap();
 }
 
-async fn process_order(j: Job) -> Result<(), std::io::Error> {
-    println!("{:?}", j);
-    assert_eq!(j.kind(), "order");
-    Ok(())
-}
-
 #[tokio::test(flavor = "multi_thread")]
 async fn roundtrip() {
     skip_check!();
+
+    let local = "roundtrip";
     let jid = String::from("x-job-id-0123456782");
+
     let mut c = WorkerBuilder::default();
-    c.register("order", process_order);
-    c.register("image", |job| async move {
-        println!("{:?}", job);
-        assert_eq!(job.kind(), "image");
-        Ok(())
+    c.register("order", move |job| async move {
+        assert_eq!(job.kind(), "order");
+        assert_eq!(job.queue, local);
+        assert_eq!(job.args(), &[Value::from("ISBN-13:9781718501850")]);
+        Ok::<(), io::Error>(())
     });
+    c.register("image", |_| async move { unreachable!() });
     let mut c = c.connect(None).await.unwrap();
     let mut p = Client::connect(None).await.unwrap();
     p.enqueue(
         JobBuilder::new("order")
             .jid(&jid)
             .args(vec!["ISBN-13:9781718501850"])
-            .queue("roundtrip")
+            .queue(local)
             .build(),
     )
     .await
     .unwrap();
-    let had_one = c.run_one(0, &["roundtrip"]).await.unwrap();
+    let had_one = c.run_one(0, &[local]).await.unwrap();
     assert!(had_one);
 
-    let drained = !c.run_one(0, &["roundtrip"]).await.unwrap();
+    let drained = !c.run_one(0, &[local]).await.unwrap();
     assert!(drained);
 }
 
