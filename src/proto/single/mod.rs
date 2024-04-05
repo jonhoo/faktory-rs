@@ -84,7 +84,7 @@ pub struct Job {
 
     /// The arguments provided for this job.
     #[builder(setter(custom), default = "Vec::new()")]
-    pub args: Vec<serde_json::Value>,
+    pub(crate) args: Vec<serde_json::Value>,
 
     /// When this job was created.
     // note that serializing works correctly here since the default chrono serialization
@@ -163,9 +163,10 @@ impl JobBuilder {
     }
 
     /// Setter for the arguments provided for this job.
-    pub fn args<A>(&mut self, args: Vec<A>) -> &mut Self
+    pub fn args<I, V>(&mut self, args: I) -> &mut Self
     where
-        A: Into<serde_json::Value>,
+        I: IntoIterator<Item = V>,
+        V: Into<serde_json::Value>,
     {
         self.args = Some(args.into_iter().map(|s| s.into()).collect());
         self
