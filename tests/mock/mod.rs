@@ -79,7 +79,6 @@ impl Stream {
         let streams = (0..streams)
             .map(|_| {
                 let mut s = inner::MockStream::default();
-                eprintln!("{:#?}", s);
                 // need to say HELLO
                 if let Some((iters, salt)) = salt {
                     // include salt for pwdhash
