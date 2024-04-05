@@ -8,7 +8,6 @@ async fn hello() {
 
     let p = Client::connect_with(s.clone(), None).await.unwrap();
     let written = s.pop_bytes_written(0);
-    eprintln!("{:?}", String::from_utf8(written.clone()).unwrap());
     assert!(written.starts_with(b"HELLO {"));
     let written: serde_json::Value = serde_json::from_slice(&written[b"HELLO ".len()..]).unwrap();
     let written = written.as_object().unwrap();
