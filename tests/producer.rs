@@ -1,7 +1,3 @@
-extern crate faktory;
-extern crate serde_json;
-extern crate url;
-
 mod mock;
 
 use faktory::*;
