@@ -96,7 +96,8 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 ///
 /// `Client` is also useful for retrieving and updating information on a job's execution progress
 /// (see [`Progress`] and [`ProgressUpdate`]), as well for retrieving a batch's status
-/// from the Faktory server (see [`BatchStatus`]).
+/// from the Faktory server (see [`BatchStatus`]). But these constructs are only available under `ent` feature
+/// and are only supported by Enterprise Faktory.
 ///
 /// Fetching a job's execution progress:
 ///
