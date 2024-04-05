@@ -6,10 +6,21 @@ use serde_json::Value;
 use std::{io, sync};
 
 #[tokio::test(flavor = "multi_thread")]
-async fn hello_p() {
+async fn hello_client() {
     skip_check!();
     let p = Client::connect(None).await.unwrap();
     drop(p);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn hello_worker() {
+    skip_check!();
+    let mut c = WorkerBuilder::<io::Error>::default();
+    c.hostname("tester".to_string())
+        .labels(vec!["foo".to_string(), "bar".to_string()]);
+    c.register("never_called", |_| async move { unreachable!() });
+    let c = c.connect(None).await.unwrap();
+    drop(c);
 }
 
 #[tokio::test(flavor = "multi_thread")]
