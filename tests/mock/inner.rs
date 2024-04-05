@@ -19,8 +19,7 @@ impl MockStream {
 
     pub fn pop_bytes_written(&mut self) -> Vec<u8> {
         let mut du = self.du.lock().unwrap();
-        let mut wr = Vec::new();
-        mem::swap(&mut wr, du.writer.get_mut());
+        let wr = mem::take(du.writer.get_mut());
         du.writer.set_position(0);
         wr
     }
