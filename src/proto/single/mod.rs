@@ -71,7 +71,7 @@ const JOB_DEFAULT_BACKTRACE: usize = 0;
 pub struct Job {
     /// The job's unique identifier.
     #[builder(default = "JobId::random()")]
-    pub jid: JobId,
+    pub(crate) jid: JobId,
 
     /// The queue this job belongs to. Usually `default`.
     #[builder(default = "JOB_DEFAULT_QUEUE.into()")]
