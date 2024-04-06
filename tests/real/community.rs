@@ -1,5 +1,3 @@
-extern crate faktory;
-
 use crate::skip_check;
 use faktory::{Client, Job, JobBuilder, WorkerBuilder};
 use serde_json::Value;
@@ -320,8 +318,8 @@ async fn test_jobs_created_with_builder() {
     assert!(had_job);
 }
 
-use tokio::sync::mpsc;
 use std::pin::Pin;
+use tokio::sync::mpsc;
 fn process_hard_task(
     sender: sync::Arc<mpsc::Sender<bool>>,
 ) -> Box<

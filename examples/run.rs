@@ -1,7 +1,7 @@
-use faktory::{channel, main, Message, WorkerBuilder};
+use faktory::{channel, Message, WorkerBuilder};
 use std::io::Error as IOError;
 
-#[main]
+#[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::fmt()
         .with_max_level(tracing::Level::TRACE)
