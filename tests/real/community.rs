@@ -1,5 +1,3 @@
-extern crate faktory;
-
 use crate::skip_check;
 use faktory::{Client, Job, JobBuilder, WorkerBuilder};
 use serde_json::Value;

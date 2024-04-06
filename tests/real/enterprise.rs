@@ -1,5 +1,3 @@
-extern crate faktory;
-
 use crate::skip_if_not_enterprise;
 use crate::utils::learn_faktory_url;
 use chrono::Utc;
