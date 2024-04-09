@@ -279,6 +279,7 @@ impl FaktoryCommand for PushBulk {
 pub(crate) enum QueueAction {
     Pause,
     Resume,
+    Remove,
 }
 
 pub(crate) struct QueueControl<'a, S>
@@ -298,6 +299,7 @@ where
         let command = match self.action {
             QueueAction::Pause => b"QUEUE PAUSE".as_ref(),
             QueueAction::Resume => b"QUEUE RESUME".as_ref(),
+            QueueAction::Remove => b"QUEUE REMOVE".as_ref(),
         };
         w.write_all(command).await?;
         write_queues(w, self.queues).await?;

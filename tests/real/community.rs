@@ -141,36 +141,93 @@ async fn fail() {
 #[tokio::test(flavor = "multi_thread")]
 async fn queue() {
     skip_check!();
-    let local = "pause";
+
+    let local_1 = "queue_control_pause_and_resume_1";
+    let local_2 = "queue_control_pause_and_resume_2";
 
     let (tx, rx) = sync::mpsc::channel();
     let tx = sync::Arc::new(sync::Mutex::new(tx));
-
     let mut c = WorkerBuilder::default();
-    c.hostname("tester".to_string()).wid(local.into());
-    c.register(local, move |_job| {
+    c.hostname("tester".to_string()).wid(local_1.into());
+    {
+        let tx = sync::Arc::clone(&tx);
+        c.register(local_1, move |_job| {
+            let tx = sync::Arc::clone(&tx);
+            Box::pin(async move { tx.lock().unwrap().send(true) })
+        });
+    }
+    c.register(local_2, move |_job| {
         let tx = sync::Arc::clone(&tx);
         Box::pin(async move { tx.lock().unwrap().send(true) })
     });
-    let mut c = c.connect(None).await.unwrap();
 
-    let mut p = Client::connect(None).await.unwrap();
-    p.enqueue(Job::new(local, vec![Value::from(1)]).on_queue(local))
+    let mut worker = c.connect(None).await.unwrap();
+
+    let mut client = Client::connect(None).await.unwrap();
+
+    // enqueue three jobs
+    client
+        .enqueue_many([
+            Job::new(local_1, vec![Value::from(1)]).on_queue(local_1),
+            Job::new(local_1, vec![Value::from(1)]).on_queue(local_1),
+            Job::new(local_1, vec![Value::from(1)]).on_queue(local_1),
+        ])
         .await
         .unwrap();
-    p.queue_pause(&[local]).await.unwrap();
 
-    let had_job = c.run_one(0, &[local]).await.unwrap();
+    // pause the queue
+    client.queue_pause(&[local_1]).await.unwrap();
+
+    // try to consume from that queue
+    let had_job = worker.run_one(0, &[local_1]).await.unwrap();
     assert!(!had_job);
     let worker_executed = rx.try_recv().is_ok();
     assert!(!worker_executed);
 
-    p.queue_resume(&[local]).await.unwrap();
+    // resume that queue and ...
+    client.queue_resume(&[local_1]).await.unwrap();
 
-    let had_job = c.run_one(0, &[local]).await.unwrap();
+    // ... be able to consume from it
+    let had_job = worker.run_one(0, &[local_1]).await.unwrap();
     assert!(had_job);
     let worker_executed = rx.try_recv().is_ok();
     assert!(worker_executed);
+
+    // push two jobs on the other queue (reminder: we got two jobs
+    // remaining on the first queue):
+    client
+        .enqueue_many([
+            Job::new(local_2, vec![Value::from(1)]).on_queue(local_2),
+            Job::new(local_2, vec![Value::from(1)]).on_queue(local_2),
+        ])
+        .await
+        .unwrap();
+
+    // pause both queues the queues
+    client.queue_pause(&[local_1, local_2]).await.unwrap();
+
+    // try to consume from them
+    assert!(!worker.run_one(0, &[local_1]).await.unwrap());
+    assert!(!worker.run_one(0, &[local_2]).await.unwrap());
+    assert!(!rx.try_recv().is_ok());
+
+    // now, resume the queues and ...
+    client.queue_resume(&[local_1, local_2]).await.unwrap();
+
+    // ... be able to consume from both of them
+    assert!(worker.run_one(0, &[local_1]).await.unwrap());
+    assert!(rx.try_recv().is_ok());
+    assert!(worker.run_one(0, &[local_2]).await.unwrap());
+    assert!(rx.try_recv().is_ok());
+
+    // let's now remove the queues
+    client.queue_remove(&[local_1, local_2]).await.unwrap();
+
+    // though there _was_ a job in each queue, consuming from
+    // the removed queues will not yield anything
+    assert!(!worker.run_one(0, &[local_1]).await.unwrap());
+    assert!(!worker.run_one(0, &[local_2]).await.unwrap());
+    assert!(!rx.try_recv().is_ok());
 }
 
 #[tokio::test(flavor = "multi_thread")]
