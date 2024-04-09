@@ -230,6 +230,8 @@ async fn queue_control_actions() {
     assert!(!rx.try_recv().is_ok());
 }
 
+// Run the following test with:
+// FAKTORY_URL=tcp://127.0.0.1:7419 cargo test --locked --all-features --all-targets queue_control_actions_wildcard -- --include-ignored
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "This requires a dedicated test run since the commands affect all queues on the Faktory server"]
 async fn queue_control_actions_wildcard() {
