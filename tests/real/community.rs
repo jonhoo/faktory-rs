@@ -139,7 +139,7 @@ async fn fail() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn queue() {
+async fn queue_control_actions() {
     skip_check!();
 
     let local_1 = "queue_control_pause_and_resume_1";
@@ -222,6 +222,72 @@ async fn queue() {
 
     // let's now remove the queues
     client.queue_remove(&[local_1, local_2]).await.unwrap();
+
+    // though there _was_ a job in each queue, consuming from
+    // the removed queues will not yield anything
+    assert!(!worker.run_one(0, &[local_1]).await.unwrap());
+    assert!(!worker.run_one(0, &[local_2]).await.unwrap());
+    assert!(!rx.try_recv().is_ok());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "This requires a dedicated test run since the commands affect all queues on the Faktory server"]
+async fn queue_control_actions_wildcard() {
+    skip_check!();
+
+    let local_1 = "queue_control_wildcard_1";
+    let local_2 = "queue_control_wildcard_2";
+
+    let (tx, rx) = sync::mpsc::channel();
+    let tx = sync::Arc::new(sync::Mutex::new(tx));
+    let mut c = WorkerBuilder::default();
+    c.hostname("tester".to_string()).wid(local_1.into());
+    {
+        let tx = sync::Arc::clone(&tx);
+        c.register(local_1, move |_job| {
+            let tx = sync::Arc::clone(&tx);
+            Box::pin(async move { tx.lock().unwrap().send(true) })
+        });
+    }
+    c.register(local_2, move |_job| {
+        let tx = sync::Arc::clone(&tx);
+        Box::pin(async move { tx.lock().unwrap().send(true) })
+    });
+
+    let mut worker = c.connect(None).await.unwrap();
+
+    let mut client = Client::connect(None).await.unwrap();
+
+    // enqueue two jobs on each queue
+    client
+        .enqueue_many([
+            Job::new(local_1, vec![Value::from(1)]).on_queue(local_1),
+            Job::new(local_1, vec![Value::from(1)]).on_queue(local_1),
+            Job::new(local_2, vec![Value::from(1)]).on_queue(local_2),
+            Job::new(local_2, vec![Value::from(1)]).on_queue(local_2),
+        ])
+        .await
+        .unwrap();
+
+    // pause all queues the queues
+    client.queue_pause_all().await.unwrap();
+
+    // try to consume from queues
+    assert!(!worker.run_one(0, &[local_1]).await.unwrap());
+    assert!(!worker.run_one(0, &[local_2]).await.unwrap());
+    assert!(!rx.try_recv().is_ok());
+
+    // now, resume all the queues and ...
+    client.queue_resume_all().await.unwrap();
+
+    // ... be able to consume from both of them
+    assert!(worker.run_one(0, &[local_1]).await.unwrap());
+    assert!(rx.try_recv().is_ok());
+    assert!(worker.run_one(0, &[local_2]).await.unwrap());
+    assert!(rx.try_recv().is_ok());
+
+    // let's now remove all the queues
+    client.queue_remove_all().await.unwrap();
 
     // though there _was_ a job in each queue, consuming from
     // the removed queues will not yield anything

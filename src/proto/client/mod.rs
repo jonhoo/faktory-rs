@@ -397,10 +397,7 @@ where
     }
 
     /// Pause all queues.
-    pub async fn queue_pause_all<Q>(&mut self) -> Result<(), Error>
-    where
-        Q: AsRef<str> + Sync,
-    {
+    pub async fn queue_pause_all(&mut self) -> Result<(), Error> {
         self.perform_queue_action(&["*"], QueueAction::Pause).await
     }
 
@@ -417,10 +414,7 @@ where
     }
 
     /// Resume all queues.
-    pub async fn queue_resume_all<Q>(&mut self) -> Result<(), Error>
-    where
-        Q: AsRef<str> + Sync,
-    {
+    pub async fn queue_resume_all(&mut self) -> Result<(), Error> {
         self.perform_queue_action(&["*"], QueueAction::Resume).await
     }
 
@@ -437,10 +431,7 @@ where
     }
 
     /// Remove all queues.
-    pub async fn queue_remove_all<Q>(&mut self) -> Result<(), Error>
-    where
-        Q: AsRef<str> + Sync,
-    {
+    pub async fn queue_remove_all(&mut self) -> Result<(), Error> {
         self.perform_queue_action(&["*"], QueueAction::Remove).await
     }
 }
