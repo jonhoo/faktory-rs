@@ -1,0 +1,55 @@
+
+*** src/proto/client/mod.rs:278:9: replace Client<S>::issue -> Result<ReadToken<'_, S>, Error> with Ok(ReadToken::new())
+
+*** mutation diff:
+--- src/proto/client/mod.rs
++++ replace Client<S>::issue -> Result<ReadToken<'_, S>, Error> with Ok(ReadToken::new())
+@@ -270,18 +270,17 @@
+         c.init().await?;
+         Ok(c)
+     }
+ 
+     pub(crate) async fn issue<FC: single::FaktoryCommand>(
+         &mut self,
+         c: &FC,
+     ) -> Result<ReadToken<'_, S>, Error> {
+-        single::write_command(&mut self.stream, c).await?;
+-        Ok(ReadToken(self))
++        Ok(ReadToken::new()) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     pub(crate) async fn fetch<Q>(&mut self, queues: &[Q]) -> Result<Option<Job>, Error>
+     where
+         Q: AsRef<str> + Sync,
+     {
+         self.issue(&single::Fetch::from(queues))
+             .await?
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-jIMFg4.tmp)
+error[E0599]: no function or associated item named `new` found for struct `ReadToken` in the current scope
+   --> src/proto/client/mod.rs:278:23
+    |
+278 |         Ok(ReadToken::new()) /* ~ changed by cargo-mutants ~ */
+    |                       ^^^ function or associated item not found in `ReadToken<'_, _>`
+...
+395 | pub struct ReadToken<'a, S>(pub(crate) &'a mut Client<S>)
+    | --------------------------- function or associated item `new` not found for this struct
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+    = note: the following traits define an item `new`, perhaps you need to implement one of them:
+            candidate #1: `VariableOutputCore`
+            candidate #2: `Digest`
+            candidate #3: `VariableOutput`
+            candidate #4: `KeyInit`
+            candidate #5: `KeyIvInit`
+            candidate #6: `Bit`
+            candidate #7: `UniformSampler`
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

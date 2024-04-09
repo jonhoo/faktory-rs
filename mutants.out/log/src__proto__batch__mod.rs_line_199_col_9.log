@@ -1,0 +1,56 @@
+
+*** src/proto/batch/mod.rs:199:9: replace BatchBuilder::with_callbacks -> Batch with Default::default()
+
+*** mutation diff:
+--- src/proto/batch/mod.rs
++++ replace BatchBuilder::with_callbacks -> Batch with Default::default()
+@@ -191,20 +191,17 @@
+     pub fn with_complete_callback(self, complete_cb: Job) -> Batch {
+         let mut b = self.build();
+         b.complete = Some(complete_cb);
+         b
+     }
+ 
+     /// Create a `Batch` with both `success` and `complete` callbacks specified.
+     pub fn with_callbacks(self, success_cb: Job, complete_cb: Job) -> Batch {
+-        let mut b = self.build();
+-        b.success = Some(success_cb);
+-        b.complete = Some(complete_cb);
+-        b
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ impl Clone for BatchBuilder {
+     fn clone(&self) -> Self {
+         BatchBuilder {
+             parent_bid: self.parent_bid.clone(),
+             description: self.description.clone(),
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+    Finished dev [unoptimized + debuginfo] target(s) in 1.23s
+
+*** result: Success
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml --locked --all-features --all-targets
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+error[E0277]: the trait bound `Batch: Default` is not satisfied
+   --> src/proto/batch/mod.rs:199:9
+    |
+199 |         Default::default() /* ~ changed by cargo-mutants ~ */
+    |         ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `Batch`
+    |
+help: consider annotating `Batch` with `#[derive(Default)]`
+    |
+132 + #[derive(Default)]
+133 | pub struct Batch {
+    |
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

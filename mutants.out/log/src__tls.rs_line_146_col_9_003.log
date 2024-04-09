@@ -1,0 +1,54 @@
+
+*** src/tls.rs:146:9: replace <impl AsyncRead for TlsStream<S>>::poll_read -> std::task::Poll<io::Result<()>> with Poll::from_iter([Ok(())])
+
+*** mutation diff:
+--- src/tls.rs
++++ replace <impl AsyncRead for TlsStream<S>>::poll_read -> std::task::Poll<io::Result<()>> with Poll::from_iter([Ok(())])
+@@ -138,17 +138,17 @@
+ }
+ 
+ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for TlsStream<S> {
+     fn poll_read(
+         self: std::pin::Pin<&mut Self>,
+         cx: &mut std::task::Context<'_>,
+         buf: &mut tokio::io::ReadBuf<'_>,
+     ) -> std::task::Poll<io::Result<()>> {
+-        self.project().stream.poll_read(cx, buf)
++        Poll::from_iter([Ok(())]) /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for TlsStream<S> {
+     fn poll_write(
+         self: std::pin::Pin<&mut Self>,
+         cx: &mut std::task::Context<'_>,
+         buf: &[u8],
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+    Finished dev [unoptimized + debuginfo] target(s) in 0.99s
+
+*** result: Success
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml --locked --all-features --all-targets
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+error[E0433]: failed to resolve: use of undeclared type `Poll`
+   --> src/tls.rs:146:9
+    |
+146 |         Poll::from_iter([Ok(())]) /* ~ changed by cargo-mutants ~ */
+    |         ^^^^ use of undeclared type `Poll`
+    |
+help: consider importing one of these items
+    |
+4   + use core::task::Poll;
+    |
+4   + use std::task::Poll;
+    |
+
+For more information about this error, try `rustc --explain E0433`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

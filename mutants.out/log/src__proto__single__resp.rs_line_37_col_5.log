@@ -1,0 +1,71 @@
+
+*** src/proto/single/resp.rs:37:5: replace read_json -> Result<Option<T>, Error> with Ok(Some(Default::default()))
+
+*** mutation diff:
+--- src/proto/single/resp.rs
++++ replace read_json -> Result<Option<T>, Error> with Ok(Some(Default::default()))
+@@ -29,42 +29,17 @@
+     }
+ }
+ 
+ // ----------------------------------------------
+ 
+ pub async fn read_json<R: AsyncBufReadExt + Unpin, T: serde::de::DeserializeOwned>(
+     r: R,
+ ) -> Result<Option<T>, Error> {
+-    let rr = read(r).await?;
+-    match rr {
+-        RawResponse::String(ref s) if s == "OK" => {
+-            return Ok(None);
+-        }
+-        RawResponse::String(ref s) => {
+-            return serde_json::from_str(s)
+-                .map(Some)
+-                .map_err(Error::Serialization);
+-        }
+-        RawResponse::Blob(ref b) if b == b"OK" => {
+-            return Ok(None);
+-        }
+-        RawResponse::Blob(ref b) => {
+-            if b.is_empty() {
+-                return Ok(None);
+-            }
+-            return serde_json::from_slice(b)
+-                .map(Some)
+-                .map_err(Error::Serialization);
+-        }
+-        RawResponse::Null => return Ok(None),
+-        _ => {}
+-    };
+-
+-    Err(bad("json", &rr).into())
++    Ok(Some(Default::default())) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ // ----------------------------------------------
+ 
+ #[cfg(feature = "ent")]
+ pub async fn read_bid<R: AsyncBufReadExt + Unpin>(r: R) -> Result<BatchId, Error> {
+     match read(r).await? {
+         RawResponse::Blob(ref b) if b.is_empty() => Err(error::Protocol::BadType {
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+error[E0277]: the trait bound `T: Default` is not satisfied
+  --> src/proto/single/resp.rs:37:13
+   |
+37 |     Ok(Some(Default::default())) /* ~ changed by cargo-mutants ~ */
+   |             ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `T`
+   |
+help: consider further restricting this bound
+   |
+34 | pub async fn read_json<R: AsyncBufReadExt + Unpin, T: serde::de::DeserializeOwned + std::default::Default>(
+   |                                                                                   +++++++++++++++++++++++
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

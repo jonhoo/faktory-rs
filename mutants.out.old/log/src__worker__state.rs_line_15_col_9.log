@@ -1,0 +1,228 @@
+
+*** src/worker/state.rs:15:9: replace WorkerState::take_last_result -> Option<Result<JobId, Fail>> with Some(Ok(Default::default()))
+
+*** mutation diff:
+--- src/worker/state.rs
++++ replace WorkerState::take_last_result -> Option<Result<JobId, Fail>> with Some(Ok(Default::default()))
+@@ -7,17 +7,17 @@
+ #[derive(Default)]
+ pub(crate) struct WorkerState {
+     last_job_result: Option<Result<JobId, Fail>>,
+     running_job: Option<JobId>,
+ }
+ 
+ impl WorkerState {
+     pub(crate) fn take_last_result(&mut self) -> Option<Result<JobId, Fail>> {
+-        self.last_job_result.take()
++        Some(Ok(Default::default())) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     pub(crate) fn take_cuurently_running(&mut self) -> Option<JobId> {
+         self.running_job.take()
+     }
+ 
+     pub(crate) fn save_last_result(&mut self, res: Result<JobId, Fail>) {
+         self.last_job_result = Some(res)
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-jIMFg4.tmp)
+    Finished dev [unoptimized + debuginfo] target(s) in 1.49s
+
+*** result: Success
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+    Finished test [unoptimized + debuginfo] target(s) in 0.04s
+     Running unittests src/lib.rs (target/debug/deps/faktory-248e4bd4cd431a2c)
+
+running 35 tests
+test proto::single::ent::test::test_same_purpose_setters_applied_simultaneously ... ok
+test proto::batch::test::test_batch_serialized_correctly ... ok
+test proto::single::ent::test::test_expiration_feature_for_enterprise_faktory ... ok
+test proto::batch::test::test_batch_creation ... ok
+test proto::single::resp::test::it_decodes_blob_json ... ok
+test proto::single::ent::test::test_uniqueness_faeture_for_enterprise_faktory ... ok
+test proto::single::resp::test::it_decodes_json_nill ... ok
+test proto::single::resp::test::it_decodes_json_empty ... ok
+test proto::single::resp::test::it_cant_do_arrays - should panic ... ok
+test proto::single::resp::test::it_decodes_json_ok_string ... ok
+test proto::single::resp::test::it_decodes_json_ok_blob ... ok
+test proto::single::resp::test::it_decodes_string_json ... ok
+test proto::single::resp::test::it_errors_on_bad_json_blob ... ok
+test proto::single::resp::test::it_errors_on_bad_json_string ... ok
+test proto::single::resp::test::it_errors_on_bad_numbers ... ok
+test proto::single::resp::test::it_parses_empty_bulk ... ok
+test proto::single::resp::test::it_errors_on_unknown_resp_type ... ok
+test proto::single::resp::test::it_parses_errors ... ok
+test proto::single::resp::test::it_errors_on_bad_sizes ... ok
+test proto::single::resp::test::it_parses_nills ... ok
+test proto::single::resp::test::it_parses_non_empty_bulk ... ok
+test proto::single::resp::test::it_parses_simple_strings ... ok
+test proto::single::resp::test::json_error_on_number ... ok
+test proto::single::test::test_all_job_creation_variants_align ... ok
+test proto::single::resp::test::it_parses_numbers ... ok
+test proto::single::test::test_arbitrary_custom_data_setter ... ok
+test proto::single::test::test_job_can_be_created_with_builder ... ok
+test proto::single::utils::test::test_id_of_known_size_generated ... ok
+test proto::utils::tests::correct_env_parsing ... ok
+test proto::utils::tests::url_can_take_password_and_port ... ok
+test proto::utils::tests::url_doesnt_require_port ... ok
+test proto::utils::tests::url_port_default ... ok
+test proto::utils::tests::url_requires_host ... ok
+test proto::utils::tests::url_requires_tcp ... ok
+test proto::single::utils::test::test_ids_are_unique ... ok
+
+test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.00s
+
+     Running unittests src/bin/loadtest.rs (target/debug/deps/loadtest-c216a21f6a383186)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/consumer.rs (target/debug/deps/consumer-e1d67c7fdddceb0c)
+
+running 8 tests
+test dequeue_first_empty ... ok
+test hello ... ok
+test dequeue ... ok
+test hello_pwd ... ok
+thread 'tokio-runtime-worker' panicked at tests/mock/mod.rs:137:9:
+assertion `left == right` failed
+  left: 1
+ right: 3
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+thread 'well_behaved_many' panicked at tests/consumer.rs:334:25:
+called `Result::unwrap()` on an `Err` value: JoinError::Panic(Id(258), ...)
+thread 'well_behaved_many' panicked at tests/mock/mod.rs:136:33:
+called `Result::unwrap()` on an `Err` value: PoisonError { .. }
+stack backtrace:
+   0:     0x5febbb6c66f6 - std::backtrace_rs::backtrace::libunwind::trace::h6e4a662bea54ccfc
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/../../backtrace/src/backtrace/libunwind.rs:104:5
+   1:     0x5febbb6c66f6 - std::backtrace_rs::backtrace::trace_unsynchronized::hb42b4eb2797d9c0e
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/../../backtrace/src/backtrace/mod.rs:66:5
+   2:     0x5febbb6c66f6 - std::sys_common::backtrace::_print_fmt::h2bc261f3223f4e4d
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/sys_common/backtrace.rs:68:5
+   3:     0x5febbb6c66f6 - <std::sys_common::backtrace::_print::DisplayBacktrace as core::fmt::Display>::fmt::h9cca0343d66d16a8
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/sys_common/backtrace.rs:44:22
+   4:     0x5febbb6efdd0 - core::fmt::rt::Argument::fmt::h8b666c45176be671
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/core/src/fmt/rt.rs:142:9
+   5:     0x5febbb6efdd0 - core::fmt::write::h4311bce0ee536615
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/core/src/fmt/mod.rs:1120:17
+   6:     0x5febbb6c3d4f - std::io::Write::write_fmt::h13dbc311a0609d24
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/io/mod.rs:1846:15
+   7:     0x5febbb6c64d4 - std::sys_common::backtrace::_print::h25f19b1d64e81f86
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/sys_common/backtrace.rs:47:5
+   8:     0x5febbb6c64d4 - std::sys_common::backtrace::print::h2fb8f70628a241ed
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/sys_common/backtrace.rs:34:9
+   9:     0x5febbb6c8247 - std::panicking::default_hook::{{closure}}::h05093fe2e3ef454d
+  10:     0x5febbb6c7f2d - std::panicking::default_hook::h5ac38aa38e0086d2
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/panicking.rs:289:9
+  11:     0x5febbb55ff67 - <alloc::boxed::Box<F,A> as core::ops::function::Fn<Args>>::call::h3af3363330b8f773
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/alloc/src/boxed.rs:2029:9
+  12:     0x5febbb55ff67 - test::test_main::{{closure}}::h6ba67334e23b2f5d
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/test/src/lib.rs:138:21
+  13:     0x5febbb6c8866 - <alloc::boxed::Box<F,A> as core::ops::function::Fn<Args>>::call::hce488f674cf5618d
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/alloc/src/boxed.rs:2029:9
+  14:     0x5febbb6c8866 - std::panicking::rust_panic_with_hook::hed79743dc8b4b969
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/panicking.rs:785:13
+  15:     0x5febbb6c85b2 - std::panicking::begin_panic_handler::{{closure}}::ha437b5d58f431abf
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/panicking.rs:659:13
+  16:     0x5febbb6c6bf6 - std::sys_common::backtrace::__rust_end_short_backtrace::hd98e82d5b39ec859
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/sys_common/backtrace.rs:171:18
+  17:     0x5febbb6c8304 - rust_begin_unwind
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/panicking.rs:647:5
+  18:     0x5febbb464ca5 - core::panicking::panic_fmt::hc69c4d258fe11477
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/core/src/panicking.rs:72:14
+  19:     0x5febbb4652a3 - core::result::unwrap_failed::hff299ec748d62aab
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/core/src/result.rs:1649:5
+  20:     0x5febbb48e7b4 - core::result::Result<T,E>::unwrap::h0100ff3dd08a0b56
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/core/src/result.rs:1073:23
+  21:     0x5febbb48e7b4 - <consumer::mock::Stream as core::ops::drop::Drop>::drop::hb4e133d30d9097ad
+                               at /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/tests/mock/mod.rs:136:17
+  22:     0x5febbb489f73 - core::ptr::drop_in_place<consumer::mock::Stream>::h0bff2a1cbc1251ef
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/core/src/ptr/mod.rs:507:1
+  23:     0x5febbb50432f - consumer::well_behaved_many::{{closure}}::h2d3fe6f7863cb608
+                               at /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/tests/consumer.rs:356:1
+  24:     0x5febbb466793 - <core::pin::Pin<P> as core::future::future::Future>::poll::h24c21f584a30906c
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/core/src/future/future.rs:124:9
+  25:     0x5febbb4dd134 - tokio::runtime::park::CachedParkThread::block_on::{{closure}}::h4626c788a640ef7c
+                               at /home/pavel/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tokio-1.36.0/src/runtime/park.rs:281:63
+  26:     0x5febbb4dc630 - tokio::runtime::coop::with_budget::h7357a691b2dc52d6
+                               at /home/pavel/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tokio-1.36.0/src/runtime/coop.rs:107:5
+  27:     0x5febbb4dc630 - tokio::runtime::coop::budget::h9143e9458443b4bf
+                               at /home/pavel/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tokio-1.36.0/src/runtime/coop.rs:73:5
+  28:     0x5febbb4dc630 - tokio::runtime::park::CachedParkThread::block_on::h234f3aa359c16a03
+                               at /home/pavel/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tokio-1.36.0/src/runtime/park.rs:281:31
+  29:     0x5febbb50d3f4 - tokio::runtime::context::blocking::BlockingRegionGuard::block_on::h7a655f53aee5a339
+                               at /home/pavel/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tokio-1.36.0/src/runtime/context/blocking.rs:66:9
+  30:     0x5febbb47cd88 - tokio::runtime::scheduler::multi_thread::MultiThread::block_on::{{closure}}::h598fee04aa40af4b
+                               at /home/pavel/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tokio-1.36.0/src/runtime/scheduler/multi_thread/mod.rs:87:13
+  31:     0x5febbb4bf914 - tokio::runtime::context::runtime::enter_runtime::h84e9dab972ea2390
+                               at /home/pavel/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tokio-1.36.0/src/runtime/context/runtime.rs:65:16
+  32:     0x5febbb47cd58 - tokio::runtime::scheduler::multi_thread::MultiThread::block_on::hdebc2d3be4649c6d
+                               at /home/pavel/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tokio-1.36.0/src/runtime/scheduler/multi_thread/mod.rs:86:9
+  33:     0x5febbb4e6247 - tokio::runtime::runtime::Runtime::block_on::hd23f664524826391
+                               at /home/pavel/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tokio-1.36.0/src/runtime/runtime.rs:350:45
+  34:     0x5febbb4ed098 - consumer::well_behaved_many::h1d439a0e79b7622f
+                               at /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/tests/consumer.rs:345:5
+  35:     0x5febbb504147 - consumer::well_behaved_many::{{closure}}::h9fd75a9e7c3cb1df
+                               at /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/tests/consumer.rs:283:29
+  36:     0x5febbb482bc6 - core::ops::function::FnOnce::call_once::hfd4ec7262c8f776d
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/core/src/ops/function.rs:250:5
+  37:     0x5febbb565b2f - core::ops::function::FnOnce::call_once::h75736212c3378490
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/core/src/ops/function.rs:250:5
+  38:     0x5febbb565b2f - test::__rust_begin_short_backtrace::h5404e4328b1839a0
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/test/src/lib.rs:621:18
+  39:     0x5febbb564981 - test::run_test_in_process::{{closure}}::h14f62785470e673e
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/test/src/lib.rs:644:60
+  40:     0x5febbb564981 - <core::panic::unwind_safe::AssertUnwindSafe<F> as core::ops::function::FnOnce<()>>::call_once::h5f21c69778df904a
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/core/src/panic/unwind_safe.rs:272:9
+  41:     0x5febbb564981 - std::panicking::try::do_call::h6727ab5cf938ba4a
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/panicking.rs:554:40
+  42:     0x5febbb564981 - std::panicking::try::h06f2ad8604abea38
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/panicking.rs:518:19
+  43:     0x5febbb564981 - std::panic::catch_unwind::h1a2ca30f7d8c994c
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/panic.rs:142:14
+  44:     0x5febbb564981 - test::run_test_in_process::h9b2121a0771a1f37
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/test/src/lib.rs:644:27
+  45:     0x5febbb564981 - test::run_test::{{closure}}::h4e7e18d467165f32
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/test/src/lib.rs:567:43
+  46:     0x5febbb52bd66 - test::run_test::{{closure}}::hd2f71fc407b285f3
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/test/src/lib.rs:595:41
+  47:     0x5febbb52bd66 - std::sys_common::backtrace::__rust_begin_short_backtrace::h84dd44f2bdb051ad
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/sys_common/backtrace.rs:155:18
+  48:     0x5febbb530da7 - std::thread::Builder::spawn_unchecked_::{{closure}}::{{closure}}::hbe8a81e42ce589e5
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/thread/mod.rs:529:17
+  49:     0x5febbb530da7 - <core::panic::unwind_safe::AssertUnwindSafe<F> as core::ops::function::FnOnce<()>>::call_once::h344823c619a67949
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/core/src/panic/unwind_safe.rs:272:9
+  50:     0x5febbb530da7 - std::panicking::try::do_call::hd626e17315d03ffd
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/panicking.rs:554:40
+  51:     0x5febbb530da7 - std::panicking::try::h970ab6d39bf1bcd7
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/panicking.rs:518:19
+  52:     0x5febbb530da7 - std::panic::catch_unwind::h1a28b9d8ff25f174
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/panic.rs:142:14
+  53:     0x5febbb530da7 - std::thread::Builder::spawn_unchecked_::{{closure}}::hff28967b9d312904
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/thread/mod.rs:528:30
+  54:     0x5febbb530da7 - core::ops::function::FnOnce::call_once{{vtable.shim}}::he6a1463a14803311
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/core/src/ops/function.rs:250:5
+  55:     0x5febbb6ccd85 - <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once::h32ae492e80523c39
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/alloc/src/boxed.rs:2015:9
+  56:     0x5febbb6ccd85 - <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once::hd05b2dc112b7a972
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/alloc/src/boxed.rs:2015:9
+  57:     0x5febbb6ccd85 - std::sys::pal::unix::thread::Thread::new::thread_start::h40e6fd3f8ce15a14
+                               at /rustc/7cf61ebde7b22796c69757901dd346d0fe70bd97/library/std/src/sys/pal/unix/thread.rs:108:17
+  58:     0x76196a294ac3 - start_thread
+                               at ./nptl/pthread_create.c:442:8
+  59:     0x76196a326850 - __GI___clone3
+                               at ./misc/../sysdeps/unix/sysv/linux/x86_64/clone3.S:81
+  60:                0x0 - <unknown>
+thread 'well_behaved_many' panicked at library/core/src/panicking.rs:163:5:
+panic in a destructor during cleanup
+thread caused non-unwinding panic. aborting.
+error: test failed, to rerun pass `--test consumer`
+
+Caused by:
+  process didn't exit successfully: `/tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/target/debug/deps/consumer-e1d67c7fdddceb0c` (signal: 6, SIGABRT: process abort signal)
+
+*** result: Failure(101)

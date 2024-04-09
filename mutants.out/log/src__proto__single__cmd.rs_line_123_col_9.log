@@ -1,0 +1,55 @@
+
+*** src/proto/single/cmd.rs:123:9: replace Fail::generic_with_backtrace -> Self with Default::default()
+
+*** mutation diff:
+--- src/proto/single/cmd.rs
++++ replace Fail::generic_with_backtrace -> Self with Default::default()
+@@ -115,25 +115,17 @@
+ 
+     // For any application errors (all kind of errors that could happen in userland when handling the job)
+     // we want to send backtrace (split into lines) to the Faktory server so that whoever is interested in
+     // the job result could follow the trace (for debugging essentially).
+     pub(crate) fn generic_with_backtrace<E>(jid: JobId, e: E) -> Self
+     where
+         E: StdError,
+     {
+-        let mut f = Fail::generic(jid, format!("{}", e));
+-        let mut root = e.source();
+-        let mut lines = Vec::new();
+-        while let Some(r) = root.take() {
+-            lines.push(format!("{}", r));
+-            root = r.source();
+-        }
+-        f.set_backtrace(lines);
+-        f
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ self_to_cmd!(Fail, "FAIL");
+ 
+ // ---------------------- END --------------------
+ 
+ pub(crate) struct End;
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+error[E0277]: the trait bound `cmd::Fail: Default` is not satisfied
+   --> src/proto/single/cmd.rs:123:9
+    |
+123 |         Default::default() /* ~ changed by cargo-mutants ~ */
+    |         ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `cmd::Fail`
+    |
+help: consider annotating `cmd::Fail` with `#[derive(Default)]`
+    |
+85  + #[derive(Default)]
+86  | pub(crate) struct Fail {
+    |
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

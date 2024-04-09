@@ -1,0 +1,58 @@
+
+*** src/proto/batch/handle.rs:33:9: replace BatchHandle<'a, S>::start_batch -> Result<BatchHandle<'_, S>, Error> with Ok(BatchHandle::new(Default::default()))
+
+*** mutation diff:
+--- src/proto/batch/handle.rs
++++ replace BatchHandle<'a, S>::start_batch -> Result<BatchHandle<'_, S>, Error> with Ok(BatchHandle::new(Default::default()))
+@@ -25,18 +25,17 @@
+     /// returned as `Some(<old value here>)`.
+     pub async fn add(&mut self, mut job: Job) -> Result<Option<serde_json::Value>, Error> {
+         let bid = job.custom.insert("bid".into(), self.bid.clone().into());
+         self.c.enqueue(job).await.map(|_| bid)
+     }
+ 
+     /// Initiate a child batch of jobs.
+     pub async fn start_batch(&mut self, mut batch: Batch) -> Result<BatchHandle<'_, S>, Error> {
+-        batch.parent_bid = Some(self.bid.clone());
+-        self.c.start_batch(batch).await
++        Ok(BatchHandle::new(Default::default())) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Commit this batch.
+     ///
+     /// The Faktory server will not queue any callbacks, unless the batch is committed.
+     /// Committing an empty batch will make the server queue the callback(s) right away.
+     /// Once committed, the batch can still be re-opened with [open_batch](Client::open_batch),
+     /// and extra jobs can be added to it.
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+    Finished dev [unoptimized + debuginfo] target(s) in 0.76s
+
+*** result: Success
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml --locked --all-features --all-targets
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+error[E0061]: this function takes 2 arguments but 1 argument was supplied
+  --> src/proto/batch/handle.rs:33:12
+   |
+33 |         Ok(BatchHandle::new(Default::default())) /* ~ changed by cargo-mutants ~ */
+   |            ^^^^^^^^^^^^^^^^-------------------- an argument of type `&mut Client<S>` is missing
+   |
+note: associated function defined here
+  --> src/proto/batch/handle.rs:17:19
+   |
+17 |     pub(crate) fn new(bid: BatchId, c: &mut Client<S>) -> BatchHandle<'_, S> {
+   |                   ^^^ ------------  -----------------
+help: provide the argument
+   |
+33 |         Ok(BatchHandle::new(Default::default(), /* &mut Client<S> */)) /* ~ changed by cargo-mutants ~ */
+   |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For more information about this error, try `rustc --explain E0061`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

@@ -1,0 +1,57 @@
+
+*** src/proto/batch/mod.rs:163:9: replace Batch::builder -> BatchBuilder with Default::default()
+
+*** mutation diff:
+--- src/proto/batch/mod.rs
++++ replace Batch::builder -> BatchBuilder with Default::default()
+@@ -155,17 +155,17 @@
+     #[serde(skip_serializing_if = "Option::is_none")]
+     #[builder(setter(skip))]
+     pub(crate) complete: Option<Job>,
+ }
+ 
+ impl Batch {
+     /// Create a new `BatchBuilder`.
+     pub fn builder() -> BatchBuilder {
+-        BatchBuilder::new()
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ impl BatchBuilder {
+     fn build(self) -> Batch {
+         self.try_build().expect("There are no required fields.")
+     }
+ 
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-jIMFg4.tmp)
+error[E0277]: the trait bound `BatchBuilder: Default` is not satisfied
+   --> src/proto/batch/mod.rs:163:9
+    |
+163 |         Default::default() /* ~ changed by cargo-mutants ~ */
+    |         ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `BatchBuilder`
+    |
+help: consider annotating `BatchBuilder` with `#[derive(Default)]`
+    |
+125 | #[derive(#[derive(Default)]
+    |          ++++++++++++++++++
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error[E0277]: the trait bound `batch::BatchBuilder: Default` is not satisfied
+   --> src/proto/batch/mod.rs:163:9
+    |
+163 |         Default::default() /* ~ changed by cargo-mutants ~ */
+    |         ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `batch::BatchBuilder`
+    |
+help: consider annotating `batch::BatchBuilder` with `#[derive(Default)]`
+    |
+125 | #[derive(#[derive(Default)]
+    |          ++++++++++++++++++
+
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

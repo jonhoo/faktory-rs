@@ -1,0 +1,49 @@
+
+*** src/proto/client/mod.rs:278:9: replace Client<S>::issue -> Result<ReadToken<'_, S>, Error> with Ok(ReadToken::from_iter([Default::default()]))
+
+*** mutation diff:
+--- src/proto/client/mod.rs
++++ replace Client<S>::issue -> Result<ReadToken<'_, S>, Error> with Ok(ReadToken::from_iter([Default::default()]))
+@@ -270,18 +270,17 @@
+         c.init().await?;
+         Ok(c)
+     }
+ 
+     pub(crate) async fn issue<FC: single::FaktoryCommand>(
+         &mut self,
+         c: &FC,
+     ) -> Result<ReadToken<'_, S>, Error> {
+-        single::write_command(&mut self.stream, c).await?;
+-        Ok(ReadToken(self))
++        Ok(ReadToken::from_iter([Default::default()])) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     pub(crate) async fn fetch<Q>(&mut self, queues: &[Q]) -> Result<Option<Job>, Error>
+     where
+         Q: AsRef<str> + Sync,
+     {
+         self.issue(&single::Fetch::from(queues))
+             .await?
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+error[E0599]: no function or associated item named `from_iter` found for struct `ReadToken` in the current scope
+   --> src/proto/client/mod.rs:278:23
+    |
+278 |         Ok(ReadToken::from_iter([Default::default()])) /* ~ changed by cargo-mutants ~ */
+    |                       ^^^^^^^^^ function or associated item not found in `ReadToken<'_, _>`
+...
+395 | pub struct ReadToken<'a, S>(pub(crate) &'a mut Client<S>)
+    | --------------------------- function or associated item `from_iter` not found for this struct
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+    = note: the following trait defines an item `from_iter`, perhaps you need to implement it:
+            candidate #1: `FromIterator`
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

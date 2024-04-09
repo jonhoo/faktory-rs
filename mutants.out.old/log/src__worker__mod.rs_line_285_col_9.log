@@ -1,0 +1,46 @@
+
+*** src/worker/mod.rs:285:9: replace Worker<S, E>::for_worker -> Result<Self, Error> with Ok(Default::default())
+
+*** mutation diff:
+--- src/worker/mod.rs
++++ replace Worker<S, E>::for_worker -> Result<Self, Error> with Ok(Default::default())
+@@ -277,22 +277,17 @@
+ }
+ 
+ impl<
+         S: AsyncBufReadExt + AsyncWriteExt + Reconnect + Send + Unpin + 'static,
+         E: StdError + 'static + Send,
+     > Worker<S, E>
+ {
+     async fn for_worker(&mut self) -> Result<Self, Error> {
+-        Ok(Worker {
+-            c: self.c.connect_again().await?,
+-            callbacks: Arc::clone(&self.callbacks),
+-            worker_states: Arc::clone(&self.worker_states),
+-            terminated: self.terminated,
+-        })
++        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     async fn spawn_worker<Q>(
+         &mut self,
+         status: Arc<AtomicUsize>,
+         worker: usize,
+         queues: &[Q],
+     ) -> Result<JoinHandle<Result<(), Error>>, Error>
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-jIMFg4.tmp)
+error[E0277]: the trait bound `Worker<S, E>: Default` is not satisfied
+   --> src/worker/mod.rs:285:12
+    |
+285 |         Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+    |            ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `Worker<S, E>`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

@@ -1,0 +1,36 @@
+
+*** src/proto/mod.rs:50:9: replace <impl Reconnect for BufStream<S>>::reconnect -> io::Result<Self> with Ok(Default::default())
+
+*** mutation diff:
+--- src/proto/mod.rs
++++ replace <impl Reconnect for BufStream<S>>::reconnect -> io::Result<Self> with Ok(Default::default())
+@@ -42,12 +42,11 @@
+ }
+ 
+ #[async_trait::async_trait]
+ impl<S> Reconnect for BufStream<S>
+ where
+     S: AsyncRead + AsyncWrite + Reconnect + Send + Sync,
+ {
+     async fn reconnect(&mut self) -> io::Result<Self> {
+-        let stream = self.get_mut().reconnect().await?;
+-        Ok(Self::new(stream))
++        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+     }
+ }
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-jIMFg4.tmp)
+error[E0277]: the trait bound `BufStream<S>: Default` is not satisfied
+  --> src/proto/mod.rs:50:12
+   |
+50 |         Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+   |            ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `BufStream<S>`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

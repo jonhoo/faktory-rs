@@ -1,0 +1,57 @@
+
+*** src/proto/single/mod.rs:231:9: replace Job::builder -> JobBuilder with Default::default()
+
+*** mutation diff:
+--- src/proto/single/mod.rs
++++ replace Job::builder -> JobBuilder with Default::default()
+@@ -223,17 +223,17 @@
+     {
+         JobBuilder::new(kind).args(args).build()
+     }
+ 
+     /// Creates an ergonomic constructor for a new [`Job`].
+     ///
+     /// Also equivalent to [`JobBuilder::new`].
+     pub fn builder<S: Into<String>>(kind: S) -> JobBuilder {
+-        JobBuilder::new(kind)
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Place this job on the given `queue`.
+     ///
+     /// If this method is not called (or `self.queue` set otherwise), the queue will be set to
+     /// "default".
+     pub fn on_queue<S: Into<String>>(mut self, queue: S) -> Self {
+         self.queue = queue.into();
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+error[E0277]: the trait bound `JobBuilder: Default` is not satisfied
+   --> src/proto/single/mod.rs:231:9
+    |
+231 |         Default::default() /* ~ changed by cargo-mutants ~ */
+    |         ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `JobBuilder`
+    |
+help: consider annotating `JobBuilder` with `#[derive(Default)]`
+    |
+65  | #[derive(Serialize, Deserialize, Debug, Clone, #[derive(Default)]
+    |                                                ++++++++++++++++++
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error[E0277]: the trait bound `single::JobBuilder: Default` is not satisfied
+   --> src/proto/single/mod.rs:231:9
+    |
+231 |         Default::default() /* ~ changed by cargo-mutants ~ */
+    |         ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `single::JobBuilder`
+    |
+help: consider annotating `single::JobBuilder` with `#[derive(Default)]`
+    |
+65  | #[derive(Serialize, Deserialize, Debug, Clone, #[derive(Default)]
+    |                                                ++++++++++++++++++
+
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

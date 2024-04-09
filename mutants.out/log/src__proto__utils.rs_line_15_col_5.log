@@ -1,0 +1,53 @@
+
+*** src/proto/utils.rs:15:5: replace url_parse -> Result<Url, Error> with Ok(Default::default())
+
+*** mutation diff:
+--- src/proto/utils.rs
++++ replace url_parse -> Result<Url, Error> with Ok(Default::default())
+@@ -7,29 +7,17 @@
+     env::var(var).unwrap_or_else(|_| "tcp://localhost:7419".to_string())
+ }
+ 
+ pub(crate) fn host_from_url(url: &Url) -> String {
+     format!("{}:{}", url.host_str().unwrap(), url.port().unwrap_or(7419))
+ }
+ 
+ pub(crate) fn url_parse(url: &str) -> Result<Url, Error> {
+-    let url = Url::parse(url).map_err(error::Connect::ParseUrl)?;
+-    if url.scheme() != "tcp" {
+-        return Err(error::Connect::BadScheme {
+-            scheme: url.scheme().to_string(),
+-        }
+-        .into());
+-    }
+-
+-    if url.host_str().is_none() || url.host_str().unwrap().is_empty() {
+-        return Err(error::Connect::MissingHostname.into());
+-    }
+-
+-    Ok(url)
++    Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ pub(crate) fn parse_provided_or_from_env(url: Option<&str>) -> Result<Url, Error> {
+     url_parse(url.unwrap_or(&get_env_url()))
+ }
+ 
+ #[cfg(test)]
+ mod tests {
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+error[E0277]: the trait bound `Url: Default` is not satisfied
+  --> src/proto/utils.rs:15:8
+   |
+15 |     Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+   |        ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `Url`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

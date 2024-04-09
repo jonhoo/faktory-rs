@@ -1,0 +1,60 @@
+
+*** src/proto/single/mod.rs:239:9: replace Job::on_queue -> Self with Default::default()
+
+*** mutation diff:
+--- src/proto/single/mod.rs
++++ replace Job::on_queue -> Self with Default::default()
+@@ -231,18 +231,17 @@
+         JobBuilder::new(kind)
+     }
+ 
+     /// Place this job on the given `queue`.
+     ///
+     /// If this method is not called (or `self.queue` set otherwise), the queue will be set to
+     /// "default".
+     pub fn on_queue<S: Into<String>>(mut self, queue: S) -> Self {
+-        self.queue = queue.into();
+-        self
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// This job's id.
+     pub fn id(&self) -> &JobId {
+         &self.jid
+     }
+ 
+     /// This job's type.
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-jIMFg4.tmp)
+error[E0277]: the trait bound `Job: Default` is not satisfied
+   --> src/proto/single/mod.rs:239:9
+    |
+239 |         Default::default() /* ~ changed by cargo-mutants ~ */
+    |         ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `Job`
+    |
+help: consider annotating `Job` with `#[derive(Default)]`
+    |
+71  + #[derive(Default)]
+72  | pub struct Job {
+    |
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error[E0277]: the trait bound `single::Job: Default` is not satisfied
+   --> src/proto/single/mod.rs:239:9
+    |
+239 |         Default::default() /* ~ changed by cargo-mutants ~ */
+    |         ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `single::Job`
+    |
+help: consider annotating `single::Job` with `#[derive(Default)]`
+    |
+71  + #[derive(Default)]
+72  | pub struct Job {
+    |
+
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

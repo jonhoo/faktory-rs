@@ -1,0 +1,45 @@
+
+*** src/proto/batch/status.rs:90:9: replace BatchStatus::open -> Result<Option<BatchHandle<'a, S>>, Error> with Ok(Some(BatchHandle::new()))
+
+*** mutation diff:
+--- src/proto/batch/status.rs
++++ replace BatchStatus::open -> Result<Option<BatchHandle<'a, S>>, Error> with Ok(Some(BatchHandle::new()))
+@@ -82,11 +82,11 @@
+ impl<'a> BatchStatus {
+     /// Open the batch for which this `BatchStatus` has been retrieved.
+     ///
+     /// See [`open_batch`](Client::open_batch).
+     pub async fn open<S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send>(
+         &self,
+         prod: &'a mut Client<S>,
+     ) -> Result<Option<BatchHandle<'a, S>>, Error> {
+-        prod.open_batch(self.bid.clone()).await
++        Ok(Some(BatchHandle::new())) /* ~ changed by cargo-mutants ~ */
+     }
+ }
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-jIMFg4.tmp)
+error[E0061]: this function takes 2 arguments but 0 arguments were supplied
+  --> src/proto/batch/status.rs:90:17
+   |
+90 |         Ok(Some(BatchHandle::new())) /* ~ changed by cargo-mutants ~ */
+   |                 ^^^^^^^^^^^^^^^^-- two arguments of type `BatchId` and `&mut Client<S>` are missing
+   |
+note: associated function defined here
+  --> src/proto/batch/handle.rs:17:19
+   |
+17 |     pub(crate) fn new(bid: BatchId, c: &mut Client<S>) -> BatchHandle<'_, S> {
+   |                   ^^^ ------------  -----------------
+help: provide the arguments
+   |
+90 |         Ok(Some(BatchHandle::new(/* BatchId */, /* &mut Client<S> */))) /* ~ changed by cargo-mutants ~ */
+   |                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For more information about this error, try `rustc --explain E0061`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

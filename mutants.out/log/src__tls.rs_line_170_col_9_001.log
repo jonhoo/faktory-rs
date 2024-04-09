@@ -1,0 +1,47 @@
+
+*** src/tls.rs:170:9: replace <impl AsyncWrite for TlsStream<S>>::poll_shutdown -> std::task::Poll<Result<(), io::Error>> with Poll::new(Ok(()))
+
+*** mutation diff:
+--- src/tls.rs
++++ replace <impl AsyncWrite for TlsStream<S>>::poll_shutdown -> std::task::Poll<Result<(), io::Error>> with Poll::new(Ok(()))
+@@ -162,11 +162,11 @@
+     ) -> std::task::Poll<Result<(), io::Error>> {
+         self.project().stream.poll_flush(cx)
+     }
+ 
+     fn poll_shutdown(
+         self: std::pin::Pin<&mut Self>,
+         cx: &mut std::task::Context<'_>,
+     ) -> std::task::Poll<Result<(), io::Error>> {
+-        self.project().stream.poll_shutdown(cx)
++        Poll::new(Ok(())) /* ~ changed by cargo-mutants ~ */
+     }
+ }
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml
+    Finished dev [unoptimized + debuginfo] target(s) in 0.05s
+
+*** result: Success
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml --locked --all-features --all-targets
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+error[E0433]: failed to resolve: use of undeclared type `Poll`
+   --> src/tls.rs:170:9
+    |
+170 |         Poll::new(Ok(())) /* ~ changed by cargo-mutants ~ */
+    |         ^^^^ use of undeclared type `Poll`
+    |
+help: consider importing one of these items
+    |
+4   + use core::task::Poll;
+    |
+4   + use std::task::Poll;
+    |
+
+For more information about this error, try `rustc --explain E0433`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

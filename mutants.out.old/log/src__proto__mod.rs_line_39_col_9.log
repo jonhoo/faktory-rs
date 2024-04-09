@@ -1,0 +1,42 @@
+
+*** src/proto/mod.rs:39:9: replace <impl Reconnect for TokioStream>::reconnect -> io::Result<Self> with Ok(Default::default())
+
+*** mutation diff:
+--- src/proto/mod.rs
++++ replace <impl Reconnect for TokioStream>::reconnect -> io::Result<Self> with Ok(Default::default())
+@@ -31,18 +31,17 @@
+ pub trait Reconnect: Sized {
+     /// Re-establish the stream.
+     async fn reconnect(&mut self) -> io::Result<Self>;
+ }
+ 
+ #[async_trait::async_trait]
+ impl Reconnect for TokioStream {
+     async fn reconnect(&mut self) -> io::Result<Self> {
+-        let addr = &self.peer_addr().expect("socket address");
+-        TokioStream::connect(addr).await
++        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ #[async_trait::async_trait]
+ impl<S> Reconnect for BufStream<S>
+ where
+     S: AsyncRead + AsyncWrite + Reconnect + Send + Sync,
+ {
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-jIMFg4.tmp)
+error[E0277]: the trait bound `tokio::net::TcpStream: Default` is not satisfied
+  --> src/proto/mod.rs:39:12
+   |
+39 |         Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+   |            ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `tokio::net::TcpStream`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

@@ -1,0 +1,63 @@
+
+*** src/proto/single/mod.rs:194:9: replace JobBuilder::build -> Job with Default::default()
+
+*** mutation diff:
+--- src/proto/single/mod.rs
++++ replace JobBuilder::build -> Job with Default::default()
+@@ -186,21 +186,17 @@
+     /// Builds a new [`Job`] from the parameters of this builder.
+     ///
+     /// For Enterprise edition of Faktory builds a new _trackable_ `Job`.
+     /// In Enterprise Faktory, a progress update can be sent and received only for the jobs
+     /// that have been explicitly marked as trackable via `"track":1` in the job's custom hash.
+     /// In case you have a reason to opt out of tracking, either unset (remove) the "track" on
+     /// the resulted job's [`custom`](Job::custom) hash or set it to 0.
+     pub fn build(&mut self) -> Job {
+-        if cfg!(feature = "ent") {
+-            self.add_to_custom_data("track", 1);
+-        }
+-        self.try_build()
+-            .expect("All required fields have been set.")
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ #[derive(Serialize, Deserialize, Debug, Clone)]
+ pub struct Failure {
+     retry_count: usize,
+     failed_at: String,
+     #[serde(skip_serializing_if = "Option::is_none")]
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+error[E0277]: the trait bound `Job: Default` is not satisfied
+   --> src/proto/single/mod.rs:194:9
+    |
+194 |         Default::default() /* ~ changed by cargo-mutants ~ */
+    |         ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `Job`
+    |
+help: consider annotating `Job` with `#[derive(Default)]`
+    |
+71  + #[derive(Default)]
+72  | pub struct Job {
+    |
+
+For more information about this error, try `rustc --explain E0277`.
+error[E0277]: the trait bound `single::Job: Default` is not satisfied
+   --> src/proto/single/mod.rs:194:9
+    |
+194 |         Default::default() /* ~ changed by cargo-mutants ~ */
+    |         ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `single::Job`
+    |
+help: consider annotating `single::Job` with `#[derive(Default)]`
+    |
+71  + #[derive(Default)]
+72  | pub struct Job {
+    |
+
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

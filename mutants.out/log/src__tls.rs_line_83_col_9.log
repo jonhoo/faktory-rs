@@ -1,0 +1,51 @@
+
+*** src/tls.rs:83:9: replace TlsStream<S>::default -> io::Result<Self> with Ok(Default::default())
+
+*** mutation diff:
+--- src/tls.rs
++++ replace TlsStream<S>::default -> io::Result<Self> with Ok(Default::default())
+@@ -75,21 +75,17 @@
+     S: AsyncRead + AsyncWrite + Send + Unpin + Reconnect + Debug + 'static,
+ {
+     /// Create a new TLS connection on an existing stream.
+     ///
+     /// Internally creates a `ClientConfig` with an empty root certificates store and no client
+     /// authentication. Use [`new`](TlsStream::new) for a customized `TlsConnector`.
+     /// Create a new TLS connection on an existing stream.
+     pub async fn default(stream: S, hostname: &str) -> io::Result<Self> {
+-        let connector = TlsConnector::builder()
+-            .build()
+-            .map_err(Error::TlsStream)
+-            .unwrap();
+-        Self::new(stream, connector, hostname).await
++        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Create a new TLS connection on an existing stream with a non-default TLS configuration.
+     pub async fn new(
+         stream: S,
+         connector: impl Into<AsyncTlsConnector>,
+         hostname: &str,
+     ) -> io::Result<Self> {
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+    Finished dev [unoptimized + debuginfo] target(s) in 0.86s
+
+*** result: Success
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml --locked --all-features --all-targets
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+error[E0277]: the trait bound `tls::TlsStream<S>: Default` is not satisfied
+  --> src/tls.rs:83:12
+   |
+83 |         Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+   |            ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `tls::TlsStream<S>`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

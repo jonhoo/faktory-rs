@@ -1,0 +1,41 @@
+
+*** src/proto/single/cmd.rs:243:9: replace <impl From for Push>::from -> Self with Default::default()
+
+*** mutation diff:
+--- src/proto/single/cmd.rs
++++ replace <impl From for Push>::from -> Self with Default::default()
+@@ -235,17 +235,17 @@
+     type Target = Job;
+     fn deref(&self) -> &Self::Target {
+         &self.0
+     }
+ }
+ 
+ impl From<Job> for Push {
+     fn from(j: Job) -> Self {
+-        Push(j)
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ #[async_trait::async_trait]
+ impl FaktoryCommand for Push {
+     async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+         w.write_all(b"PUSH ").await?;
+         let r = serde_json::to_vec(&**self).map_err(Error::Serialization)?;
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+error[E0277]: the trait bound `cmd::Push: Default` is not satisfied
+   --> src/proto/single/cmd.rs:243:9
+    |
+243 |         Default::default() /* ~ changed by cargo-mutants ~ */
+    |         ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `cmd::Push`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

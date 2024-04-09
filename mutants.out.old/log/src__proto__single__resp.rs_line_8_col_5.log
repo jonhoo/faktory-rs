@@ -1,0 +1,61 @@
+
+*** src/proto/single/resp.rs:8:5: replace bad -> error::Protocol with Default::default()
+
+*** mutation diff:
+--- src/proto/single/resp.rs
++++ replace bad -> error::Protocol with Default::default()
+@@ -1,37 +1,16 @@
+ #[cfg(feature = "ent")]
+ use crate::ent::BatchId;
+ 
+ use crate::error::{self, Error};
+ use tokio::io::{AsyncBufReadExt, AsyncReadExt};
+ 
+ pub fn bad(expected: &'static str, got: &RawResponse) -> error::Protocol {
+-    let stringy = match *got {
+-        RawResponse::String(ref s) => Some(&**s),
+-        RawResponse::Blob(ref b) => {
+-            if let Ok(s) = std::str::from_utf8(b) {
+-                Some(s)
+-            } else {
+-                None
+-            }
+-        }
+-        _ => None,
+-    };
+-
+-    match stringy {
+-        Some(s) => error::Protocol::BadType {
+-            expected,
+-            received: s.to_string(),
+-        },
+-        None => error::Protocol::BadType {
+-            expected,
+-            received: format!("{:?}", got),
+-        },
+-    }
++    Default::default() /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ // ----------------------------------------------
+ 
+ pub async fn read_json<R: AsyncBufReadExt + Unpin, T: serde::de::DeserializeOwned>(
+     r: R,
+ ) -> Result<Option<T>, Error> {
+     let rr = read(r).await?;
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-jIMFg4.tmp)
+error[E0277]: the trait bound `error::Protocol: Default` is not satisfied
+ --> src/proto/single/resp.rs:8:5
+  |
+8 |     Default::default() /* ~ changed by cargo-mutants ~ */
+  |     ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `error::Protocol`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

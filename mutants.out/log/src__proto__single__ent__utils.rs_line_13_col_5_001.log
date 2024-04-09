@@ -1,0 +1,63 @@
+
+*** src/proto/single/ent/utils.rs:13:5: replace parse_datetime -> Result<Option<DateTime<Utc>>, D::Error> with Ok(Some(DateTime::from(Default::default())))
+
+*** mutation diff:
+--- src/proto/single/ent/utils.rs
++++ replace parse_datetime -> Result<Option<DateTime<Utc>>, D::Error> with Ok(Some(DateTime::from(Default::default())))
+@@ -5,13 +5,10 @@
+ };
+ 
+ // Used to parse responses from Faktory where a datetime field is set to an empty string, e.g:
+ // '{"jid":"f6APFzrS2RZi9eaA","state":"unknown","updated_at":""}'
+ pub(crate) fn parse_datetime<'de, D>(value: D) -> Result<Option<DateTime<Utc>>, D::Error>
+ where
+     D: Deserializer<'de>,
+ {
+-    match Option::<String>::deserialize(value)?.as_deref() {
+-        Some("") | None => Ok(None),
+-        Some(non_empty) => DateTime::deserialize(non_empty.into_deserializer()).map(Some),
+-    }
++    Ok(Some(DateTime::from(Default::default()))) /* ~ changed by cargo-mutants ~ */
+ }
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+    Finished dev [unoptimized + debuginfo] target(s) in 0.89s
+
+*** result: Success
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml --locked --all-features --all-targets
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+error[E0283]: type annotations needed
+  --> src/proto/single/ent/utils.rs:13:13
+   |
+13 |     Ok(Some(DateTime::from(Default::default()))) /* ~ changed by cargo-mutants ~ */
+   |             ^^^^^^^^ cannot infer type for type parameter `T` declared on the trait `From`
+   |
+   = note: multiple `impl`s satisfying `DateTime<Utc>: From<_>` found in the following crates: `chrono`, `core`:
+           - impl From<DateTime<FixedOffset>> for DateTime<Utc>;
+           - impl From<DateTime<Local>> for DateTime<Utc>;
+           - impl From<SystemTime> for DateTime<Utc>;
+           - impl<T> From<!> for T;
+           - impl<T> From<T> for T;
+
+For more information about this error, try `rustc --explain E0283`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error[E0283]: type annotations needed
+  --> src/proto/single/ent/utils.rs:13:13
+   |
+13 |     Ok(Some(DateTime::from(Default::default()))) /* ~ changed by cargo-mutants ~ */
+   |             ^^^^^^^^ cannot infer type for type parameter `T` declared on the trait `From`
+   |
+   = note: multiple `impl`s satisfying `DateTime<chrono::Utc>: From<_>` found in the following crates: `chrono`, `core`:
+           - impl From<DateTime<FixedOffset>> for DateTime<chrono::Utc>;
+           - impl From<DateTime<Local>> for DateTime<chrono::Utc>;
+           - impl From<SystemTime> for DateTime<chrono::Utc>;
+           - impl<T> From<!> for T;
+           - impl<T> From<T> for T;
+
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

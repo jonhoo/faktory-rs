@@ -1,0 +1,44 @@
+
+*** src/worker/state.rs:32:9: replace <impl Deref for WorkerStatesRegistry>::deref -> &Self::Target with &Default::default()
+
+*** mutation diff:
+--- src/worker/state.rs
++++ replace <impl Deref for WorkerStatesRegistry>::deref -> &Self::Target with &Default::default()
+@@ -24,17 +24,17 @@
+     }
+ }
+ 
+ pub(crate) struct WorkerStatesRegistry(Vec<Mutex<WorkerState>>);
+ 
+ impl Deref for WorkerStatesRegistry {
+     type Target = Vec<Mutex<WorkerState>>;
+     fn deref(&self) -> &Self::Target {
+-        &self.0
++        &Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ impl DerefMut for WorkerStatesRegistry {
+     fn deref_mut(&mut self) -> &mut Self::Target {
+         &mut self.0
+     }
+ }
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+error[E0515]: cannot return reference to temporary value
+  --> src/worker/state.rs:32:9
+   |
+32 |         &Default::default() /* ~ changed by cargo-mutants ~ */
+   |         ^------------------
+   |         ||
+   |         |temporary value created here
+   |         returns a reference to data owned by the current function
+
+For more information about this error, try `rustc --explain E0515`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

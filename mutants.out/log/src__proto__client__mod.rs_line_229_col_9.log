@@ -1,0 +1,184 @@
+
+*** src/proto/client/mod.rs:229:9: replace Client<S>::init -> Result<(), Error> with Ok(())
+
+*** mutation diff:
+--- src/proto/client/mod.rs
++++ replace Client<S>::init -> Result<(), Error> with Ok(())
+@@ -221,53 +221,17 @@
+     }
+ }
+ 
+ impl<S> Client<S>
+ where
+     S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send,
+ {
+     async fn init(&mut self) -> Result<(), Error> {
+-        let hi = single::read_hi(&mut self.stream).await?;
+-        check_protocols_match(hi.version)?;
+-
+-        // fill in any missing options, and remember them for re-connect
+-        let mut hello = single::Hello::default();
+-
+-        // prepare password hash, if one expected by 'Faktory'
+-        if hi.salt.is_some() {
+-            if let Some(ref pwd) = self.opts.password {
+-                hello.set_password(&hi, pwd);
+-            } else {
+-                return Err(error::Connect::AuthenticationNeeded.into());
+-            }
+-        }
+-
+-        if self.opts.is_worker {
+-            // fill in any missing options, and remember them for re-connect
+-            let hostname = self
+-                .opts
+-                .hostname
+-                .clone()
+-                .or_else(|| hostname::get().ok()?.into_string().ok())
+-                .unwrap_or_else(|| "local".to_string());
+-            self.opts.hostname = Some(hostname);
+-            let pid = self.opts.pid.unwrap_or_else(|| std::process::id() as usize);
+-            self.opts.pid = Some(pid);
+-            let wid = self.opts.wid.clone().unwrap_or_else(WorkerId::random);
+-            self.opts.wid = Some(wid);
+-
+-            hello.hostname = Some(self.opts.hostname.clone().unwrap());
+-            hello.wid = Some(self.opts.wid.clone().unwrap());
+-            hello.pid = Some(self.opts.pid.unwrap());
+-            hello.labels.clone_from(&self.opts.labels);
+-        }
+-
+-        single::write_command_and_await_ok(&mut self.stream, &hello).await?;
+-        Ok(())
++        Ok(()) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     pub(crate) async fn new(stream: S, opts: ClientOptions) -> Result<Client<S>, Error> {
+         let mut c = Client { stream, opts };
+         c.init().await?;
+         Ok(c)
+     }
+ 
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+    Finished dev [unoptimized + debuginfo] target(s) in 1.42s
+
+*** result: Success
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml --locked --all-features --all-targets
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+    Finished test [unoptimized + debuginfo] target(s) in 2.01s
+     Running unittests src/lib.rs (target/debug/deps/faktory-248e4bd4cd431a2c)
+
+running 35 tests
+test proto::batch::test::test_batch_serialized_correctly ... ok
+test proto::batch::test::test_batch_creation ... ok
+test proto::single::ent::test::test_uniqueness_faeture_for_enterprise_faktory ... ok
+test proto::single::ent::test::test_expiration_feature_for_enterprise_faktory ... ok
+test proto::single::ent::test::test_same_purpose_setters_applied_simultaneously ... ok
+test proto::single::resp::test::it_decodes_blob_json ... ok
+test proto::single::resp::test::it_decodes_json_empty ... ok
+test proto::single::resp::test::it_cant_do_arrays - should panic ... ok
+test proto::single::resp::test::it_decodes_json_nill ... ok
+test proto::single::resp::test::it_errors_on_bad_json_blob ... ok
+test proto::single::resp::test::it_decodes_json_ok_blob ... ok
+test proto::single::resp::test::it_errors_on_bad_json_string ... ok
+test proto::single::resp::test::it_errors_on_bad_numbers ... ok
+test proto::single::resp::test::it_errors_on_bad_sizes ... ok
+test proto::single::resp::test::it_errors_on_unknown_resp_type ... ok
+test proto::single::resp::test::it_decodes_json_ok_string ... ok
+test proto::single::resp::test::it_decodes_string_json ... ok
+test proto::single::resp::test::it_parses_empty_bulk ... ok
+test proto::single::resp::test::it_parses_errors ... ok
+test proto::single::resp::test::it_parses_nills ... ok
+test proto::single::resp::test::it_parses_non_empty_bulk ... ok
+test proto::single::resp::test::it_parses_numbers ... ok
+test proto::single::resp::test::it_parses_simple_strings ... ok
+test proto::single::resp::test::json_error_on_number ... ok
+test proto::single::test::test_all_job_creation_variants_align ... ok
+test proto::single::test::test_arbitrary_custom_data_setter ... ok
+test proto::single::test::test_job_can_be_created_with_builder ... ok
+test proto::utils::tests::correct_env_parsing ... ok
+test proto::utils::tests::url_can_take_password_and_port ... ok
+test proto::utils::tests::url_doesnt_require_port ... ok
+test proto::utils::tests::url_port_default ... ok
+test proto::single::utils::test::test_id_of_known_size_generated ... ok
+test proto::utils::tests::url_requires_host ... ok
+test proto::utils::tests::url_requires_tcp ... ok
+test proto::single::utils::test::test_ids_are_unique ... ok
+
+test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.20s
+
+     Running unittests src/bin/loadtest.rs (target/debug/deps/loadtest-c216a21f6a383186)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/consumer.rs (target/debug/deps/consumer-e1d67c7fdddceb0c)
+
+running 8 tests
+test hello ... FAILED
+test dequeue ... FAILED
+test dequeue_first_empty ... FAILED
+test hello_pwd ... FAILED
+test terminate ... FAILED
+test well_behaved_many ... FAILED
+test well_behaved ... FAILED
+test no_first_job ... FAILED
+
+failures:
+
+---- hello stdout ----
+thread 'hello' panicked at tests/consumer.rs:17:5:
+assertion failed: written.starts_with(b"HELLO {")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- dequeue stdout ----
+Serialization(Error("expected value", line: 1, column: 1))
+thread 'dequeue' panicked at tests/consumer.rs:85:9:
+internal error: entered unreachable code
+
+---- dequeue_first_empty stdout ----
+Serialization(Error("expected value", line: 1, column: 1))
+thread 'dequeue_first_empty' panicked at tests/consumer.rs:128:13:
+internal error: entered unreachable code
+
+---- hello_pwd stdout ----
+thread 'hello_pwd' panicked at tests/consumer.rs:46:5:
+assertion failed: written.starts_with(b"HELLO {")
+
+---- terminate stdout ----
+thread 'terminate' panicked at tests/consumer.rs:394:34:
+called `Result::unwrap()` on an `Err` value: Serialization(Error("expected value", line: 1, column: 1))
+
+---- well_behaved_many stdout ----
+thread 'well_behaved_many' panicked at tests/consumer.rs:334:34:
+called `Result::unwrap()` on an `Err` value: Serialization(Error("expected value", line: 1, column: 1))
+
+---- well_behaved stdout ----
+thread 'well_behaved' panicked at tests/consumer.rs:194:34:
+called `Result::unwrap()` on an `Err` value: Serialization(Error("expected value", line: 1, column: 1))
+
+---- no_first_job stdout ----
+thread 'no_first_job' panicked at tests/consumer.rs:259:34:
+called `Result::unwrap()` on an `Err` value: Serialization(Error("expected value", line: 1, column: 1))
+
+
+failures:
+    dequeue
+    dequeue_first_empty
+    hello
+    hello_pwd
+    no_first_job
+    terminate
+    well_behaved
+    well_behaved_many
+
+test result: FAILED. 0 passed; 8 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+error: test failed, to rerun pass `--test consumer`
+
+*** result: Failure(101)

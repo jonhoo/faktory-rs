@@ -1,0 +1,41 @@
+
+*** src/tls.rs:136:9: replace <impl DerefMut for TlsStream<S>>::deref_mut -> &mut Self::Target with Box::leak(Box::new(Default::default()))
+
+*** mutation diff:
+--- src/tls.rs
++++ replace <impl DerefMut for TlsStream<S>>::deref_mut -> &mut Self::Target with Box::leak(Box::new(Default::default()))
+@@ -128,17 +128,17 @@
+     type Target = NativeTlsStream<S>;
+     fn deref(&self) -> &Self::Target {
+         &self.stream
+     }
+ }
+ 
+ impl<S> DerefMut for TlsStream<S> {
+     fn deref_mut(&mut self) -> &mut Self::Target {
+-        &mut self.stream
++        Box::leak(Box::new(Default::default())) /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for TlsStream<S> {
+     fn poll_read(
+         self: std::pin::Pin<&mut Self>,
+         cx: &mut std::task::Context<'_>,
+         buf: &mut tokio::io::ReadBuf<'_>,
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-jIMFg4.tmp)
+error[E0277]: the trait bound `tokio_native_tls::TlsStream<S>: Default` is not satisfied
+   --> src/tls.rs:136:28
+    |
+136 |         Box::leak(Box::new(Default::default())) /* ~ changed by cargo-mutants ~ */
+    |                            ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `tokio_native_tls::TlsStream<S>`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

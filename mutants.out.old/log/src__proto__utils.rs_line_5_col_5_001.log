@@ -1,0 +1,89 @@
+
+*** src/proto/utils.rs:5:5: replace get_env_url -> String with String::new()
+
+*** mutation diff:
+--- src/proto/utils.rs
++++ replace get_env_url -> String with String::new()
+@@ -1,15 +1,13 @@
+ use crate::error::{self, Error};
+ use url::Url;
+ 
+ pub(crate) fn get_env_url() -> String {
+-    use std::env;
+-    let var = env::var("FAKTORY_PROVIDER").unwrap_or_else(|_| "FAKTORY_URL".to_string());
+-    env::var(var).unwrap_or_else(|_| "tcp://localhost:7419".to_string())
++    String::new() /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ pub(crate) fn host_from_url(url: &Url) -> String {
+     format!("{}:{}", url.host_str().unwrap(), url.port().unwrap_or(7419))
+ }
+ 
+ pub(crate) fn url_parse(url: &str) -> Result<Url, Error> {
+     let url = Url::parse(url).map_err(error::Connect::ParseUrl)?;
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-jIMFg4.tmp)
+    Finished dev [unoptimized + debuginfo] target(s) in 1.15s
+
+*** result: Success
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+    Finished test [unoptimized + debuginfo] target(s) in 0.05s
+     Running unittests src/lib.rs (target/debug/deps/faktory-248e4bd4cd431a2c)
+
+running 35 tests
+test proto::single::resp::test::it_decodes_json_ok_blob ... ok
+test proto::batch::test::test_batch_serialized_correctly ... ok
+test proto::single::resp::test::it_decodes_json_nill ... ok
+test proto::single::resp::test::it_decodes_json_empty ... ok
+test proto::single::ent::test::test_same_purpose_setters_applied_simultaneously ... ok
+test proto::single::ent::test::test_uniqueness_faeture_for_enterprise_faktory ... ok
+test proto::batch::test::test_batch_creation ... ok
+test proto::single::ent::test::test_expiration_feature_for_enterprise_faktory ... ok
+test proto::single::resp::test::it_decodes_json_ok_string ... ok
+test proto::single::resp::test::it_decodes_blob_json ... ok
+test proto::single::resp::test::it_decodes_string_json ... ok
+test proto::single::resp::test::it_cant_do_arrays - should panic ... ok
+test proto::single::resp::test::it_errors_on_bad_numbers ... ok
+test proto::single::resp::test::it_errors_on_bad_json_blob ... ok
+test proto::single::resp::test::it_errors_on_bad_sizes ... ok
+test proto::single::resp::test::it_errors_on_bad_json_string ... ok
+test proto::single::resp::test::it_errors_on_unknown_resp_type ... ok
+test proto::single::resp::test::it_parses_empty_bulk ... ok
+test proto::single::resp::test::it_parses_errors ... ok
+test proto::single::resp::test::it_parses_nills ... ok
+test proto::single::resp::test::it_parses_non_empty_bulk ... ok
+test proto::single::resp::test::it_parses_numbers ... ok
+test proto::single::resp::test::json_error_on_number ... ok
+test proto::single::resp::test::it_parses_simple_strings ... ok
+test proto::single::test::test_all_job_creation_variants_align ... ok
+test proto::single::test::test_arbitrary_custom_data_setter ... ok
+test proto::single::test::test_job_can_be_created_with_builder ... ok
+test proto::single::utils::test::test_id_of_known_size_generated ... ok
+test proto::utils::tests::correct_env_parsing ... FAILED
+test proto::utils::tests::url_can_take_password_and_port ... ok
+test proto::utils::tests::url_requires_host ... ok
+test proto::utils::tests::url_doesnt_require_port ... ok
+test proto::utils::tests::url_requires_tcp ... ok
+test proto::utils::tests::url_port_default ... ok
+test proto::single::utils::test::test_ids_are_unique ... ok
+
+failures:
+
+---- proto::utils::tests::correct_env_parsing stdout ----
+thread 'proto::utils::tests::correct_env_parsing' panicked at src/proto/utils.rs:45:9:
+assertion `left == right` failed
+  left: ""
+ right: "tcp://localhost:7419"
+
+
+failures:
+    proto::utils::tests::correct_env_parsing
+
+test result: FAILED. 34 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.35s
+
+error: test failed, to rerun pass `--lib`
+
+*** result: Failure(101)

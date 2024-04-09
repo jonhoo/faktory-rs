@@ -1,0 +1,42 @@
+
+*** src/proto/batch/handle.rs:33:9: replace BatchHandle<'a, S>::start_batch -> Result<BatchHandle<'_, S>, Error> with Ok(BatchHandle::from(Default::default()))
+
+*** mutation diff:
+--- src/proto/batch/handle.rs
++++ replace BatchHandle<'a, S>::start_batch -> Result<BatchHandle<'_, S>, Error> with Ok(BatchHandle::from(Default::default()))
+@@ -25,18 +25,17 @@
+     /// returned as `Some(<old value here>)`.
+     pub async fn add(&mut self, mut job: Job) -> Result<Option<serde_json::Value>, Error> {
+         let bid = job.custom.insert("bid".into(), self.bid.clone().into());
+         self.c.enqueue(job).await.map(|_| bid)
+     }
+ 
+     /// Initiate a child batch of jobs.
+     pub async fn start_batch(&mut self, mut batch: Batch) -> Result<BatchHandle<'_, S>, Error> {
+-        batch.parent_bid = Some(self.bid.clone());
+-        self.c.start_batch(batch).await
++        Ok(BatchHandle::from(Default::default())) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Commit this batch.
+     ///
+     /// The Faktory server will not queue any callbacks, unless the batch is committed.
+     /// Committing an empty batch will make the server queue the callback(s) right away.
+     /// Once committed, the batch can still be re-opened with [open_batch](Client::open_batch),
+     /// and extra jobs can be added to it.
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-jIMFg4.tmp)
+error[E0277]: the trait bound `BatchHandle<'_, S>: Default` is not satisfied
+  --> src/proto/batch/handle.rs:33:30
+   |
+33 |         Ok(BatchHandle::from(Default::default())) /* ~ changed by cargo-mutants ~ */
+   |                              ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `BatchHandle<'_, S>`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

@@ -1,0 +1,65 @@
+
+*** src/proto/single/ent/mod.rs:79:9: replace JobBuilder::unique_until_success -> &mut Self with Box::leak(Box::new(Default::default()))
+
+*** mutation diff:
+--- src/proto/single/ent/mod.rs
++++ replace JobBuilder::unique_until_success -> &mut Self with Box::leak(Box::new(Default::default()))
+@@ -71,17 +71,17 @@
+ 
+     /// Do not remove unique lock for this job until it successfully finishes.
+     ///
+     /// Sets `unique_until` on the Job's custom hash to `success`, which is Faktory's default.
+     /// Another job with the same kind-args-queue combination will be accepted by the Faktory server
+     /// after the period specified in [`unique_for`](JobBuilder::unique_for) has finished
+     /// _or_ after this job has been been ***successfully*** processed.
+     pub fn unique_until_success(&mut self) -> &mut Self {
+-        self.add_to_custom_data("unique_until", "success")
++        Box::leak(Box::new(Default::default())) /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ #[cfg(test)]
+ mod test {
+     use crate::JobBuilder;
+     use chrono::{DateTime, Utc};
+ 
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+    Finished dev [unoptimized + debuginfo] target(s) in 1.06s
+
+*** result: Success
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml --locked --all-features --all-targets
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+error[E0277]: the trait bound `JobBuilder: Default` is not satisfied
+  --> src/proto/single/ent/mod.rs:79:28
+   |
+79 |         Box::leak(Box::new(Default::default())) /* ~ changed by cargo-mutants ~ */
+   |                            ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `JobBuilder`
+   |
+help: consider annotating `JobBuilder` with `#[derive(Default)]`
+  --> src/proto/single/mod.rs:65:48
+   |
+65 | #[derive(Serialize, Deserialize, Debug, Clone, #[derive(Default)]
+   |                                                ++++++++++++++++++
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error[E0277]: the trait bound `single::JobBuilder: Default` is not satisfied
+  --> src/proto/single/ent/mod.rs:79:28
+   |
+79 |         Box::leak(Box::new(Default::default())) /* ~ changed by cargo-mutants ~ */
+   |                            ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `single::JobBuilder`
+   |
+help: consider annotating `single::JobBuilder` with `#[derive(Default)]`
+  --> src/proto/single/mod.rs:65:48
+   |
+65 | #[derive(Serialize, Deserialize, Debug, Clone, #[derive(Default)]
+   |                                                ++++++++++++++++++
+
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

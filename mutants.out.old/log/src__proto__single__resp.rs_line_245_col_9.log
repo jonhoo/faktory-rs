@@ -1,0 +1,41 @@
+
+*** src/proto/single/resp.rs:245:9: replace <impl From for RawResponse>::from -> Self with Default::default()
+
+*** mutation diff:
+--- src/proto/single/resp.rs
++++ replace <impl From for RawResponse>::from -> Self with Default::default()
+@@ -237,17 +237,17 @@
+ impl<'a> From<&'a str> for RawResponse {
+     fn from(s: &'a str) -> Self {
+         RawResponse::String(s.to_string())
+     }
+ }
+ 
+ impl From<isize> for RawResponse {
+     fn from(i: isize) -> Self {
+-        RawResponse::Number(i)
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ impl From<Vec<u8>> for RawResponse {
+     fn from(b: Vec<u8>) -> Self {
+         RawResponse::Blob(b)
+     }
+ }
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-jIMFg4.tmp)
+error[E0277]: the trait bound `RawResponse: Default` is not satisfied
+   --> src/proto/single/resp.rs:245:9
+    |
+245 |         Default::default() /* ~ changed by cargo-mutants ~ */
+    |         ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `RawResponse`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

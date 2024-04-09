@@ -1,0 +1,42 @@
+
+*** src/proto/client/ent.rs:17:9: replace Client<S>::get_progress -> Result<Option<Progress>, Error> with Ok(Some(Default::default()))
+
+*** mutation diff:
+--- src/proto/client/ent.rs
++++ replace Client<S>::get_progress -> Result<Option<Progress>, Error> with Ok(Some(Default::default()))
+@@ -9,18 +9,17 @@
+     /// Send information on a job's execution progress to Faktory.
+     pub async fn set_progress(&mut self, upd: ProgressUpdate) -> Result<(), Error> {
+         let cmd = Track::Set(upd);
+         self.issue(&cmd).await?.read_ok().await
+     }
+ 
+     /// Fetch information on a job's execution progress from Faktory.
+     pub async fn get_progress(&mut self, jid: JobId) -> Result<Option<Progress>, Error> {
+-        let cmd = Track::Get(jid);
+-        self.issue(&cmd).await?.read_json().await
++        Ok(Some(Default::default())) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Fetch information on a batch of jobs execution progress.
+     pub async fn get_batch_status(&mut self, bid: BatchId) -> Result<Option<BatchStatus>, Error> {
+         let cmd = GetBatchStatus::from(bid);
+         self.issue(&cmd).await?.read_json().await
+     }
+ 
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-jIMFg4.tmp)
+error[E0277]: the trait bound `Progress: Default` is not satisfied
+  --> src/proto/client/ent.rs:17:17
+   |
+17 |         Ok(Some(Default::default())) /* ~ changed by cargo-mutants ~ */
+   |                 ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `Progress`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

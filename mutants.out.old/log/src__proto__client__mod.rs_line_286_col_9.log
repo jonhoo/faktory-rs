@@ -1,0 +1,64 @@
+
+*** src/proto/client/mod.rs:286:9: replace Client<S>::fetch -> Result<Option<Job>, Error> with Ok(Some(Default::default()))
+
+*** mutation diff:
+--- src/proto/client/mod.rs
++++ replace Client<S>::fetch -> Result<Option<Job>, Error> with Ok(Some(Default::default()))
+@@ -278,20 +278,17 @@
+         single::write_command(&mut self.stream, c).await?;
+         Ok(ReadToken(self))
+     }
+ 
+     pub(crate) async fn fetch<Q>(&mut self, queues: &[Q]) -> Result<Option<Job>, Error>
+     where
+         Q: AsRef<str> + Sync,
+     {
+-        self.issue(&single::Fetch::from(queues))
+-            .await?
+-            .read_json()
+-            .await
++        Ok(Some(Default::default())) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     pub(crate) async fn heartbeat(&mut self) -> Result<HeartbeatStatus, Error> {
+         single::write_command(
+             &mut self.stream,
+             &single::Heartbeat::new(self.opts.wid.as_ref().unwrap().clone()),
+         )
+         .await?;
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-jIMFg4.tmp)
+error[E0277]: the trait bound `Job: Default` is not satisfied
+   --> src/proto/client/mod.rs:286:17
+    |
+286 |         Ok(Some(Default::default())) /* ~ changed by cargo-mutants ~ */
+    |                 ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `Job`
+    |
+help: consider annotating `Job` with `#[derive(Default)]`
+   --> src/proto/single/mod.rs:71:1
+    |
+71  + #[derive(Default)]
+72  | pub struct Job {
+    |
+
+error[E0277]: the trait bound `single::Job: Default` is not satisfied
+   --> src/proto/client/mod.rs:286:17
+    |
+286 |         Ok(Some(Default::default())) /* ~ changed by cargo-mutants ~ */
+    |                 ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `single::Job`
+    |
+help: consider annotating `single::Job` with `#[derive(Default)]`
+   --> src/proto/single/mod.rs:71:1
+    |
+71  + #[derive(Default)]
+72  | pub struct Job {
+    |
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

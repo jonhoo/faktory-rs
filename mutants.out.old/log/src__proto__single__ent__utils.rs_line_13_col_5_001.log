@@ -1,0 +1,89 @@
+
+*** src/proto/single/ent/utils.rs:13:5: replace parse_datetime -> Result<Option<DateTime<Utc>>, D::Error> with Ok(Some(DateTime::new()))
+
+*** mutation diff:
+--- src/proto/single/ent/utils.rs
++++ replace parse_datetime -> Result<Option<DateTime<Utc>>, D::Error> with Ok(Some(DateTime::new()))
+@@ -5,13 +5,10 @@
+ };
+ 
+ // Used to parse responses from Faktory where a datetime field is set to an empty string, e.g:
+ // '{"jid":"f6APFzrS2RZi9eaA","state":"unknown","updated_at":""}'
+ pub(crate) fn parse_datetime<'de, D>(value: D) -> Result<Option<DateTime<Utc>>, D::Error>
+ where
+     D: Deserializer<'de>,
+ {
+-    match Option::<String>::deserialize(value)?.as_deref() {
+-        Some("") | None => Ok(None),
+-        Some(non_empty) => DateTime::deserialize(non_empty.into_deserializer()).map(Some),
+-    }
++    Ok(Some(DateTime::new())) /* ~ changed by cargo-mutants ~ */
+ }
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-jIMFg4.tmp)
+error[E0599]: no function or associated item named `new` found for struct `DateTime` in the current scope
+   --> src/proto/single/ent/utils.rs:13:23
+    |
+13  |     Ok(Some(DateTime::new())) /* ~ changed by cargo-mutants ~ */
+    |                       ^^^ function or associated item not found in `DateTime<_>`
+    |
+note: if you're trying to build a new `DateTime<_>` consider using one of the following associated functions:
+      DateTime::<Tz>::from_naive_utc_and_offset
+      DateTime::<Tz>::from_utc
+      DateTime::<Tz>::from_local
+      DateTime::<Utc>::from_timestamp
+      and 6 others
+   --> /home/pavel/.cargo/registry/src/index.crates.io-6f17d22bba15001f/chrono-0.4.35/src/datetime/mod.rs:96:5
+    |
+96  | /     pub const fn from_naive_utc_and_offset(
+97  | |         datetime: NaiveDateTime,
+98  | |         offset: Tz::Offset,
+99  | |     ) -> DateTime<Tz> {
+    | |_____________________^
+...
+110 |       pub fn from_utc(datetime: NaiveDateTime, offset: Tz::Offset) -> DateTime<Tz> {
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+128 |       pub fn from_local(datetime: NaiveDateTime, offset: Tz::Offset) -> DateTime<Tz> {
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+725 |       pub const fn from_timestamp(secs: i64, nsecs: u32) -> Option<Self> {
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error[E0599]: no function or associated item named `new` found for struct `DateTime` in the current scope
+   --> src/proto/single/ent/utils.rs:13:23
+    |
+13  |     Ok(Some(DateTime::new())) /* ~ changed by cargo-mutants ~ */
+    |                       ^^^ function or associated item not found in `DateTime<_>`
+    |
+note: if you're trying to build a new `DateTime<_>` consider using one of the following associated functions:
+      DateTime::<Tz>::from_naive_utc_and_offset
+      DateTime::<Tz>::from_utc
+      DateTime::<Tz>::from_local
+      DateTime::<chrono::Utc>::from_timestamp
+      and 6 others
+   --> /home/pavel/.cargo/registry/src/index.crates.io-6f17d22bba15001f/chrono-0.4.35/src/datetime/mod.rs:96:5
+    |
+96  | /     pub const fn from_naive_utc_and_offset(
+97  | |         datetime: NaiveDateTime,
+98  | |         offset: Tz::Offset,
+99  | |     ) -> DateTime<Tz> {
+    | |_____________________^
+...
+110 |       pub fn from_utc(datetime: NaiveDateTime, offset: Tz::Offset) -> DateTime<Tz> {
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+128 |       pub fn from_local(datetime: NaiveDateTime, offset: Tz::Offset) -> DateTime<Tz> {
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+725 |       pub const fn from_timestamp(secs: i64, nsecs: u32) -> Option<Self> {
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

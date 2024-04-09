@@ -1,0 +1,62 @@
+
+*** src/worker/mod.rs:302:9: replace Worker<S, E>::spawn_worker -> Result<JoinHandle<Result<(), Error>>, Error> with Ok(JoinHandle::from(Ok(())))
+
+*** mutation diff:
+--- src/worker/mod.rs
++++ replace Worker<S, E>::spawn_worker -> Result<JoinHandle<Result<(), Error>>, Error> with Ok(JoinHandle::from(Ok(())))
+@@ -294,28 +294,17 @@
+         &mut self,
+         status: Arc<AtomicUsize>,
+         worker: usize,
+         queues: &[Q],
+     ) -> Result<JoinHandle<Result<(), Error>>, Error>
+     where
+         Q: AsRef<str>,
+     {
+-        let mut w = self.for_worker().await?;
+-        let queues: Vec<_> = queues.iter().map(|s| s.as_ref().to_string()).collect();
+-        Ok(tokio::spawn(async move {
+-            while status.load(atomic::Ordering::SeqCst) == STATUS_RUNNING {
+-                if let Err(e) = w.run_one(worker, &queues[..]).await {
+-                    status.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
+-                    return Err(e);
+-                }
+-            }
+-            status.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
+-            Ok(())
+-        }))
++        Ok(JoinHandle::from(Ok(()))) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Run this worker on the given `queues` until an I/O error occurs (`Err` is returned), or
+     /// until the server tells the worker to disengage (`Ok` is returned).
+     ///
+     /// The value in an `Ok` indicates the number of workers that may still be processing jobs.
+     ///
+     /// If an error occurred while reporting a job success or failure, the result will be re-reported to the server
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+error[E0308]: mismatched types
+   --> src/worker/mod.rs:302:29
+    |
+302 |         Ok(JoinHandle::from(Ok(()))) /* ~ changed by cargo-mutants ~ */
+    |            ---------------- ^^^^^^ expected `JoinHandle<Result<(), Error>>`, found `Result<(), _>`
+    |            |
+    |            arguments to this function are incorrect
+    |
+    = note: expected struct `tokio::task::JoinHandle<Result<_, error::Error>>`
+                 found enum `Result<_, _>`
+note: associated function defined here
+   --> /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/convert/mod.rs:584:8
+    |
+584 |     fn from(value: T) -> Self;
+    |        ^^^^
+
+For more information about this error, try `rustc --explain E0308`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)

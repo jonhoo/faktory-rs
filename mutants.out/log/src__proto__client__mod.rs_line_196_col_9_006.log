@@ -1,0 +1,78 @@
+
+*** src/proto/client/mod.rs:196:9: replace Client<BufStream<S>>::connect_with -> Result<Client<BufStream<S>>, Error> with Ok(Client::new(BufStream::from_iter([Default::default()])))
+
+*** mutation diff:
+--- src/proto/client/mod.rs
++++ replace Client<BufStream<S>>::connect_with -> Result<Client<BufStream<S>>, Error> with Ok(Client::new(BufStream::from_iter([Default::default()])))
+@@ -188,22 +188,17 @@
+ }
+ 
+ impl<S: AsyncRead + AsyncWrite + Send + Unpin> Client<BufStream<S>> {
+     /// Create new [`Client`] and connect to a Faktory server with a non-standard stream.
+     pub async fn connect_with(
+         stream: S,
+         pwd: Option<String>,
+     ) -> Result<Client<BufStream<S>>, Error> {
+-        let buffered = BufStream::new(stream);
+-        let opts = ClientOptions {
+-            password: pwd,
+-            ..Default::default()
+-        };
+-        Client::new(buffered, opts).await
++        Ok(Client::new(BufStream::from_iter([Default::default()]))) /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ impl Client<BufStream<TokioStream>> {
+     /// Create new [`Client`] and connect to a Faktory server.
+     ///
+     /// If `url` is not given, will use the standard Faktory environment variables. Specifically,
+     /// `FAKTORY_PROVIDER` is read to get the name of the environment variable to get the address
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-3ziugm.tmp/Cargo.toml
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-3ziugm.tmp)
+error[E0599]: no function or associated item named `from_iter` found for struct `BufStream` in the current scope
+   --> src/proto/client/mod.rs:196:35
+    |
+196 |         Ok(Client::new(BufStream::from_iter([Default::default()]))) /* ~ changed by cargo-mutants ~ */
+    |                                   ^^^^^^^^^ function or associated item not found in `BufStream<_>`
+    |
+note: if you're trying to build a new `BufStream<_>` consider using one of the following associated functions:
+      BufStream::<RW>::new
+      BufStream::<RW>::with_capacity
+   --> /home/pavel/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tokio-1.36.0/src/io/util/buf_stream.rs:29:5
+    |
+29  |       pub fn new(stream: RW) -> BufStream<RW> {
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+39  | /     pub fn with_capacity(
+40  | |         reader_capacity: usize,
+41  | |         writer_capacity: usize,
+42  | |         stream: RW,
+43  | |     ) -> BufStream<RW> {
+    | |______________________^
+
+error[E0061]: this function takes 2 arguments but 1 argument was supplied
+   --> src/proto/client/mod.rs:196:12
+    |
+196 |         Ok(Client::new(BufStream::from_iter([Default::default()]))) /* ~ changed by cargo-mutants ~ */
+    |            ^^^^^^^^^^^-------------------------------------------- an argument of type `ClientOptions` is missing
+    |
+note: associated function defined here
+   --> src/proto/client/mod.rs:263:25
+    |
+263 |     pub(crate) async fn new(stream: S, opts: ClientOptions) -> Result<Client<S>, Error> {
+    |                         ^^^ ---------  -------------------
+help: provide the argument
+    |
+196 |         Ok(Client::new(BufStream::from_iter([Default::default()]), /* ClientOptions */)) /* ~ changed by cargo-mutants ~ */
+    |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Some errors have detailed explanations: E0061, E0599.
+For more information about an error, try `rustc --explain E0061`.
+error: could not compile `faktory` (lib) due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 2 previous errors
+
+*** result: Failure(101)

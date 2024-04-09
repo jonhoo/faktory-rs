@@ -1,0 +1,9 @@
+src/worker/mod.rs:228:9: replace Worker<S, E>::force_fail_all_workers -> usize with 0
+src/worker/mod.rs:358:24: replace != with == in Worker<S, E>::run
+src/worker/mod.rs:232:25: replace += with *= in Worker<S, E>::force_fail_all_workers
+src/worker/state.rs:19:9: replace WorkerState::take_cuurently_running -> Option<JobId> with None
+src/worker/health.rs:20:9: replace Worker<S, E>::listen_for_heartbeats -> Result<bool, Error> with Ok(true)
+src/worker/health.rs:29:17: replace && with || in Worker<S, E>::listen_for_heartbeats
+src/worker/health.rs:20:9: replace Worker<S, E>::listen_for_heartbeats -> Result<bool, Error> with Ok(false)
+src/worker/state.rs:48:9: replace WorkerStatesRegistry::register_running with ()
+src/worker/health.rs:31:63: replace == with != in Worker<S, E>::listen_for_heartbeats

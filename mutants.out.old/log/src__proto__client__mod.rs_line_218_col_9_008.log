@@ -1,0 +1,67 @@
+
+*** src/proto/client/mod.rs:218:9: replace Client<BufStream<TokioStream>>::connect -> Result<Client<BufStream<TokioStream>>, Error> with Ok(Client::from_iter([BufStream::new()]))
+
+*** mutation diff:
+--- src/proto/client/mod.rs
++++ replace Client<BufStream<TokioStream>>::connect -> Result<Client<BufStream<TokioStream>>, Error> with Ok(Client::from_iter([BufStream::new()]))
+@@ -210,19 +210,17 @@
+     /// from (defaults to `FAKTORY_URL`), and then that environment variable is read to get the
+     /// server address. If the latter environment variable is not defined, the connection will be
+     /// made to
+     ///
+     /// ```text
+     /// tcp://localhost:7419
+     /// ```
+     pub async fn connect(url: Option<&str>) -> Result<Client<BufStream<TokioStream>>, Error> {
+-        let url = utils::parse_provided_or_from_env(url)?;
+-        let stream = TokioStream::connect(utils::host_from_url(&url)).await?;
+-        Self::connect_with(stream, url.password().map(|p| p.to_string())).await
++        Ok(Client::from_iter([BufStream::new()])) /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ impl<S> Client<S>
+ where
+     S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send,
+ {
+     async fn init(&mut self) -> Result<(), Error> {
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-jIMFg4.tmp)
+error[E0599]: no function or associated item named `from_iter` found for struct `Client` in the current scope
+   --> src/proto/client/mod.rs:218:20
+    |
+149 | pub struct Client<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> {
+    | -------------------------------------------------------------------- function or associated item `from_iter` not found for this struct
+...
+218 |         Ok(Client::from_iter([BufStream::new()])) /* ~ changed by cargo-mutants ~ */
+    |                    ^^^^^^^^^ function or associated item not found in `Client<_>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+    = note: the following trait defines an item `from_iter`, perhaps you need to implement it:
+            candidate #1: `FromIterator`
+
+error[E0061]: this function takes 1 argument but 0 arguments were supplied
+   --> src/proto/client/mod.rs:218:31
+    |
+218 |         Ok(Client::from_iter([BufStream::new()])) /* ~ changed by cargo-mutants ~ */
+    |                               ^^^^^^^^^^^^^^-- an argument is missing
+    |
+note: associated function defined here
+   --> /home/pavel/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tokio-1.36.0/src/io/util/buf_stream.rs:29:12
+    |
+29  |     pub fn new(stream: RW) -> BufStream<RW> {
+    |            ^^^
+help: provide the argument
+    |
+218 |         Ok(Client::from_iter([BufStream::new(/* stream */)])) /* ~ changed by cargo-mutants ~ */
+    |                                             ~~~~~~~~~~~~~~
+
+Some errors have detailed explanations: E0061, E0599.
+For more information about an error, try `rustc --explain E0061`.
+error: could not compile `faktory` (lib) due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 2 previous errors
+
+*** result: Failure(101)

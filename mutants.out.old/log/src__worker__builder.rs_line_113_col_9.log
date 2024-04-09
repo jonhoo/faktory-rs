@@ -1,0 +1,40 @@
+
+*** src/worker/builder.rs:113:9: replace WorkerBuilder<E>::connect -> Result<Worker<BufStream<TokioStream>, E>, Error> with Ok(Default::default())
+
+*** mutation diff:
+--- src/worker/builder.rs
++++ replace WorkerBuilder<E>::connect -> Result<Worker<BufStream<TokioStream>, E>, Error> with Ok(Default::default())
+@@ -105,16 +105,11 @@
+ 
+     /// Asynchronously connect to a Faktory server.
+     ///
+     /// See [`connect`](WorkerBuilder::connect).
+     pub async fn connect(
+         mut self,
+         url: Option<&str>,
+     ) -> Result<Worker<BufStream<TokioStream>, E>, Error> {
+-        let url = utils::parse_provided_or_from_env(url)?;
+-        let stream = TokioStream::connect(utils::host_from_url(&url)).await?;
+-        self.opts.is_worker = true;
+-        let buffered = BufStream::new(stream);
+-        let client = Client::new(buffered, self.opts).await?;
+-        Ok(Worker::new(client, self.workers_count, self.callbacks).await)
++        Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+     }
+ }
+
+
+*** /home/pavel/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --tests --manifest-path /tmp/cargo-mutants-faktory-rs-jIMFg4.tmp/Cargo.toml --all-features
+   Compiling faktory v0.12.5 (/tmp/cargo-mutants-faktory-rs-jIMFg4.tmp)
+error[E0277]: the trait bound `Worker<BufStream<tokio::net::TcpStream>, E>: Default` is not satisfied
+   --> src/worker/builder.rs:113:12
+    |
+113 |         Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+    |            ^^^^^^^^^^^^^^^^^^ the trait `Default` is not implemented for `Worker<BufStream<tokio::net::TcpStream>, E>`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `faktory` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `faktory` (lib test) due to 1 previous error
+
+*** result: Failure(101)
