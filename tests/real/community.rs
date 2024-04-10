@@ -220,6 +220,12 @@ async fn queue_control_actions() {
     assert!(worker.run_one(0, &[local_2]).await.unwrap());
     assert!(rx.try_recv().is_ok());
 
+    // let's inspect the sever state
+    let server_state = client.info().await.unwrap();
+    let queues = server_state.get("faktory").unwrap().get("queues").unwrap();
+    assert_eq!(queues.get(local_1).unwrap(), 1); // 1 job remaining
+    assert_eq!(queues.get(local_2).unwrap(), 1); // also 1 job remaining
+
     // let's now remove the queues
     client.queue_remove(&[local_1, local_2]).await.unwrap();
 
@@ -228,12 +234,19 @@ async fn queue_control_actions() {
     assert!(!worker.run_one(0, &[local_1]).await.unwrap());
     assert!(!worker.run_one(0, &[local_2]).await.unwrap());
     assert!(!rx.try_recv().is_ok());
+
+    // let's inspect the sever state again
+    let server_state = client.info().await.unwrap();
+    let queues = server_state.get("faktory").unwrap().get("queues").unwrap();
+    // our queue are not even mentioned in the server report:
+    assert!(queues.get(local_1).is_none());
+    assert!(queues.get(local_2).is_none());
 }
 
 // Run the following test with:
 // FAKTORY_URL=tcp://127.0.0.1:7419 cargo test --locked --all-features --all-targets queue_control_actions_wildcard -- --include-ignored
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "This requires a dedicated test run since the commands affect all queues on the Faktory server"]
+#[ignore = "this test requires a dedicated test run since the commands affect all queues on the Faktory server"]
 async fn queue_control_actions_wildcard() {
     skip_check!();
 
@@ -288,6 +301,12 @@ async fn queue_control_actions_wildcard() {
     assert!(worker.run_one(0, &[local_2]).await.unwrap());
     assert!(rx.try_recv().is_ok());
 
+    // let's inspect the sever state
+    let server_state = client.info().await.unwrap();
+    let queues = server_state.get("faktory").unwrap().get("queues").unwrap();
+    assert_eq!(queues.get(local_1).unwrap(), 1); // 1 job remaining
+    assert_eq!(queues.get(local_2).unwrap(), 1); // also 1 job remaining
+
     // let's now remove all the queues
     client.queue_remove_all().await.unwrap();
 
@@ -296,6 +315,13 @@ async fn queue_control_actions_wildcard() {
     assert!(!worker.run_one(0, &[local_1]).await.unwrap());
     assert!(!worker.run_one(0, &[local_2]).await.unwrap());
     assert!(!rx.try_recv().is_ok());
+
+    // let's inspect the sever state again
+    let server_state = client.info().await.unwrap();
+    let queues = server_state.get("faktory").unwrap().get("queues").unwrap();
+    // our queue are not even mentioned in the server report:
+    assert!(queues.get(local_1).is_none());
+    assert!(queues.get(local_2).is_none());
 }
 
 #[tokio::test(flavor = "multi_thread")]
