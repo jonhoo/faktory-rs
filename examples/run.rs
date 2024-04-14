@@ -27,7 +27,7 @@ async fn main() {
 
     let handle = tokio::spawn(async move { w.run(&["default"], Some(rx)).await });
 
-    tx.send(Message::Exit(100)).await.expect("sent ok");
+    tx.send(Message::Exit(100)).expect("sent ok");
 
     let nrunning = handle.await.expect("joined ok").expect("no worker errors");
 

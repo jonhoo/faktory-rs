@@ -6,7 +6,7 @@ use std::process;
 use std::sync::{atomic, Arc};
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
-use tokio::sync::mpsc;
+use tokio::sync::oneshot::Receiver;
 use tokio::task::JoinHandle;
 use tokio::time::sleep as tokio_sleep;
 use tokio::time::Duration as TokioDuration;
@@ -356,7 +356,7 @@ impl<
     ///
     /// let (tx, rx) = channel();
     /// let _handle = tokio::spawn(async move { w.run(&["qname"], Some(rx)).await });
-    /// tx.send(Message::Exit(0)).await.expect("sent ok");
+    /// tx.send(Message::Exit(0)).expect("sent ok");
     /// # });
     /// ```
     ///
@@ -379,7 +379,7 @@ impl<
     pub async fn run<Q>(
         &mut self,
         queues: &[Q],
-        channel: Option<mpsc::Receiver<Message>>,
+        channel: Option<Receiver<Message>>,
     ) -> Result<usize, Error>
     where
         Q: AsRef<str>,
@@ -422,7 +422,12 @@ impl<
                 }
             },
             // Message from userland received:
-            Some(msg) = async { let mut ch = channel.unwrap(); ch.recv().await }, if channel.is_some() => {
+            from_channel = async { let ch = channel.unwrap(); ch.await }, if channel.is_some() => {
+                if from_channel.is_err() {
+                    tracing::info!("The sender dropped");
+                    process::exit(0);
+                }
+                let msg = from_channel.unwrap();
                 if let Message::ExitNow(code) = msg {
                     tracing::info!("Received signal to immediately exit with status {}.", code);
                     process::exit(code);

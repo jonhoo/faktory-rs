@@ -1,7 +1,7 @@
 #[cfg(doc)]
 use super::{Worker, WorkerBuilder};
 
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::sync::oneshot::{self, Receiver, Sender};
 
 /// Message sent to running worker.
 ///
@@ -31,8 +31,7 @@ pub enum Message {
     ReturnControlNow,
 }
 
-/// Returns multiple producers and a singler consumer of a [`Message`].
+/// Returns multiple producers and a singler consumer one-shot channel for a [`Message`].
 pub fn channel() -> (Sender<Message>, Receiver<Message>) {
-    let buf_size = std::mem::size_of::<Message>();
-    mpsc::channel::<Message>(buf_size)
+    oneshot::channel::<Message>()
 }

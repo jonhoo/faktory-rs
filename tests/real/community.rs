@@ -373,7 +373,7 @@ async fn test_shutdown_signals_handling() {
     cl.enqueue(j).await.unwrap();
     rx_for_test_purposes.recv().await;
     // ... immediately signal to return control
-    tx.send(Message::ReturnControl).await.expect("sent ok");
+    tx.send(Message::ReturnControl).expect("sent ok");
 
     // one worker was processing a task when we interrupted it
     let nrunning = jh.await.expect("joined ok").unwrap();
@@ -394,7 +394,7 @@ async fn test_shutdown_signals_handling() {
         .unwrap();
     rx_for_test_purposes.recv().await;
     // signalling to yield immediately
-    tx.send(Message::ReturnControlNow).await.expect("sent ok");
+    tx.send(Message::ReturnControlNow).expect("sent ok");
     let nrunning = jh.await.expect("joined ok").unwrap();
     // we did not even have a change to examine the current workers state
     assert_eq!(nrunning, 0);
