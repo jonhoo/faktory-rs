@@ -403,7 +403,7 @@ impl<
         }
 
         let report = tokio::select! {
-            // SIGTERM received:
+            // Signal SIGTERM received.
             _ = tokio::signal::ctrl_c(), if self.forever => {
                 tracing::info!("SIGINT received, shutting down gracefully.");
                 tokio::select! {
@@ -421,7 +421,7 @@ impl<
                     }
                 }
             },
-            // Message from userland received:
+            // Message from userland code received.
             from_channel = async { let ch = channel.unwrap(); ch.await }, if channel.is_some() => {
                 if from_channel.is_err() {
                     tracing::info!("The sender dropped");
@@ -459,7 +459,10 @@ impl<
                     _ => unreachable!("ExitNow and ReturnControlNow variants are already handled above.")
                 }
             },
-            // Instruction from Faktory received or error occurred:
+            // Instruction from Faktory received or error occurred.
+            // Though this is not cancellation safe, we _are_ ok, since we are effectively running a one-time race in this select
+            // (without any looping) and, besides, we are mutating `statuses` atomically inside this method, so even if one the other
+            // select arms were to utilize the `statuses` state, it would be just fine to do so.
             exit = self.listen_for_heartbeats(&statuses) => {
                 // there are a couple of cases here:
                 //  - we got TERMINATE, so we should just return, even if a worker is still running

@@ -16,6 +16,11 @@ impl<
         E: StdError + 'static + Send,
     > Worker<S, E>
 {
+    /// Exchange heart beats with the Faktory service.
+    ///
+    /// Note that this method is not cancellation safe. We are using an interval timer internally, that
+    /// would be reset should we call this method anew. Besides, the `Heartbeat` command is being issued
+    /// with the help of `AsyncWriteExt::write_all` which is not cancellation safe.
     pub(crate) async fn listen_for_heartbeats(
         &mut self,
         statuses: &Vec<Arc<atomic::AtomicUsize>>,
