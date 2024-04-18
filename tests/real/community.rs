@@ -77,8 +77,7 @@ async fn server_state() {
 
     // examine server state before pushing anything
     let server_state = client.info().await.unwrap();
-    assert_eq!(*server_state.faktory.queues.get(local).unwrap(), 0);
-
+    assert!(server_state.faktory.queues.get(local).is_none());
     // the following two assertions are not super-helpful but
     // there is not much info we can make meaningful assetions on anyhow
     // (like memusage, server description string, version, etc.)
