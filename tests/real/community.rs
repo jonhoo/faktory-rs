@@ -62,6 +62,63 @@ async fn roundtrip() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn server_state() {
+    skip_check!();
+
+    let local = "server_state";
+
+    // prepare a worker
+    let mut w = WorkerBuilder::default();
+    w.register(local, move |_| async move { Ok::<(), io::Error>(()) });
+    let mut w = w.connect(None).await.unwrap();
+
+    // prepare a producing client
+    let mut client = Client::connect(None).await.unwrap();
+
+    // examine server state before pushing anything
+    let server_state = client.info().await.unwrap();
+    assert_eq!(*server_state.faktory.queues.get(local).unwrap(), 0);
+
+    // the following two assertions are not super-helpful but
+    // there is not much info we can make meaningful assetions on anyhow
+    // (like memusage, server description string, version, etc.)
+    assert!(server_state.server.connections >= 2); // at least two clients from the current test
+    assert!(server_state.server.uptime > 0); // if IPC is happenning, this should hold :)
+
+    // push 1 job
+    client
+        .enqueue(
+            JobBuilder::new(local)
+                .args(vec!["abc"])
+                .queue(local)
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    // we only pushed 1 job on this queue
+    let server_state = client.info().await.unwrap();
+    assert_eq!(*server_state.faktory.queues.get(local).unwrap(), 1);
+    assert!(server_state.faktory.total_enqueued >= 1); // at least 1 job from this test
+    assert!(server_state.faktory.total_queues >= 1); // at least 1 qeueu from this test
+
+    // let's know consume that job ...
+    assert!(w.run_one(0, &[local]).await.unwrap());
+
+    // ... and verify the queue has got 0 pending jobs
+    //
+    // NB! If this is not passing locally, make sure to launch a fresh Faktory container,
+    // because if you have not pruned its volume _AND_ there somehow used to be a pending job
+    // on this local queue, you can imagine the test will fail. But generally, by consuming
+    // the jobs from the local queue, we are getting a clean up for free and there is normally
+    // no need to purge docker volumes to perform the next test run.
+    // Also note that on CI we are always starting a-fresh.
+    let server_state = client.info().await.unwrap();
+    assert_eq!(*server_state.faktory.queues.get(local).unwrap(), 0);
+    assert!(server_state.faktory.total_processed >= 1); // at least 1 job from this test
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn multi() {
     skip_check!();
     let local = "multi_async";
@@ -222,9 +279,9 @@ async fn queue_control_actions() {
 
     // let's inspect the sever state
     let server_state = client.info().await.unwrap();
-    let queues = server_state.get("faktory").unwrap().get("queues").unwrap();
-    assert_eq!(queues.get(local_1).unwrap(), 1); // 1 job remaining
-    assert_eq!(queues.get(local_2).unwrap(), 1); // also 1 job remaining
+    let queues = &server_state.faktory.queues;
+    assert_eq!(*queues.get(local_1).unwrap(), 1); // 1 job remaining
+    assert_eq!(*queues.get(local_2).unwrap(), 1); // also 1 job remaining
 
     // let's now remove the queues
     client.queue_remove(&[local_1, local_2]).await.unwrap();
@@ -237,7 +294,7 @@ async fn queue_control_actions() {
 
     // let's inspect the sever state again
     let server_state = client.info().await.unwrap();
-    let queues = server_state.get("faktory").unwrap().get("queues").unwrap();
+    let queues = &server_state.faktory.queues;
     // our queue are not even mentioned in the server report:
     assert!(queues.get(local_1).is_none());
     assert!(queues.get(local_2).is_none());
@@ -303,9 +360,9 @@ async fn queue_control_actions_wildcard() {
 
     // let's inspect the sever state
     let server_state = client.info().await.unwrap();
-    let queues = server_state.get("faktory").unwrap().get("queues").unwrap();
-    assert_eq!(queues.get(local_1).unwrap(), 1); // 1 job remaining
-    assert_eq!(queues.get(local_2).unwrap(), 1); // also 1 job remaining
+    let queues = &server_state.faktory.queues;
+    assert_eq!(*queues.get(local_1).unwrap(), 1); // 1 job remaining
+    assert_eq!(*queues.get(local_2).unwrap(), 1); // also 1 job remaining
 
     // let's now remove all the queues
     client.queue_remove_all().await.unwrap();
@@ -318,7 +375,7 @@ async fn queue_control_actions_wildcard() {
 
     // let's inspect the sever state again
     let server_state = client.info().await.unwrap();
-    let queues = server_state.get("faktory").unwrap().get("queues").unwrap();
+    let queues = &server_state.faktory.queues;
     // our queue are not even mentioned in the server report:
     assert!(queues.get(local_1).is_none());
     assert!(queues.get(local_2).is_none());

@@ -34,7 +34,7 @@ faktory/tls:
 
 .PHONY: faktory/tls/kill
 faktory/tls/kill:
-	docker compose -f docker/compose.yml down
+	docker compose -f docker/compose.yml down -v
 
 .PHONY: test
 test:

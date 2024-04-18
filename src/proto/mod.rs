@@ -9,7 +9,9 @@ pub(crate) use client::{ClientOptions, HeartbeatStatus, EXPECTED_PROTOCOL_VERSIO
 
 mod single;
 
-pub use single::{Job, JobBuilder, JobId, WorkerId};
+pub use single::{
+    FaktoryServerProcessStats, FaktoryServiceStats, Job, JobBuilder, JobId, ServerState, WorkerId,
+};
 
 pub(crate) use single::{Ack, Fail, Info, Push, PushBulk, QueueAction, QueueControl};
 
