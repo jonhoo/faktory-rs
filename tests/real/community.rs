@@ -107,14 +107,25 @@ async fn server_state() {
     // ... and verify the queue has got 0 pending jobs
     //
     // NB! If this is not passing locally, make sure to launch a fresh Faktory container,
-    // because if you have not pruned its volume _AND_ there somehow used to be a pending job
-    // on this local queue, you can imagine the test will fail. But generally, by consuming
-    // the jobs from the local queue, we are getting a clean up for free and there is normally
-    // no need to purge docker volumes to perform the next test run.
-    // Also note that on CI we are always starting a-fresh.
+    // because if you have not pruned its volume the Faktory will still keep the queue name
+    // as registered.
+    // But generally, we are performing a clean-up by consuming the jobs from the local queue/
+    // and then deleting the queue programmatically, so there is normally no need to prune docker
+    // volumes to perform the next test run. Also note that on CI we are always starting a-fresh.
     let server_state = client.info().await.unwrap();
     assert_eq!(*server_state.faktory.queues.get(local).unwrap(), 0);
     assert!(server_state.faktory.total_processed >= 1); // at least 1 job from this test
+
+    client.queue_remove(&[local]).await.unwrap();
+
+    assert!(client
+        .info()
+        .await
+        .unwrap()
+        .faktory
+        .queues
+        .get(local)
+        .is_none());
 }
 
 #[tokio::test(flavor = "multi_thread")]
