@@ -1,7 +1,9 @@
 #[cfg(doc)]
 use crate::{Client, WorkerBuilder};
 
-use crate::{proto::utils, Error, Reconnect};
+use crate::error::{self, Error};
+use crate::proto::utils;
+use crate::Reconnect;
 use std::fmt::Debug;
 use std::io;
 use std::ops::{Deref, DerefMut};
@@ -32,7 +34,7 @@ pub struct TlsStream<S> {
     connector: AsyncTlsConnector,
     hostname: String,
     #[pin]
-    pub(crate) stream: NativeTlsStream<S>,
+    stream: NativeTlsStream<S>,
 }
 
 impl TlsStream<TokioTcpStream> {
@@ -51,7 +53,9 @@ impl TlsStream<TokioTcpStream> {
     /// If `url` is given, but does not specify a port, it defaults to 7419.
     pub async fn connect(url: Option<&str>) -> Result<Self, Error> {
         TlsStream::with_connector(
-            TlsConnector::builder().build().map_err(Error::TlsStream)?,
+            TlsConnector::builder()
+                .build()
+                .map_err(error::TlsStream::Native)?,
             url,
         )
         .await
@@ -83,7 +87,7 @@ where
     pub async fn default(stream: S, hostname: &str) -> io::Result<Self> {
         let connector = TlsConnector::builder()
             .build()
-            .map_err(Error::TlsStream)
+            .map_err(error::TlsStream::Native)
             .unwrap();
         Self::new(stream, connector, hostname).await
     }

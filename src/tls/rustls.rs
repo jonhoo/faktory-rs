@@ -34,7 +34,7 @@ pub struct TlsStream<S> {
     connector: TlsConnector,
     hostname: &'static str,
     #[pin]
-    pub(crate) stream: RustlsStream<S>,
+    stream: RustlsStream<S>,
 }
 
 impl TlsStream<TokioTcpStream> {
@@ -64,7 +64,7 @@ impl TlsStream<TokioTcpStream> {
         TlsStream::with_connector(con, url).await
     }
 
-    /// Create a new asynchronous TLS connection over TCP using a non-default TLS configuration.
+    /// Create a new TLS connection over TCP using a non-default TLS configuration.
     ///
     /// See `connect` for details about the `url` parameter.
     pub async fn with_client_config(conf: ClientConfig, url: Option<&str>) -> Result<Self, Error> {
@@ -72,7 +72,7 @@ impl TlsStream<TokioTcpStream> {
         TlsStream::with_connector(con, url).await
     }
 
-    /// Create a new asynchronous TLS connection over TCP using a connector with a non-default TLS configuration.
+    /// Create a new TLS connection over TCP using a connector with a non-default TLS configuration.
     ///
     /// See `connect` for details about the `url` parameter.
     pub async fn with_connector(connector: TlsConnector, url: Option<&str>) -> Result<Self, Error> {
@@ -82,8 +82,7 @@ impl TlsStream<TokioTcpStream> {
         }?;
         let hostname = utils::host_from_url(&url);
         let tcp_stream = TokioTcpStream::connect(&hostname).await?;
-        let hostname: &'static str = url.host_str().unwrap().to_string().leak();
-        Ok(TlsStream::new(tcp_stream, connector, hostname).await?)
+        Ok(TlsStream::new(tcp_stream, connector, hostname.leak()).await?)
     }
 }
 
@@ -91,7 +90,7 @@ impl<S> TlsStream<S>
 where
     S: AsyncRead + AsyncWrite + Send + Unpin + Reconnect + Debug + 'static,
 {
-    /// Create a new asynchronous TLS connection on an existing stream.
+    /// Create a new TLS connection on an existing stream.
     ///
     /// Internally creates a `ClientConfig` with an empty root certificates store and no client
     /// authentication. Use [`new`](TlsStream::new) for a customized `TlsConnector`.
@@ -103,13 +102,12 @@ where
         Self::new(stream, TlsConnector::from(Arc::new(conf)), hostname).await
     }
 
-    /// Create a new asynchronous TLS connection on an existing stream with a non-default TLS configuration.
+    /// Create a new TLS connection on an existing stream with a non-default TLS configuration.
     pub async fn new(
         stream: S,
         connector: TlsConnector,
         hostname: &'static str,
     ) -> io::Result<Self> {
-        // let hostname: &'static str = hostname.to_string().leak();
         let domain = hostname.try_into().expect("a valid DNS name or IP address");
         let tls_stream = connector
             .connect(domain, stream)
