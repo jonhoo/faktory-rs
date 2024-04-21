@@ -1,5 +1,5 @@
-#[cfg(feature = "openssl")]
-mod native;
+#[cfg(feature = "native_tls")]
+mod native_tls;
 
 #[cfg(feature = "rustls")]
-mod rust;
+mod rustls;

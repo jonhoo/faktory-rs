@@ -1,4 +1,4 @@
-use faktory::openssl::TlsStream;
+use faktory::native_tls::TlsStream;
 use faktory::{Client, Job, WorkerBuilder};
 use serde_json::Value;
 use std::{env, sync};

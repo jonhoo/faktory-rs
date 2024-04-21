@@ -20,7 +20,7 @@ use tokio_native_tls::{native_tls::TlsConnector, TlsConnector as AsyncTlsConnect
 /// ```no_run
 /// # tokio_test::block_on(async {
 /// use faktory::Client;
-/// use faktory::openssl::TlsStream;
+/// use faktory::native_tls::TlsStream;
 /// let tls = TlsStream::connect(None).await.unwrap();
 /// let cl = Client::connect_with(tls, None).await.unwrap();
 /// # drop(cl);

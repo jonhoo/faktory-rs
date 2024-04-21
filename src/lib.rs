@@ -87,8 +87,8 @@ pub mod ent {
     };
 }
 
-#[cfg(feature = "tls")]
+#[cfg(any(feature = "native_tls", feature = "rustls"))]
 mod tls;
 
-#[cfg(feature = "tls")]
+#[cfg(any(feature = "native_tls", feature = "rustls"))]
 pub use tls::*;
