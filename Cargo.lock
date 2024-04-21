@@ -443,6 +443,7 @@ dependencies = [
  "openssl",
  "pin-project",
  "rand",
+ "rustls",
  "serde",
  "serde_derive",
  "serde_json",
