@@ -1,6 +1,5 @@
-#![cfg(feature = "tls")]
-
-use faktory::{Client, Job, TlsStream, WorkerBuilder};
+use faktory::openssl::TlsStream;
+use faktory::{Client, Job, WorkerBuilder};
 use serde_json::Value;
 use std::{env, sync};
 

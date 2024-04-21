@@ -15,7 +15,9 @@ exclude = [".github", "docker", ".gitignore", "Makefile"]
 
 [features]
 default = []
-tls = ["dep:tokio-native-tls", "dep:pin-project"]
+tls = ["dep:pin-project"]
+openssl = ["tls", "dep:tokio-native-tls"]
+rustls = ["tls", "dep:tokio-rustls"]
 binaries = ["dep:clap", "tokio/macros"]
 ent = []
 
@@ -44,6 +46,7 @@ tokio = { version = "1.35.1", features = [
     "time",
 ] }
 tokio-native-tls = { version = "0.3.1", optional = true }
+tokio-rustls = { version = "0.25.0", optional = true }
 url = "2"
 
 [dev-dependencies]
@@ -53,7 +56,7 @@ x509-parser = "0.15.1"
 
 # to make -Zminimal-versions work
 [target.'cfg(any())'.dependencies]
-openssl = { version = "0.10.60", optional = true }
+openssl-crate = { package = "openssl", version = "0.10.60", optional = true }
 native-tls = { version = "0.2.4", optional = true }
 num-bigint = "0.4.2"
 oid-registry = "0.6.1"

@@ -29,4 +29,4 @@ jobs:
       - name: Run tests
         env:
           FAKTORY_URL_SECURE: tcp://localhost:17419
-        run: cargo test --locked --features tls --test tls
+        run: cargo test --locked --features openssl,rustls --test tls

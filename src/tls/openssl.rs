@@ -19,7 +19,8 @@ use tokio_native_tls::{native_tls::TlsConnector, TlsConnector as AsyncTlsConnect
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// use faktory::{Client, TlsStream};
+/// use faktory::Client;
+/// use faktory::openssl::TlsStream;
 /// let tls = TlsStream::connect(None).await.unwrap();
 /// let cl = Client::connect_with(tls, None).await.unwrap();
 /// # drop(cl);
@@ -31,7 +32,7 @@ pub struct TlsStream<S> {
     connector: AsyncTlsConnector,
     hostname: String,
     #[pin]
-    stream: NativeTlsStream<S>,
+    pub(crate) stream: NativeTlsStream<S>,
 }
 
 impl TlsStream<TokioTcpStream> {
