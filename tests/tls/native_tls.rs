@@ -1,5 +1,5 @@
 use faktory::native_tls::TlsStream;
-use faktory::{Client, Job, WorkerBuilder};
+use faktory::{Client, Job, WorkerBuilder, WorkerId};
 use serde_json::Value;
 use std::{env, sync};
 
@@ -25,7 +25,7 @@ async fn roundtrip_tls() {
     let (tx, rx) = sync::mpsc::channel();
     let mut c = WorkerBuilder::default();
 
-    c.hostname("tester".to_string()).wid(local.into());
+    c.hostname("tester".to_string()).wid(WorkerId::new(local));
     c.register_runner(local, fixtures::JobHandler::new(tx));
 
     let tls = || async {

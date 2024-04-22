@@ -1,14 +1,16 @@
 use super::utils;
 use std::ops::{Deref, DerefMut};
+use std::fmt::Display;
 
 macro_rules! string_wrapper_impls {
     ($new_type:ident) => {
-        impl<S> From<S> for $new_type
-        where
-            S: AsRef<str>,
-        {
-            fn from(value: S) -> Self {
-                $new_type(value.as_ref().to_owned())
+        impl $new_type {
+            /// Document me!
+            pub fn new<S>(inner: S) -> Self
+            where
+                S: AsRef<str> + Clone + Display,
+            {
+                Self(inner.to_string())
             }
         }
 

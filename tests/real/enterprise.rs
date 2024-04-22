@@ -998,7 +998,7 @@ async fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
     // ############################## SUBTEST 0 ##########################################
     // Let's try to open/reopen a batch we have never declared:
     let b = p
-        .open_batch(BatchId::from("non-existent-batch-id"))
+        .open_batch(BatchId::new("non-existent-batch-id"))
         .await
         .unwrap();
     // The server will error back on this, with "No such batch <provided batch id>", but

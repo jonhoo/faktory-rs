@@ -1,5 +1,5 @@
 use crate::skip_check;
-use faktory::{Client, Job, JobBuilder, WorkerBuilder};
+use faktory::{Client, Job, JobBuilder, JobId, WorkerBuilder, WorkerId};
 use serde_json::Value;
 use std::{io, sync};
 
@@ -33,7 +33,7 @@ async fn roundtrip() {
     skip_check!();
 
     let local = "roundtrip";
-    let jid = String::from("x-job-id-0123456782");
+    let jid = JobId::new("x-job-id-0123456782");
 
     let mut c = WorkerBuilder::default();
     c.register("order", move |job| async move {
@@ -47,7 +47,7 @@ async fn roundtrip() {
     let mut p = Client::connect(None).await.unwrap();
     p.enqueue(
         JobBuilder::new("order")
-            .jid(&jid)
+            .jid(jid)
             .args(vec!["ISBN-13:9781718501850"])
             .queue(local)
             .build(),
@@ -69,7 +69,7 @@ async fn multi() {
     let (tx, rx) = sync::mpsc::channel();
     let tx = sync::Arc::new(sync::Mutex::new(tx));
     let mut c = WorkerBuilder::default();
-    c.hostname("tester".to_string()).wid(local.into());
+    c.hostname("tester".to_string()).wid(WorkerId::new(local));
 
     c.register(local, move |j| {
         let tx = sync::Arc::clone(&tx);
@@ -110,7 +110,7 @@ async fn fail() {
     let (tx, rx) = sync::mpsc::channel();
     let tx = sync::Arc::new(sync::Mutex::new(tx));
     let mut c = WorkerBuilder::default();
-    c.hostname("tester".to_string()).wid(local.into());
+    c.hostname("tester".to_string()).wid(WorkerId::new(local));
 
     c.register(local, move |j| {
         let tx = sync::Arc::clone(&tx);
@@ -147,7 +147,7 @@ async fn queue() {
     let tx = sync::Arc::new(sync::Mutex::new(tx));
 
     let mut c = WorkerBuilder::default();
-    c.hostname("tester".to_string()).wid(local.into());
+    c.hostname("tester".to_string()).wid(WorkerId::new(local));
     c.register(local, move |_job| {
         let tx = sync::Arc::clone(&tx);
         Box::pin(async move { tx.lock().unwrap().send(true) })
@@ -203,13 +203,16 @@ async fn test_jobs_pushed_in_bulk() {
 
     let (enqueued_count, errors) = p
         .enqueue_many([
-            Job::builder("broken").jid("short").queue(local_3).build(), // jid.len() < 8
+            Job::builder("broken")
+                .jid(JobId::new("short"))
+                .queue(local_3)
+                .build(), // jid.len() < 8
             Job::builder("") // empty string jobtype
-                .jid("3sZCbdp8e9WX__0")
+                .jid(JobId::new("3sZCbdp8e9WX__0"))
                 .queue(local_3)
                 .build(),
             Job::builder("broken")
-                .jid("3sZCbdp8e9WX__1")
+                .jid(JobId::new("3sZCbdp8e9WX__1"))
                 .queue(local_3)
                 .reserve_for(864001) // reserve_for exceeded
                 .build(),
@@ -241,7 +244,7 @@ async fn test_jobs_pushed_in_bulk() {
     // have _really_ been enqueued, i.e. that `enqueue_many`
     // is not an  all-or-nothing operation:
     let mut c = WorkerBuilder::default();
-    c.hostname("tester".to_string()).wid(local_3.into());
+    c.hostname("tester".to_string()).wid(WorkerId::new(local_3));
     c.register("very_special", move |_job| async {
         Ok::<(), io::Error>(())
     });

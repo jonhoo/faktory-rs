@@ -72,12 +72,13 @@ pub async fn read_bid<R: AsyncBufReadExt + Unpin>(r: R) -> Result<BatchId, Error
             received: "empty blob".into(),
         }
         .into()),
-        RawResponse::Blob(ref b) => Ok(std::str::from_utf8(b)
-            .map_err(|_| error::Protocol::BadType {
+        RawResponse::Blob(ref b) => {
+            let raw = std::str::from_utf8(b).map_err(|_| error::Protocol::BadType {
                 expected: "valid blob representation of batch id",
                 received: "unprocessable blob".into(),
-            })?
-            .into()),
+            })?;
+            Ok(BatchId::new(raw))
+        }
         something_else => Err(bad("id", &something_else).into()),
     }
 }
