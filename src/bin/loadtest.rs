@@ -115,5 +115,8 @@ async fn main() {
         stop_secs,
         jobs as f64 / stop_secs,
     );
-    println!("Number of operations (pushes and pops) per thread: {:?}", ops_count);
+    println!(
+        "Number of operations (pushes and pops) per thread: {:?}",
+        ops_count
+    );
 }

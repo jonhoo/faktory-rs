@@ -104,7 +104,7 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// ```no_run
 /// # tokio_test::block_on(async {
 /// use faktory::{Client, JobId, ent::JobState};
-/// let job_id = JobId::from("W8qyVle9vXzUWQOf");
+/// let job_id = JobId::new("W8qyVle9vXzUWQOf");
 /// let mut cl = Client::connect(None).await?;
 /// if let Some(progress) = cl.get_progress(job_id).await? {
 ///     if let JobState::Success = progress.state {
@@ -122,7 +122,7 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// ```no_run
 /// # tokio_test::block_on(async {
 /// use faktory::{Client, JobId, ent::ProgressUpdateBuilder};
-/// let jid = JobId::from("W8qyVle9vXzUWQOf");
+/// let jid = JobId::new("W8qyVle9vXzUWQOf");
 /// let mut cl = Client::connect(None).await?;
 /// let progress = ProgressUpdateBuilder::new(jid)
 ///     .desc("Almost done...".to_owned())
@@ -138,7 +138,7 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// ```no_run
 /// # tokio_test::block_on(async {
 /// use faktory::{Client, ent::BatchId};
-/// let bid = BatchId::from("W8qyVle9vXzUWQOg");
+/// let bid = BatchId::new("W8qyVle9vXzUWQOg");
 /// let mut cl = Client::connect(None).await?;
 /// if let Some(status) = cl.get_batch_status(bid).await? {
 ///     println!("This batch created at {}", status.created_at);

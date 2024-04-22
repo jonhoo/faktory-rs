@@ -13,7 +13,7 @@ pub(crate) struct ClientOptions {
     pub(crate) pid: Option<usize>,
 
     /// Worker ID to advertise to server.
-    /// 
+    ///
     /// Defaults to a GUID.
     pub(crate) wid: Option<WorkerId>,
 
@@ -23,7 +23,7 @@ pub(crate) struct ClientOptions {
     pub(crate) labels: Vec<String>,
 
     /// Password to authenticate with.
-    /// 
+    ///
     /// Defaults to None.
     pub(crate) password: Option<String>,
 
