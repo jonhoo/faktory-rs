@@ -99,9 +99,9 @@ async fn main() {
         });
     }
 
-    let mut _ops_count = Vec::with_capacity(threads);
+    let mut ops_count = Vec::with_capacity(threads);
     while let Some(res) = set.join_next().await {
-        _ops_count.push(res.unwrap())
+        ops_count.push(res.unwrap())
     }
 
     let stop = start.elapsed();
@@ -115,5 +115,5 @@ async fn main() {
         stop_secs,
         jobs as f64 / stop_secs,
     );
-    println!("{:?}", _ops_count);
+    println!("Number of operations (pushes and pops) per thread: {:?}", ops_count);
 }
