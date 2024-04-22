@@ -80,9 +80,10 @@ impl TlsStream<TokioTcpStream> {
             Some(url) => utils::url_parse(url),
             None => utils::url_parse(&utils::get_env_url()),
         }?;
-        let hostname = utils::host_from_url(&url);
-        let tcp_stream = TokioTcpStream::connect(&hostname).await?;
-        Ok(TlsStream::new(tcp_stream, connector, hostname.leak()).await?)
+        let host_and_port = utils::host_from_url(&url);
+        let tcp_stream = TokioTcpStream::connect(&host_and_port).await?;
+        let host = url.host_str().unwrap();
+        Ok(TlsStream::new(tcp_stream, connector, host).await?)
     }
 }
 
@@ -106,11 +107,23 @@ where
     pub async fn new(
         stream: S,
         connector: TlsConnector,
-        hostname: &'static str,
+        hostname: impl Into<String>,
     ) -> io::Result<Self> {
-        let domain = hostname.try_into().expect("a valid DNS name or IP address");
+        let hostname: &'static str = hostname.into().leak();
+        TlsStream::create_new(stream, connector, hostname).await
+    }
+
+    /// Actually create new `TlsStream`.
+    /// 
+    /// This private faktory method is needed to be able re-use the already `&'static str` hostname
+    /// when re-connecting, rather than allocate new String and leak it yet again.
+    /// 
+    /// See how we are leaking the `hostname` in [`new`](TlsStream::new) constructor. This is needed
+    /// to satisfy the `tokio_rustls::TlsConnector::connect` which is expecting a `pki_types::ServerName<'static>`.
+    async fn create_new(stream: S, connector: TlsConnector, hostname: &'static str) -> io::Result<Self>{
+        let server_name = hostname.try_into().expect("a valid DNS name or IP address");
         let tls_stream = connector
-            .connect(domain, stream)
+            .connect(server_name, stream)
             .await
             .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e))?;
         Ok(TlsStream {
@@ -128,7 +141,7 @@ where
 {
     async fn reconnect(&mut self) -> io::Result<Self> {
         let stream = self.stream.get_mut().0.reconnect().await?;
-        Self::new(stream, self.connector.clone(), &self.hostname).await
+        TlsStream::create_new(stream, self.connector.clone(), self.hostname).await
     }
 }
 
