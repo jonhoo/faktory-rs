@@ -319,7 +319,7 @@ impl<S> Client<S>
 where
     S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send,
 {
-    /// Asynchronously enqueue the given job on the Faktory server.
+    /// Enqueue the given job on the Faktory server.
     ///
     /// Returns `Ok` if the job was successfully queued by the Faktory server.
     pub async fn enqueue(&mut self, job: Job) -> Result<(), Error> {
