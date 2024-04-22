@@ -1,11 +1,11 @@
 use super::utils;
-use std::ops::{Deref, DerefMut};
 use std::fmt::Display;
+use std::ops::Deref;
 
 macro_rules! string_wrapper_impls {
     ($new_type:ident) => {
         impl $new_type {
-            /// Document me!
+            /// Create a new entity identifier.
             pub fn new<S>(inner: S) -> Self
             where
                 S: AsRef<str> + Clone + Display,
@@ -21,9 +21,9 @@ macro_rules! string_wrapper_impls {
             }
         }
 
-        impl DerefMut for $new_type {
-            fn deref_mut(&mut self) -> &mut Self::Target {
-                &mut self.0
+        impl AsRef<str> for $new_type {
+            fn as_ref(&self) -> &str {
+                self.deref().as_ref()
             }
         }
     };
