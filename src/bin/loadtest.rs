@@ -12,7 +12,7 @@ const QUEUES: &[&str] = &["queue0", "queue1", "queue2", "queue3", "queue4"];
 
 #[tokio::main]
 async fn main() {
-    let matches = Command::new("My Super Program (Async)")
+    let matches = Command::new("My Super Program")
         .version("0.1")
         .about("Benchmark the performance of Rust Faktory async workers and client")
         .arg(
