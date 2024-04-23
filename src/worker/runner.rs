@@ -77,6 +77,18 @@ where
     }
 }
 
+#[async_trait::async_trait]
+impl<'a, E, F, Fut> JobRunner for &'a mut F
+where
+    F: Send + Sync + Fn(Job) -> Fut,
+    Fut: Future<Output = Result<(), E>> + Send,
+{
+    type Error = E;
+    async fn run(&self, job: Job) -> Result<(), E> {
+        (self as &F)(job).await
+    }
+}
+
 /// A wrapper for the userland's handler.
 /// 
 /// The `Closure` newtype is introduced to avoid having to box a job handler:
