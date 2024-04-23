@@ -39,6 +39,24 @@ impl DerefMut for WorkerStatesRegistry {
     }
 }
 
+impl<'a> IntoIterator for &'a WorkerStatesRegistry {
+    type Item = &'a Mutex<WorkerState>;
+    type IntoIter = <&'a Vec<Mutex<WorkerState>> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut WorkerStatesRegistry {
+    type Item = &'a mut Mutex<WorkerState>;
+    type IntoIter = <&'a mut Vec<Mutex<WorkerState>> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter_mut()
+    }
+}
+
 impl WorkerStatesRegistry {
     pub(crate) fn new(workers_count: usize) -> Self {
         Self((0..workers_count).map(|_| Default::default()).collect())

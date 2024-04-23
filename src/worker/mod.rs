@@ -188,7 +188,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
 
         // retry delivering notification about our last job result.
         // we know there's no leftover thread at this point, so there's no race on the option.
-        for wstate in worker_states.iter_mut() {
+        for wstate in worker_states {
             let wstate = wstate.get_mut().unwrap();
             if let Some(res) = wstate.take_last_result() {
                 let r = match res {
@@ -226,7 +226,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
     // an "emergency" case.
     async fn force_fail_all_workers(&mut self) -> usize {
         let mut running = 0;
-        for wstate in self.worker_states.iter() {
+        for wstate in &*self.worker_states {
             let may_be_jid = wstate.lock().unwrap().take_cuurently_running();
             if let Some(jid) = may_be_jid {
                 running += 1;
