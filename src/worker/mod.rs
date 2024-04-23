@@ -4,7 +4,7 @@ use crate::proto::{Ack, Fail, Job, JobId};
 use fnv::FnvHashMap;
 use std::sync::{atomic, Arc};
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufRead, AsyncWrite};
 use tokio::task::JoinHandle;
 
 mod builder;
@@ -136,20 +136,20 @@ type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
 /// You can also register anything that implements [`JobRunner`] to handle jobs
 /// with [`register_runner`](WorkerBuilder::register_runner).
 ///
-pub struct Worker<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> {
+pub struct Worker<S: AsyncBufRead + AsyncWrite + Send + Unpin, E> {
     c: Client<S>,
     worker_states: Arc<state::WorkerStatesRegistry>,
     callbacks: Arc<CallbacksRegistry<E>>,
     terminated: bool,
 }
 
-impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin + Reconnect, E> Worker<S, E> {
+impl<S: AsyncBufRead + AsyncWrite + Send + Unpin + Reconnect, E> Worker<S, E> {
     async fn reconnect(&mut self) -> Result<(), Error> {
         self.c.reconnect().await
     }
 }
 
-impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> Worker<S, E> {
+impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E> Worker<S, E> {
     async fn new(c: Client<S>, workers_count: usize, callbacks: CallbacksRegistry<E>) -> Self {
         Worker {
             c,
@@ -165,7 +165,7 @@ enum Failed<E: StdError> {
     BadJobType(String),
 }
 
-impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + Send> Worker<S, E> {
+impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> Worker<S, E> {
     async fn run_job(&mut self, job: Job) -> Result<(), Failed<E>> {
         let handler = self
             .callbacks
@@ -277,7 +277,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
 }
 
 impl<
-        S: AsyncBufReadExt + AsyncWriteExt + Reconnect + Send + Unpin + 'static,
+        S: AsyncBufRead + AsyncWrite + Reconnect + Send + Unpin + 'static,
         E: StdError + 'static + Send,
     > Worker<S, E>
 {
