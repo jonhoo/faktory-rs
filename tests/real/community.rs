@@ -35,29 +35,34 @@ async fn roundtrip() {
     let local = "roundtrip";
     let jid = JobId::new("x-job-id-0123456782");
 
-    let mut c = WorkerBuilder::default();
-    c.register("order", move |job| async move {
-        assert_eq!(job.kind(), "order");
-        assert_eq!(job.queue, local);
-        assert_eq!(job.args(), &[Value::from("ISBN-13:9781718501850")]);
-        Ok::<(), io::Error>(())
-    });
-    c.register("image", |_| async move { unreachable!() });
-    let mut c = c.connect(None).await.unwrap();
-    let mut p = Client::connect(None).await.unwrap();
-    p.enqueue(
-        JobBuilder::new("order")
-            .jid(jid)
-            .args(vec!["ISBN-13:9781718501850"])
-            .queue(local)
-            .build(),
-    )
-    .await
-    .unwrap();
-    let had_one = c.run_one(0, &[local]).await.unwrap();
+    let mut worker = WorkerBuilder::default();
+    worker
+        .labels(vec!["rust".into(), local.into()])
+        .workers(1)
+        .wid(WorkerId::random())
+        .register("order", move |job| async move {
+            assert_eq!(job.kind(), "order");
+            assert_eq!(job.queue, local);
+            assert_eq!(job.args(), &[Value::from("ISBN-13:9781718501850")]);
+            Ok::<(), io::Error>(())
+        })
+        .register("image", |_| async move { unreachable!() });
+    let mut worker = worker.connect(None).await.unwrap();
+    let mut client = Client::connect(None).await.unwrap();
+    client
+        .enqueue(
+            JobBuilder::new("order")
+                .jid(jid)
+                .args(vec!["ISBN-13:9781718501850"])
+                .queue(local)
+                .build(),
+        )
+        .await
+        .unwrap();
+    let had_one = worker.run_one(0, &[local]).await.unwrap();
     assert!(had_one);
 
-    let drained = !c.run_one(0, &[local]).await.unwrap();
+    let drained = !worker.run_one(0, &[local]).await.unwrap();
     assert!(drained);
 }
 
