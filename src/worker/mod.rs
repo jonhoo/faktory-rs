@@ -330,7 +330,7 @@ impl<
             .collect();
 
         let mut workers = Vec::with_capacity(workers_count);
-        for (worker, status) in statuses.iter().enumerate().take(workers_count) {
+        for (worker, status) in statuses.iter().enumerate() {
             let handle = self
                 .spawn_worker(Arc::clone(status), worker, queues)
                 .await?;
