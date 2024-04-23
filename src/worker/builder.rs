@@ -97,7 +97,7 @@ impl<E: 'static> WorkerBuilder<E> {
         self
     }
 
-    /// Asynchronously connect to a Faktory server with a non-standard stream.
+    /// Connect to a Faktory server with a non-standard stream.
     pub async fn connect_with<S: AsyncRead + AsyncWrite + Send + Unpin>(
         mut self,
         stream: S,
@@ -110,9 +110,19 @@ impl<E: 'static> WorkerBuilder<E> {
         Ok(Worker::new(client, self.workers_count, self.callbacks).await)
     }
 
-    /// Asynchronously connect to a Faktory server.
+    /// Connect to a Faktory server.
     ///
-    /// See [`connect`](WorkerBuilder::connect).
+    /// If `url` is not given, will use the standard Faktory environment variables. Specifically,
+    /// `FAKTORY_PROVIDER` is read to get the name of the environment variable to get the address
+    /// from (defaults to `FAKTORY_URL`), and then that environment variable is read to get the
+    /// server address. If the latter environment variable is not defined, the connection will be
+    /// made to
+    ///
+    /// ```text
+    /// tcp://localhost:7419
+    /// ```
+    ///
+    /// If `url` is given, but does not specify a port, it defaults to 7419.
     pub async fn connect(
         mut self,
         url: Option<&str>,
