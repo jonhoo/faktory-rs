@@ -1,6 +1,6 @@
 use super::proto::{Client, Reconnect};
 use crate::error::Error;
-use crate::proto::{Ack, Fail, Job, JobId};
+use crate::proto::{Ack, Fail, Job};
 use fnv::FnvHashMap;
 use std::sync::{atomic, Arc};
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
@@ -174,14 +174,6 @@ impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> 
         handler.run(job).await.map_err(Failed::Application)
     }
 
-    async fn report_failure_to_server(&mut self, f: &Fail) -> Result<(), Error> {
-        self.c.issue(f).await?.read_ok().await
-    }
-
-    async fn report_success_to_server(&mut self, jid: JobId) -> Result<(), Error> {
-        self.c.issue(&Ack::new(jid)).await?.read_ok().await
-    }
-
     async fn report_on_all_workers(&mut self) -> Result<(), Error> {
         let worker_states = Arc::get_mut(&mut self.worker_states)
             .expect("all workers are scoped to &mut of the user-code-visible Worker");
@@ -258,7 +250,7 @@ impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> 
         match self.run_job(job).await {
             Ok(_) => {
                 self.worker_states.register_success(worker, jid.clone());
-                self.report_success_to_server(jid).await?;
+                self.c.issue(&Ack::new(jid)).await?.read_ok().await?;
             }
             Err(e) => {
                 let fail = match e {
@@ -266,7 +258,7 @@ impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> 
                     Failed::Application(e) => Fail::generic_with_backtrace(jid, e),
                 };
                 self.worker_states.register_failure(worker, fail.clone());
-                self.report_failure_to_server(&fail).await?;
+                self.c.issue(&fail).await?.read_ok().await?;
             }
         }
 
