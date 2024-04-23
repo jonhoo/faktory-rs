@@ -55,11 +55,11 @@ impl WorkerStatesRegistry {
             .save_last_result(Ok(jid));
     }
 
-    pub(crate) fn register_failure(&self, worker: usize, f: &Fail) {
+    pub(crate) fn register_failure(&self, worker: usize, f: Fail) {
         self[worker]
             .lock()
             .expect("lock acquired")
-            .save_last_result(Err(f.clone()));
+            .save_last_result(Err(f));
     }
 
     pub(crate) fn reset(&self, worker: usize) {

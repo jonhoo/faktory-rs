@@ -265,7 +265,7 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
                     Failed::BadJobType(jt) => Fail::generic(jid, format!("No handler for {}", jt)),
                     Failed::Application(e) => Fail::generic_with_backtrace(jid, e),
                 };
-                self.worker_states.register_failure(worker, &fail);
+                self.worker_states.register_failure(worker, fail.clone());
                 self.report_failure_to_server(&fail).await?;
             }
         }
