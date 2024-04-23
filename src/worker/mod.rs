@@ -212,19 +212,21 @@ impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> 
         Ok(())
     }
 
-    // FAIL currently running jobs even though they're still running.
-    // Returns the number of workers that may still be processing jobs.
-    // We are ignoring any FAIL command issue errors, since this is already
-    // an "emergency" case.
+    /// Fail currently running jobs.
+    ///
+    /// This will FAIL _all_ the jobs even though they're still running.
+    /// Returns the number of workers that may still be processing jobs.
     async fn force_fail_all_workers(&mut self) -> usize {
         let mut running = 0;
         for wstate in &*self.worker_states {
-            let may_be_jid = wstate.lock().unwrap().take_cuurently_running();
+            let may_be_jid = wstate.lock().unwrap().take_currently_running();
             if let Some(jid) = may_be_jid {
                 running += 1;
-                let f = Fail::new(jid, "unknown", "terminated");
+                let f = Fail::generic(jid, "terminated");
                 let _ = match self.c.issue(&f).await {
                     Ok(r) => r.read_ok().await,
+                    // We are ignoring any FAIL command issue errors, since this is already
+                    // an "emergency" case.
                     Err(_) => continue,
                 }
                 .is_ok();
