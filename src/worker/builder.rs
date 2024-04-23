@@ -17,9 +17,16 @@ pub struct WorkerBuilder<E> {
 }
 
 impl<E> Default for WorkerBuilder<E> {
-    /// Create a builder for asynchronous version of `Worker`.
+    /// Construct a new [`WorkerBuilder`](struct.WorkerBuilder.html) with default worker options and the url fetched from environment
+    /// variables.
     ///
-    /// See [`WorkerBuilder`](struct.WorkerBuilder.html)
+    /// This will construct a worker where:
+    ///
+    ///  - `hostname` is this machine's hostname.
+    ///  - `wid` is a randomly generated string.
+    ///  - `pid` is the OS PID of this process.
+    ///  - `labels` is `["rust"]`.
+    ///
     fn default() -> Self {
         WorkerBuilder {
             opts: ClientOptions::default(),
