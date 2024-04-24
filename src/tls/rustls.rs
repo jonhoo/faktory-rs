@@ -109,21 +109,6 @@ where
         connector: TlsConnector,
         hostname: &'static str,
     ) -> io::Result<Self> {
-        TlsStream::create_new(stream, connector, hostname).await
-    }
-
-    /// Actually create new `TlsStream`.
-    ///
-    /// This private faktory method is needed to be able re-use the already `&'static str` hostname
-    /// when re-connecting, rather than allocate new String and leak it yet again.
-    ///
-    /// See how we are leaking the `hostname` in [`new`](TlsStream::new) constructor. This is needed
-    /// to satisfy the `tokio_rustls::TlsConnector::connect` which is expecting a `pki_types::ServerName<'static>`.
-    async fn create_new(
-        stream: S,
-        connector: TlsConnector,
-        hostname: &'static str,
-    ) -> io::Result<Self> {
         let server_name = hostname.try_into().expect("a valid DNS name or IP address");
         let tls_stream = connector
             .connect(server_name, stream)
@@ -144,7 +129,7 @@ where
 {
     async fn reconnect(&mut self) -> io::Result<Self> {
         let stream = self.stream.get_mut().0.reconnect().await?;
-        TlsStream::create_new(stream, self.connector.clone(), self.hostname).await
+        TlsStream::new(stream, self.connector.clone(), self.hostname).await
     }
 }
 
