@@ -26,6 +26,12 @@ macro_rules! string_wrapper_impls {
                 self.deref().as_ref()
             }
         }
+
+        impl AsRef<$new_type> for $new_type {
+            fn as_ref(&self) -> &$new_type {
+                &self
+            }
+        }
     };
 }
 

@@ -41,6 +41,6 @@ impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> BatchHandle<'a, S> {
     /// Once committed, the batch can still be re-opened with [open_batch](Client::open_batch),
     /// and extra jobs can be added to it.
     pub async fn commit(self) -> Result<(), Error> {
-        self.c.commit_batch(self.bid).await
+        self.c.commit_batch(&self.bid).await
     }
 }

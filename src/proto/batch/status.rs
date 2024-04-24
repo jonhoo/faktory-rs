@@ -87,6 +87,6 @@ impl<'a> BatchStatus {
         &self,
         prod: &'a mut Client<S>,
     ) -> Result<Option<BatchHandle<'a, S>>, Error> {
-        prod.open_batch(self.bid.clone()).await
+        prod.open_batch(&self.bid).await
     }
 }
