@@ -5,7 +5,7 @@ use fnv::FnvHashMap;
 use std::sync::{atomic, Arc};
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
 use tokio::io::{AsyncBufRead, AsyncWrite};
-use tokio::task::JoinHandle;
+use tokio::task::{AbortHandle, JoinSet};
 
 mod builder;
 mod health;
@@ -277,6 +277,19 @@ impl<
 {
     async fn for_worker(&mut self) -> Result<Self, Error> {
         Ok(Worker {
+            // We actually only need:
+            //
+            // 1) a connected client;
+            // 2) access to callback registry;
+            // 3) access to this worker's state (not all of them)
+            //
+            // For simplicity, we are currently creating a processing worker as a full replica
+            // of the coordinating worker.
+            //
+            // In the future though this can be updated to strip off `terminated` from
+            // the processing worker (as unused) and disallow access to other processing workers'
+            // states from inside this processing worker (as privilege not needed).
+            //
             c: self.c.connect_again().await?,
             callbacks: Arc::clone(&self.callbacks),
             worker_states: Arc::clone(&self.worker_states),
@@ -284,18 +297,19 @@ impl<
         })
     }
 
-    async fn spawn_worker<Q>(
+    async fn spawn_worker_into<Q>(
         &mut self,
+        set: &mut JoinSet<Result<(), Error>>,
         status: Arc<AtomicUsize>,
         worker: usize,
         queues: &[Q],
-    ) -> Result<JoinHandle<Result<(), Error>>, Error>
+    ) -> Result<AbortHandle, Error>
     where
         Q: AsRef<str>,
     {
         let mut w = self.for_worker().await?;
         let queues: Vec<_> = queues.iter().map(|s| s.as_ref().to_string()).collect();
-        Ok(tokio::spawn(async move {
+        Ok(set.spawn(async move {
             while status.load(atomic::Ordering::SeqCst) == STATUS_RUNNING {
                 if let Err(e) = w.run_one(worker, &queues[..]).await {
                     status.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
@@ -319,7 +333,10 @@ impl<
     where
         Q: AsRef<str>,
     {
-        assert!(!self.terminated, "do not re-run a terminated worker");
+        assert!(
+            !self.terminated,
+            "do not re-run a terminated worker (coordinator)"
+        );
         self.report_on_all_workers().await?;
 
         let workers_count = self.worker_states.len();
@@ -329,12 +346,11 @@ impl<
             .map(|_| Arc::new(atomic::AtomicUsize::new(STATUS_RUNNING)))
             .collect();
 
-        let mut workers = Vec::with_capacity(workers_count);
+        let mut join_set = JoinSet::new();
         for (worker, status) in statuses.iter().enumerate() {
-            let handle = self
-                .spawn_worker(Arc::clone(status), worker, queues)
+            let _abort_handle = self
+                .spawn_worker_into(&mut join_set, Arc::clone(status), worker, queues)
                 .await?;
-            workers.push(handle)
         }
 
         let exit = self.listen_for_heartbeats(&statuses).await;
@@ -342,7 +358,7 @@ impl<
         // there are a couple of cases here:
         //
         //  - we got TERMINATE, so we should just return, even if a worker is still running
-        //  - we got TERMINATE and all workers has exited
+        //  - we got TERMINATE and all workers have exited
         //  - we got an error from heartbeat()
         //
         self.terminated = exit.is_ok();
@@ -356,9 +372,10 @@ impl<
 
         // we want to expose worker errors, or otherwise the heartbeat error
         let mut results = Vec::with_capacity(workers_count);
-        for w in workers {
-            results.push(w.await.expect("joined ok"));
+        while let Some(res) = join_set.join_next().await {
+            results.push(res.expect("joined ok"));
         }
+
         let result = results.into_iter().collect::<Result<Vec<_>, _>>();
 
         match exit {
