@@ -62,6 +62,11 @@ oid-registry = "0.6.1"
 openssl = { version = "0.10.60", optional = true }
 rustls = "0.22.1"
 
+# Lockstep between `serde` and `serde_derive` was introduced with the "pinned" release:
+# https://github.com/serde-rs/serde/compare/v1.0.185...v1.0.186#diff-2843fc1320fa24a059f5ca967ee45d116110116263a8ba311a3aca3793c562f0R34-R41
+# Without this pin our `#[serde(transparent)]` and `#[derive(Serialize, Deserialize)] do not play well together.
+serde = "1.0.186"
+
 [[bin]]
 name = "loadtest"
 path = "src/bin/loadtest.rs"
