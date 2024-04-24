@@ -71,7 +71,7 @@ impl TlsStream<TokioTcpStream> {
         }?;
         let hostname = utils::host_from_url(&url);
         let tcp_stream = TokioTcpStream::connect(&hostname).await?;
-        Ok(TlsStream::new(tcp_stream, connector, &hostname).await?)
+        Ok(TlsStream::new(tcp_stream, connector, hostname).await?)
     }
 }
 
@@ -84,7 +84,7 @@ where
     /// Internally creates a `ClientConfig` with an empty root certificates store and no client
     /// authentication. Use [`new`](TlsStream::new) for a customized `TlsConnector`.
     /// Create a new TLS connection on an existing stream.
-    pub async fn default(stream: S, hostname: &str) -> io::Result<Self> {
+    pub async fn default(stream: S, hostname: String) -> io::Result<Self> {
         let connector = TlsConnector::builder()
             .build()
             .map_err(error::TlsStream::Native)
@@ -96,17 +96,16 @@ where
     pub async fn new(
         stream: S,
         connector: impl Into<AsyncTlsConnector>,
-        hostname: &str,
+        hostname: String,
     ) -> io::Result<Self> {
-        let domain = hostname.try_into().expect("a valid DNS name or IP address");
-        let connector = connector.into();
+        let connector: AsyncTlsConnector = connector.into();
         let tls_stream = connector
-            .connect(domain, stream)
+            .connect(&hostname, stream)
             .await
             .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e))?;
         Ok(TlsStream {
             connector,
-            hostname: hostname.into(),
+            hostname,
             stream: tls_stream,
         })
     }
@@ -125,7 +124,7 @@ where
             .get_mut()
             .reconnect()
             .await?;
-        Self::new(stream, self.connector.clone(), &self.hostname).await
+        Self::new(stream, self.connector.clone(), self.hostname.clone()).await
     }
 }
 

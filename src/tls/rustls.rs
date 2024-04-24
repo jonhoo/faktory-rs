@@ -82,7 +82,7 @@ impl TlsStream<TokioTcpStream> {
         }?;
         let host_and_port = utils::host_from_url(&url);
         let tcp_stream = TokioTcpStream::connect(&host_and_port).await?;
-        let host = url.host_str().unwrap();
+        let host = url.host_str().unwrap().to_string().leak();
         Ok(TlsStream::new(tcp_stream, connector, host).await?)
     }
 }
@@ -107,9 +107,8 @@ where
     pub async fn new(
         stream: S,
         connector: TlsConnector,
-        hostname: impl Into<String>,
+        hostname: &'static str,
     ) -> io::Result<Self> {
-        let hostname: &'static str = hostname.into().leak();
         TlsStream::create_new(stream, connector, hostname).await
     }
 
