@@ -43,6 +43,7 @@ macro_rules! string_wrapper_impls {
 /// If you do not have any domain, product or organisation specific requirements, you may prefer
 /// to have a random job identifier generated for you with [`random`](JobId::random).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct JobId(String);
 
 impl JobId {
@@ -64,6 +65,7 @@ string_wrapper_impls!(JobId);
 /// If you do not have any domain, product or organisation specific requirements, you may prefer
 /// to have a random job identifier generated for you with [`random`](WorkerId::random).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct WorkerId(String);
 
 impl WorkerId {
@@ -82,6 +84,7 @@ string_wrapper_impls!(WorkerId);
 /// This is a wrapper over the string identifier issued by the Faktory server.
 /// Only used for operations with [`Batch`](struct.Batch.html) in Enterprise Faktory.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct BatchId(String);
 
 string_wrapper_impls!(BatchId);
