@@ -97,7 +97,6 @@ impl<E: 'static> WorkerBuilder<E> {
     pub fn register<K, H, Fut>(&mut self, kind: K, handler: H) -> &mut Self
     where
         K: Into<String>,
-
         H: Fn(Job) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<(), E>> + Send,
     {
