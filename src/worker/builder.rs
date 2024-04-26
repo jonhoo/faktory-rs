@@ -56,8 +56,29 @@ impl<E: 'static> WorkerBuilder<E> {
     /// Set the labels to use for this worker.
     ///
     /// Defaults to `["rust"]`.
-    pub fn labels(&mut self, labels: Vec<String>) -> &mut Self {
-        self.opts.labels = labels;
+    ///
+    /// Note that calling this overrides the labels set previously.
+    ///
+    /// If you need to extend the labels already set, use [`WorkerBuilder::add_to_labels`] instead.
+    pub fn labels<I>(&mut self, labels: I) -> &mut Self
+    where
+        I: IntoIterator<Item = String>,
+    {
+        self.opts.labels = labels.into_iter().collect();
+        self
+    }
+
+    /// Extend the worker's labels.
+    ///
+    /// Note that calling this will add the provided labels to those that are already there or -
+    /// if no labels have been explicitly set before - to the default `"rust"` label.
+    ///
+    /// If you need to override the labels set previously, use [`WorkerBuilder::labels`] instead.
+    pub fn add_to_labels<I>(&mut self, labels: I) -> &mut Self
+    where
+        I: IntoIterator<Item = String>,
+    {
+        self.opts.labels.extend(labels);
         self
     }
 

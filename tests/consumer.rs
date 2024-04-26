@@ -66,7 +66,14 @@ async fn hello() {
     let mut c: WorkerBuilder<io::Error> = WorkerBuilder::default();
     c.hostname("host".to_string())
         .wid(WorkerId::new("wid"))
-        .labels(vec!["foo".to_string(), "bar".to_string()]);
+        .labels([
+            "will".to_string(),
+            "be!".to_string(),
+            "overwritten".to_string(),
+        ])
+        .labels(["foo".to_string(), "bar".to_string()])
+        .add_to_labels(["will".to_string()])
+        .add_to_labels(["be".to_string(), "added".to_string()]);
     c.register("never_called", |_j: Job| async move { unreachable!() });
     let c = c.connect_with(s.clone(), None).await.unwrap();
     let written = s.pop_bytes_written(0);
@@ -81,7 +88,7 @@ async fn hello() {
     assert_eq!(written.get("pid").map(|h| h.is_number()), Some(true));
     assert_eq!(written.get("v").and_then(|h| h.as_i64()), Some(2));
     let labels = written["labels"].as_array().unwrap();
-    assert_eq!(labels, &["foo", "bar"]);
+    assert_eq!(labels, &["foo", "bar", "will", "be", "added"]);
 
     drop(c);
     let written = s.pop_bytes_written(0);
