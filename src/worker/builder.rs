@@ -150,14 +150,11 @@ impl<E: 'static> WorkerBuilder<E> {
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
     pub async fn connect(
-        mut self,
+        self,
         url: Option<&str>,
     ) -> Result<Worker<BufStream<TokioStream>, E>, Error> {
         let url = utils::parse_provided_or_from_env(url)?;
         let stream = TokioStream::connect(utils::host_from_url(&url)).await?;
-        self.opts.is_worker = true;
-        let buffered = BufStream::new(stream);
-        let client = Client::new(buffered, self.opts).await?;
-        Ok(Worker::new(client, self.workers_count, self.callbacks).await)
+        self.connect_with(stream, None).await
     }
 }
