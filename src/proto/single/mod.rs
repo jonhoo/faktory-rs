@@ -2,7 +2,7 @@ use crate::Error;
 use chrono::{DateTime, Utc};
 use derive_builder::Builder;
 use std::collections::HashMap;
-use tokio::io::{AsyncBufRead, AsyncWriteExt};
+use tokio::io::{AsyncBufRead, AsyncWrite};
 
 mod cmd;
 mod id;
@@ -260,7 +260,9 @@ impl Job {
         &self.failure
     }
 }
-pub async fn write_command<W: AsyncWriteExt + Unpin + Send, C: FaktoryCommand>(
+
+use tokio::io::AsyncWriteExt;
+pub async fn write_command<W: AsyncWrite + Unpin + Send, C: FaktoryCommand>(
     w: &mut W,
     command: &C,
 ) -> Result<(), Error> {
@@ -269,7 +271,7 @@ pub async fn write_command<W: AsyncWriteExt + Unpin + Send, C: FaktoryCommand>(
 }
 
 pub async fn write_command_and_await_ok<
-    S: AsyncBufRead + AsyncWriteExt + Unpin + Send,
+    S: AsyncBufRead + AsyncWrite + Unpin + Send,
     C: FaktoryCommand,
 >(
     stream: &mut S,

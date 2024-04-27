@@ -1,14 +1,14 @@
 use crate::error::Error;
 use crate::proto::{Batch, BatchId, Client, Job};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufRead, AsyncWrite};
 
 /// Represents a newly started or re-opened batch of jobs.
-pub struct BatchHandle<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> {
+pub struct BatchHandle<'a, S: AsyncBufRead + AsyncWrite + Unpin + Send> {
     bid: BatchId,
     c: &'a mut Client<S>,
 }
 
-impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> BatchHandle<'a, S> {
+impl<'a, S: AsyncBufRead + AsyncWrite + Unpin + Send> BatchHandle<'a, S> {
     /// ID issued by the Faktory server to this batch.
     pub fn id(&self) -> &BatchId {
         &self.bid

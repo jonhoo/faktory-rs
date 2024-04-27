@@ -1,18 +1,18 @@
 use crate::error::Error;
 use crate::proto::{Job, JobId, WorkerId};
 use std::error::Error as StdError;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 #[async_trait::async_trait]
 pub trait FaktoryCommand {
-    async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error>;
+    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error>;
 }
 
 macro_rules! self_to_cmd {
     ($struct:ident, $cmd:expr) => {
         #[async_trait::async_trait]
         impl FaktoryCommand for $struct {
-            async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+            async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
                 w.write_all($cmd.as_bytes()).await?;
                 w.write_all(b" ").await?;
                 let r = serde_json::to_vec(self).map_err(Error::Serialization)?;
@@ -27,7 +27,7 @@ macro_rules! self_to_cmd {
 /// followed by space separated queue names.
 async fn write_queues<W, S>(w: &mut W, queues: &[S]) -> Result<(), Error>
 where
-    W: AsyncWriteExt + Unpin + Send,
+    W: AsyncWrite + Unpin + Send,
     S: AsRef<str>,
 {
     for q in queues {
@@ -44,7 +44,7 @@ pub(crate) struct Info;
 
 #[async_trait::async_trait]
 impl FaktoryCommand for Info {
-    async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
         Ok(w.write_all(b"INFO\r\n").await?)
     }
 }
@@ -140,7 +140,7 @@ pub(crate) struct End;
 
 #[async_trait::async_trait]
 impl FaktoryCommand for End {
-    async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
         Ok(w.write_all(b"END\r\n").await?)
     }
 }
@@ -159,7 +159,7 @@ impl<'a, Q> FaktoryCommand for Fetch<'a, Q>
 where
     Q: AsRef<str> + Sync,
 {
-    async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
         w.write_all(b"FETCH").await?;
         write_queues(w, self.queues).await?;
         Ok(w.write_all(b"\r\n").await?)
@@ -246,7 +246,7 @@ impl From<Job> for Push {
 
 #[async_trait::async_trait]
 impl FaktoryCommand for Push {
-    async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
         w.write_all(b"PUSH ").await?;
         let r = serde_json::to_vec(&**self).map_err(Error::Serialization)?;
         w.write_all(&r).await?;
@@ -266,7 +266,7 @@ impl From<Vec<Job>> for PushBulk {
 
 #[async_trait::async_trait]
 impl FaktoryCommand for PushBulk {
-    async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
         w.write_all(b"PUSHB ").await?;
         let r = serde_json::to_vec(&self.0).map_err(Error::Serialization)?;
         w.write_all(&r).await?;
@@ -294,7 +294,7 @@ impl<Q> FaktoryCommand for QueueControl<'_, Q>
 where
     Q: AsRef<str> + Sync,
 {
-    async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
         let command = match self.action {
             QueueAction::Pause => b"QUEUE PAUSE".as_ref(),
             QueueAction::Resume => b"QUEUE RESUME".as_ref(),

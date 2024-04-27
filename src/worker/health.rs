@@ -5,11 +5,11 @@ use std::{
     sync::{atomic, Arc},
     time,
 };
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufRead, AsyncWrite};
 use tokio::time::sleep as tokio_sleep;
 
 impl<
-        S: AsyncBufReadExt + AsyncWriteExt + Reconnect + Send + Unpin + 'static,
+        S: AsyncBufRead + AsyncWrite + Reconnect + Send + Unpin + 'static,
         E: StdError + 'static + Send,
     > Worker<S, E>
 {

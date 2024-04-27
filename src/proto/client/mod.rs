@@ -10,8 +10,7 @@ use super::{utils, PushBulk};
 use crate::error::{self, Error};
 use crate::{Job, WorkerId};
 use std::collections::HashMap;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
-use tokio::io::{AsyncRead, AsyncWrite, BufStream};
+use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
 mod options;
@@ -146,14 +145,14 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// # Ok::<(), faktory::Error>(())
 /// });
 /// ```
-pub struct Client<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> {
+pub struct Client<S: AsyncBufRead + AsyncWrite + Send + Unpin> {
     stream: S,
     opts: ClientOptions,
 }
 
 impl<S> Client<S>
 where
-    S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send + Reconnect,
+    S: AsyncBufRead + AsyncWrite + Unpin + Send + Reconnect,
 {
     pub(crate) async fn connect_again(&mut self) -> Result<Self, Error> {
         let s = self.stream.reconnect().await?;
@@ -168,7 +167,7 @@ where
 
 impl<S> Drop for Client<S>
 where
-    S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send,
+    S: AsyncBufRead + AsyncWrite + Unpin + Send,
 {
     fn drop(&mut self) {
         tokio::task::block_in_place(|| {
@@ -223,7 +222,7 @@ impl Client<BufStream<TokioStream>> {
 
 impl<S> Client<S>
 where
-    S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send,
+    S: AsyncBufRead + AsyncWrite + Unpin + Send,
 {
     async fn init(&mut self) -> Result<(), Error> {
         let hi = single::read_hi(&mut self.stream).await?;
@@ -317,7 +316,7 @@ where
 
 impl<S> Client<S>
 where
-    S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send,
+    S: AsyncBufRead + AsyncWrite + Unpin + Send,
 {
     /// Enqueue the given job on the Faktory server.
     ///
@@ -395,9 +394,9 @@ where
 
 pub struct ReadToken<'a, S>(pub(crate) &'a mut Client<S>)
 where
-    S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send;
+    S: AsyncBufRead + AsyncWrite + Unpin + Send;
 
-impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> ReadToken<'a, S> {
+impl<'a, S: AsyncBufRead + AsyncWrite + Unpin + Send> ReadToken<'a, S> {
     pub(crate) async fn read_ok(self) -> Result<(), Error> {
         single::read_ok(&mut self.0.stream).await
     }
