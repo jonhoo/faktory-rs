@@ -136,7 +136,7 @@ type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
 /// You can also register anything that implements [`JobRunner`] to handle jobs
 /// with [`register`](WorkerBuilder::register).
 ///
-pub struct Worker<S: AsyncBufRead + AsyncWrite + Send + Unpin, E> {
+pub struct Worker<S: AsyncWrite + Send + Unpin, E> {
     c: Client<S>,
     worker_states: Arc<state::WorkerStatesRegistry>,
     callbacks: Arc<CallbacksRegistry<E>>,
@@ -149,7 +149,7 @@ impl<S: AsyncBufRead + AsyncWrite + Send + Unpin + Reconnect, E> Worker<S, E> {
     }
 }
 
-impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E> Worker<S, E> {
+impl<S: AsyncWrite + Send + Unpin, E> Worker<S, E> {
     async fn new(c: Client<S>, workers_count: usize, callbacks: CallbacksRegistry<E>) -> Self {
         Worker {
             c,

@@ -145,7 +145,7 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// # Ok::<(), faktory::Error>(())
 /// });
 /// ```
-pub struct Client<S: AsyncBufRead + AsyncWrite + Send + Unpin> {
+pub struct Client<S: AsyncWrite + Unpin + Send> {
     stream: S,
     opts: ClientOptions,
 }
@@ -167,7 +167,7 @@ where
 
 impl<S> Drop for Client<S>
 where
-    S: AsyncBufRead + AsyncWrite + Unpin + Send,
+    S: AsyncWrite + Unpin + Send,
 {
     fn drop(&mut self) {
         tokio::task::block_in_place(|| {
