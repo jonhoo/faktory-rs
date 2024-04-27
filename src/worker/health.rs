@@ -13,6 +13,15 @@ where
     S: AsyncBufRead + AsyncWrite + Reconnect + Send + Unpin + 'static,
     E: StdError + 'static + Send,
 {
+    /// Send beats to Fakotry and quiet/terminate workers if signalled so.
+    /// 
+    /// Some core details:
+    /// - beats should be sent to Faktory at least every 15 seconds;
+    /// - a worker's lifecycle is "running -> quiet -> terminate";
+    /// - STATUS_QUIET means the worker should not consume any new jobs,
+    ///   but should _continue_ processing its current job (if any);
+    /// 
+    /// Ref: https://github.com/contribsys/faktory/blob/main/server/workers.go#L21
     pub(crate) async fn listen_for_heartbeats(
         &mut self,
         statuses: &[Arc<atomic::AtomicUsize>],
@@ -58,7 +67,7 @@ where
                             // tell the workers to terminate
                             // *and* fail the current job and immediately return
                             for s in statuses {
-                                s.store(STATUS_QUIET, atomic::Ordering::SeqCst);
+                                s.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
                             }
                             break Ok(true);
                         }
