@@ -36,7 +36,7 @@ use std::future::Future;
 /// let handler = MyHandler {
 ///    config: "bar".to_string(),
 /// };
-/// w.register_runner("foo", handler);
+/// w.register("foo", handler);
 /// let mut w = w.connect(None).await.unwrap();
 /// if let Err(e) = w.run(&["default"]).await {
 ///     println!("worker failed: {}", e);

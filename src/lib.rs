@@ -51,7 +51,7 @@
 //! use faktory::WorkerBuilder;
 //! use std::io;
 //! let mut w = WorkerBuilder::default();
-//! w.register("foobar", |job| async move {
+//! w.register_fn("foobar", |job| async move {
 //!     println!("{:?}", job);
 //!     Ok::<(), io::Error>(())
 //! });

@@ -94,13 +94,13 @@ impl<E: 'static> WorkerBuilder<E> {
     ///
     /// Whenever a job whose type matches `kind` is fetched from the Faktory, the given handler
     /// function is called with that job as its argument.
-    pub fn register<K, H, Fut>(&mut self, kind: K, handler: H) -> &mut Self
+    pub fn register_fn<K, H, Fut>(&mut self, kind: K, handler: H) -> &mut Self
     where
         K: Into<String>,
         H: Fn(Job) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<(), E>> + Send,
     {
-        self.register_runner(kind, Closure(handler));
+        self.register(kind, Closure(handler));
         self
     }
 
@@ -108,7 +108,7 @@ impl<E: 'static> WorkerBuilder<E> {
     ///
     /// Whenever a job whose type matches `kind` is fetched from the Faktory, the given handler
     /// object is called with that job as its argument.
-    pub fn register_runner<K, H>(&mut self, kind: K, runner: H) -> &mut Self
+    pub fn register<K, H>(&mut self, kind: K, runner: H) -> &mut Self
     where
         K: Into<String>,
         H: JobRunner<Error = E> + 'static,

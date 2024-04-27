@@ -28,7 +28,7 @@ async fn roundtrip_tls() {
     let mut c = WorkerBuilder::default();
 
     c.hostname("tester".to_string()).wid(WorkerId::new(local));
-    c.register_runner(local, fixtures::JobHandler::new(tx));
+    c.register(local, fixtures::JobHandler::new(tx));
 
     let tls = || async {
         let verifier = fixtures::TestServerCertVerifier::new(

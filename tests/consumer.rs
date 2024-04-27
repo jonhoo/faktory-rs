@@ -74,7 +74,7 @@ async fn hello() {
         .labels(["foo".to_string(), "bar".to_string()])
         .add_to_labels(["will".to_string()])
         .add_to_labels(["be".to_string(), "added".to_string()]);
-    c.register("never_called", |_j: Job| async move { unreachable!() });
+    c.register_fn("never_called", |_j: Job| async move { unreachable!() });
     let c = c.connect_with(s.clone(), None).await.unwrap();
     let written = s.pop_bytes_written(0);
     assert!(written.starts_with(b"HELLO {"));
@@ -100,7 +100,7 @@ async fn hello_pwd() {
     let mut s = mock::Stream::with_salt(1545, "55104dc76695721d");
 
     let mut c: WorkerBuilder<io::Error> = WorkerBuilder::default();
-    c.register("never_called", |_j: Job| async move { unreachable!() });
+    c.register_fn("never_called", |_j: Job| async move { unreachable!() });
     let c = c
         .connect_with(s.clone(), Some("foobar".to_string()))
         .await
@@ -121,7 +121,7 @@ async fn hello_pwd() {
 async fn dequeue() {
     let mut s = mock::Stream::default();
     let mut c = WorkerBuilder::default();
-    c.register("foobar", |job: Job| async move {
+    c.register_fn("foobar", |job: Job| async move {
         assert_eq!(job.args(), &["z"]);
         Ok::<(), io::Error>(())
     });
@@ -160,7 +160,7 @@ async fn dequeue() {
 async fn dequeue_first_empty() {
     let mut s = mock::Stream::default();
     let mut c = WorkerBuilder::default();
-    c.register("foobar", |job: Job| async move {
+    c.register_fn("foobar", |job: Job| async move {
         assert_eq!(job.args(), &["z"]);
         Ok::<(), io::Error>(())
     });
@@ -216,7 +216,7 @@ async fn well_behaved() {
     let mut s = mock::Stream::new(2); // main plus worker
     let mut c = WorkerBuilder::default();
     c.wid(WorkerId::new("wid"));
-    c.register("foobar", |_| async move {
+    c.register_fn("foobar", |_| async move {
         // NOTE: this time needs to be so that it lands between the first heartbeat and the second
         sleep(Duration::from_secs(7)).await;
         Ok::<(), io::Error>(())
@@ -281,7 +281,7 @@ async fn no_first_job() {
     let mut s = mock::Stream::new(2); // main plus worker
     let mut c = WorkerBuilder::default();
     c.wid(WorkerId::new("wid"));
-    c.register("foobar", |_| async move {
+    c.register_fn("foobar", |_| async move {
         // NOTE: this time needs to be so that it lands between the first heartbeat and the second
         sleep(Duration::from_secs(7)).await;
         Ok::<(), io::Error>(())
@@ -348,7 +348,7 @@ async fn well_behaved_many() {
     let mut w = WorkerBuilder::default();
     w.workers(2);
     w.wid(WorkerId::new("wid"));
-    w.register("foobar", |_| async move {
+    w.register_fn("foobar", |_| async move {
         // NOTE: this time needs to be so that it lands between the first heartbeat and the second
         sleep(Duration::from_secs(7)).await;
         Ok::<(), io::Error>(())
@@ -429,7 +429,7 @@ async fn terminate() {
     let mut w: WorkerBuilder<io::Error> = WorkerBuilder::default();
     w.hostname("machine".into());
     w.wid(WorkerId::new("wid"));
-    w.register("foobar", |_| async move {
+    w.register_fn("foobar", |_| async move {
         loop {
             sleep(Duration::from_secs(5)).await;
         }

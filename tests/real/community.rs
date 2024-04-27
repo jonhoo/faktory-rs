@@ -16,7 +16,7 @@ async fn hello_worker() {
     let mut c = WorkerBuilder::<io::Error>::default();
     c.hostname("tester".to_string())
         .labels(vec!["foo".to_string(), "bar".to_string()]);
-    c.register("never_called", |_| async move { unreachable!() });
+    c.register_fn("never_called", |_| async move { unreachable!() });
     let c = c.connect(None).await.unwrap();
     drop(c);
 }
@@ -40,13 +40,13 @@ async fn roundtrip() {
         .labels(vec!["rust".into(), local.into()])
         .workers(1)
         .wid(WorkerId::random())
-        .register("order", move |job| async move {
+        .register_fn("order", move |job| async move {
             assert_eq!(job.kind(), "order");
             assert_eq!(job.queue, local);
             assert_eq!(job.args(), &[Value::from("ISBN-13:9781718501850")]);
             Ok::<(), io::Error>(())
         })
-        .register("image", |_| async move { unreachable!() });
+        .register_fn("image", |_| async move { unreachable!() });
     let mut worker = worker.connect(None).await.unwrap();
     let mut client = Client::connect(None).await.unwrap();
     client
@@ -76,7 +76,7 @@ async fn multi() {
     let mut c = WorkerBuilder::default();
     c.hostname("tester".to_string()).wid(WorkerId::new(local));
 
-    c.register(local, move |j| {
+    c.register_fn(local, move |j| {
         let tx = sync::Arc::clone(&tx);
         Box::pin(async move {
             tx.lock().unwrap().send(j).unwrap();
@@ -117,7 +117,7 @@ async fn fail() {
     let mut c = WorkerBuilder::default();
     c.hostname("tester".to_string()).wid(WorkerId::new(local));
 
-    c.register(local, move |j| {
+    c.register_fn(local, move |j| {
         let tx = sync::Arc::clone(&tx);
         Box::pin(async move {
             tx.lock().unwrap().send(j).unwrap();
@@ -153,7 +153,7 @@ async fn queue() {
 
     let mut c = WorkerBuilder::default();
     c.hostname("tester".to_string()).wid(WorkerId::new(local));
-    c.register(local, move |_job| {
+    c.register_fn(local, move |_job| {
         let tx = sync::Arc::clone(&tx);
         Box::pin(async move { tx.lock().unwrap().send(true) })
     });
@@ -250,10 +250,10 @@ async fn test_jobs_pushed_in_bulk() {
     // is not an  all-or-nothing operation:
     let mut c = WorkerBuilder::default();
     c.hostname("tester".to_string()).wid(WorkerId::new(local_3));
-    c.register("very_special", move |_job| async {
+    c.register_fn("very_special", move |_job| async {
         Ok::<(), io::Error>(())
     });
-    c.register("broken", move |_job| async { Ok::<(), io::Error>(()) });
+    c.register_fn("broken", move |_job| async { Ok::<(), io::Error>(()) });
     let mut c = c.connect(None).await.unwrap();
 
     // we targeted "very_special" jobs to "local_4" queue
@@ -283,8 +283,8 @@ async fn test_jobs_created_with_builder() {
     // prepare a client and a worker:
     let mut cl = Client::connect(None).await.unwrap();
     let mut w = WorkerBuilder::default();
-    w.register("rebuild_index", assert_args_empty);
-    w.register("register_order", assert_args_not_empty);
+    w.register_fn("rebuild_index", assert_args_empty);
+    w.register_fn("register_order", assert_args_not_empty);
 
     let mut w = w.connect(None).await.unwrap();
 

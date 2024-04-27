@@ -43,7 +43,7 @@ async fn ent_expiring_job() {
     // prepare a client and a worker:
     let mut p = Client::connect(Some(&url)).await.unwrap();
     let mut c = WorkerBuilder::default();
-    c.register("AnExpiringJob", print_job);
+    c.register_fn("AnExpiringJob", print_job);
     let mut c = c.connect(Some(&url)).await.unwrap();
 
     // prepare an expiring job:
@@ -92,7 +92,7 @@ async fn ent_unique_job() {
     // prepare client and worker:
     let mut p = Client::connect(Some(&url)).await.unwrap();
     let mut c = WorkerBuilder::default();
-    c.register(job_type, print_job);
+    c.register_fn(job_type, print_job);
     let mut c = c.connect(Some(&url)).await.unwrap();
 
     // Reminder. Jobs are considered unique for kind + args + queue.
@@ -208,7 +208,7 @@ async fn ent_unique_job_until_success() {
         // to work hard:
         let mut client_a = Client::connect(Some(&url1)).await.unwrap();
         let mut worker_a = WorkerBuilder::default();
-        worker_a.register(job_type, |job| async move {
+        worker_a.register_fn(job_type, |job| async move {
             let args = job.args().to_owned();
             let mut args = args.iter();
             let diffuculty_level = args
@@ -288,7 +288,7 @@ async fn ent_unique_job_until_start() {
     let handle = tokio::spawn(async move {
         let mut client_a = Client::connect(Some(&url1)).await.unwrap();
         let mut worker_a = WorkerBuilder::default();
-        worker_a.register(job_type, |job| async move {
+        worker_a.register_fn(job_type, |job| async move {
             let args = job.args().to_owned();
             let mut args = args.iter();
             let diffuculty_level = args
@@ -378,7 +378,7 @@ async fn ent_unique_job_bypass_unique_lock() {
     // let's consume three times from the queue to verify that the first two jobs
     // have been enqueued for real, while the last one has not.
     let mut c = WorkerBuilder::default();
-    c.register("order", print_job);
+    c.register_fn("order", print_job);
     let mut c = c.connect(Some(&url)).await.unwrap();
 
     assert!(c.run_one(0, &[queue_name]).await.unwrap());
@@ -427,7 +427,7 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
     {
         let job_id = job_id.clone();
         let url = url.clone();
-        c.register("order", move |job| {
+        c.register_fn("order", move |job| {
             let job_id = job_id.clone();
             let url = url.clone();
             Box::pin(async move {
@@ -558,8 +558,8 @@ async fn test_batch_of_jobs_can_be_initiated() {
 
     let mut p = Client::connect(Some(&url)).await.unwrap();
     let mut c = WorkerBuilder::default();
-    c.register("thumbnail", |_job| async { Ok::<(), io::Error>(()) });
-    c.register("clean_up", |_job| async { Ok(()) });
+    c.register_fn("thumbnail", |_job| async { Ok::<(), io::Error>(()) });
+    c.register_fn("clean_up", |_job| async { Ok(()) });
     let mut c = c.connect(Some(&url)).await.unwrap();
     let mut t = Client::connect(Some(&url))
         .await
@@ -695,7 +695,7 @@ async fn test_batches_can_be_nested() {
     // Set up 'client', 'worker', and 'tracker':
     let mut p = Client::connect(Some(&url)).await.unwrap();
     let mut c = WorkerBuilder::default();
-    c.register("jobtype", |_job| async { Ok::<(), io::Error>(()) });
+    c.register_fn("jobtype", |_job| async { Ok::<(), io::Error>(()) });
     let mut _c = c.connect(Some(&url)).await.unwrap();
     let mut t = Client::connect(Some(&url))
         .await
@@ -796,8 +796,8 @@ async fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
     let mut cl = Client::connect(Some(&url)).await.unwrap();
     let mut tr = Client::connect(Some(&url)).await.unwrap();
     let mut w = WorkerBuilder::default();
-    w.register("order", |_job| async { Ok(()) });
-    w.register("order_clean_up", |_job| async { Ok::<(), io::Error>(()) });
+    w.register_fn("order", |_job| async { Ok(()) });
+    w.register_fn("order_clean_up", |_job| async { Ok::<(), io::Error>(()) });
     let mut c = w.connect(Some(&url)).await.unwrap();
 
     let mut jobs = some_jobs(
@@ -928,8 +928,8 @@ async fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
     assert_eq!(s.success_callback_state, CallbackState::Pending);
 
     let mut c = WorkerBuilder::default();
-    c.register(complete_cb_jobtype, |_job| async { Ok(()) });
-    c.register(success_cb_jobtype, |_job| async {
+    c.register_fn(complete_cb_jobtype, |_job| async { Ok(()) });
+    c.register_fn(success_cb_jobtype, |_job| async {
         Err(io::Error::new(
             io::ErrorKind::Other,
             "we want this one to fail to test the 'CallbackState' behavior",

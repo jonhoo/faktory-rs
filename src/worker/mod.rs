@@ -112,7 +112,7 @@ type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
 ///
 /// let mut w = WorkerBuilder::default();
 ///
-/// w.register("foo", process_job);
+/// w.register_fn("foo", process_job);
 ///
 /// let mut w = w.connect(None).await.unwrap();
 /// if let Err(e) = w.run(&["default"]).await {
@@ -127,14 +127,14 @@ type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
 /// # use faktory::WorkerBuilder;
 /// # use std::io;
 /// let mut w = WorkerBuilder::default();
-/// w.register("bar", |job| async move {
+/// w.register_fn("bar", |job| async move {
 ///     println!("{:?}", job);
 ///     Ok::<(), io::Error>(())
 /// });
 /// ```
 ///
 /// You can also register anything that implements [`JobRunner`] to handle jobs
-/// with [`register_runner`](WorkerBuilder::register_runner).
+/// with [`register`](WorkerBuilder::register).
 ///
 pub struct Worker<S: AsyncBufRead + AsyncWrite + Send + Unpin, E> {
     c: Client<S>,

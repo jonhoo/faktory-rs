@@ -59,7 +59,7 @@ async fn main() {
             // make producer and consumer
             let mut p = Client::connect(None).await.unwrap();
             let mut c = WorkerBuilder::default();
-            c.register("SomeJob", |_| {
+            c.register_fn("SomeJob", |_| {
                 Box::pin(async move {
                     let mut rng = rand::thread_rng();
                     if rng.gen_bool(0.01) {
