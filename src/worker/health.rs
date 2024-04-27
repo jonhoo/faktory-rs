@@ -8,14 +8,14 @@ use std::{
 use tokio::io::{AsyncBufRead, AsyncWrite};
 use tokio::time::sleep as tokio_sleep;
 
-impl<
-        S: AsyncBufRead + AsyncWrite + Reconnect + Send + Unpin + 'static,
-        E: StdError + 'static + Send,
-    > Worker<S, E>
+impl<S, E> Worker<S, E>
+where
+    S: AsyncBufRead + AsyncWrite + Reconnect + Send + Unpin + 'static,
+    E: StdError + 'static + Send,
 {
     pub(crate) async fn listen_for_heartbeats(
         &mut self,
-        statuses: &Vec<Arc<atomic::AtomicUsize>>,
+        statuses: &[Arc<atomic::AtomicUsize>],
     ) -> Result<bool, Error> {
         let mut target = STATUS_RUNNING;
 
