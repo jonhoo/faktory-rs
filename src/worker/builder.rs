@@ -94,6 +94,9 @@ impl<E: 'static> WorkerBuilder<E> {
     ///
     /// Whenever a job whose type matches `kind` is fetched from the Faktory, the given handler
     /// function is called with that job as its argument.
+    ///
+    /// Note that only one single handler per job kind is supported. Registering another handler
+    /// for the same job kind will silently override the handler registered previously.
     pub fn register_fn<K, H, Fut>(&mut self, kind: K, handler: H) -> &mut Self
     where
         K: Into<String>,
@@ -108,6 +111,9 @@ impl<E: 'static> WorkerBuilder<E> {
     ///
     /// Whenever a job whose type matches `kind` is fetched from the Faktory, the given handler
     /// object is called with that job as its argument.
+    ///
+    /// Note that only one single handler per job kind is supported. Registering another handler
+    /// for the same job kind will silently override the handler registered previously.
     pub fn register<K, H>(&mut self, kind: K, runner: H) -> &mut Self
     where
         K: Into<String>,
