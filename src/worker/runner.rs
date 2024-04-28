@@ -31,17 +31,17 @@ use std::future::Future;
 ///       Ok(())
 ///   }
 /// }
-/// 
+///
 /// let handler = MyHandler {
 ///    config: "bar".to_string(),
 /// };
-/// 
+///
 /// let mut w = WorkerBuilder::default()
 ///     .register("foo", handler)
 ///     .connect(None)
 ///     .await
 ///     .unwrap();
-/// 
+///
 /// if let Err(e) = w.run(&["default"]).await {
 ///     println!("worker failed: {}", e);
 /// }
