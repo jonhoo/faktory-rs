@@ -89,7 +89,7 @@ where
     }
 }
 
-/// A wrapper for the userland's handler.
+/// A "transparent" wrapper for a handler.
 ///
 /// The `Closure` newtype is introduced to avoid having to box a job handler:
 /// we can now use `Closure(handler)` instead of `Box::new(handler)` and make
@@ -98,7 +98,7 @@ where
 /// The `repr(transparent)` macro is to guarantee that this single-field struct
 /// and the wrapped handler have the same layout and so it is safe to operate on
 /// the in-memory representations of _the_ handler (submitted to us
-/// from the userland) and its enclosed (by us) self.
+/// from the user code) and its enclosed (by us) self.
 ///
 /// Ref: https://github.com/jonhoo/faktory-rs/pull/51
 #[repr(transparent)]

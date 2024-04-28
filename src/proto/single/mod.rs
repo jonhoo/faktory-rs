@@ -2,7 +2,7 @@ use crate::Error;
 use chrono::{DateTime, Utc};
 use derive_builder::Builder;
 use std::collections::HashMap;
-use tokio::io::{AsyncBufRead, AsyncWrite};
+use tokio::io::{AsyncBufRead, AsyncWrite, AsyncWriteExt};
 
 mod cmd;
 mod id;
@@ -261,7 +261,6 @@ impl Job {
     }
 }
 
-use tokio::io::AsyncWriteExt;
 pub async fn write_command<W: AsyncWrite + Unpin + Send, C: FaktoryCommand>(
     w: &mut W,
     command: &C,
@@ -291,7 +290,7 @@ mod test {
         let job_args = vec!["ISBN-13:9781718501850"];
         let job = JobBuilder::new(job_kind).args(job_args.clone()).build();
 
-        assert!(job.jid != JobId::new(""));
+        assert!(&job.jid != "");
         assert!(job.queue == JOB_DEFAULT_QUEUE.to_string());
         assert_eq!(job.kind, job_kind);
         assert_eq!(job.args, job_args);

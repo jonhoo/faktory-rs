@@ -171,7 +171,7 @@ pub enum TlsStream {
     #[error("underlying tls stream")]
     Native(#[source] tokio_native_tls::native_tls::Error),
 
-    /// Error in the underlying rutsls powered stream.
+    /// Error in the underlying rustls powered stream.
     #[cfg(feature = "rustls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
     #[error("underlying tls stream")]

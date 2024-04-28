@@ -1,5 +1,4 @@
 use super::utils;
-use std::fmt::Display;
 use std::ops::Deref;
 
 macro_rules! string_wrapper_impls {
@@ -8,9 +7,9 @@ macro_rules! string_wrapper_impls {
             /// Create a new entity identifier.
             pub fn new<S>(inner: S) -> Self
             where
-                S: AsRef<str> + Clone + Display,
+                S: Into<String>,
             {
-                Self(inner.to_string())
+                Self(inner.into())
             }
         }
 
@@ -30,6 +29,12 @@ macro_rules! string_wrapper_impls {
         impl AsRef<$new_type> for $new_type {
             fn as_ref(&self) -> &$new_type {
                 &self
+            }
+        }
+
+        impl PartialEq<str> for $new_type {
+            fn eq(&self, other: &str) -> bool {
+                self.deref().eq(other)
             }
         }
     };
