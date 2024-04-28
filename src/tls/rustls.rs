@@ -32,7 +32,7 @@ use tokio_rustls::TlsConnector;
 #[pin_project::pin_project]
 pub struct TlsStream<S> {
     connector: TlsConnector,
-    hostname: &'static str,
+    hostname: String,
     #[pin]
     stream: RustlsStream<S>,
 }
@@ -82,7 +82,7 @@ impl TlsStream<TokioTcpStream> {
         }?;
         let host_and_port = utils::host_from_url(&url);
         let tcp_stream = TokioTcpStream::connect(&host_and_port).await?;
-        let host = url.host_str().unwrap().to_string().leak();
+        let host = url.host_str().unwrap().to_string();
         Ok(TlsStream::new(tcp_stream, connector, host).await?)
     }
 }
@@ -95,7 +95,7 @@ where
     ///
     /// Internally creates a `ClientConfig` with an empty root certificates store and no client
     /// authentication. Use [`new`](TlsStream::new) for a customized `TlsConnector`.
-    pub async fn default(stream: S, hostname: &'static str) -> io::Result<Self> {
+    pub async fn default(stream: S, hostname: String) -> io::Result<Self> {
         let conf = ClientConfig::builder()
             .with_root_certificates(RootCertStore::empty())
             .with_no_client_auth();
@@ -104,12 +104,11 @@ where
     }
 
     /// Create a new TLS connection on an existing stream with a non-default TLS configuration.
-    pub async fn new(
-        stream: S,
-        connector: TlsConnector,
-        hostname: &'static str,
-    ) -> io::Result<Self> {
-        let server_name = hostname.try_into().expect("a valid DNS name or IP address");
+    pub async fn new(stream: S, connector: TlsConnector, hostname: String) -> io::Result<Self> {
+        let server_name = hostname
+            .clone()
+            .try_into()
+            .expect("a valid DNS name or IP address");
         let tls_stream = connector
             .connect(server_name, stream)
             .await
@@ -129,7 +128,7 @@ where
 {
     async fn reconnect(&mut self) -> io::Result<Self> {
         let stream = self.stream.get_mut().0.reconnect().await?;
-        TlsStream::new(stream, self.connector.clone(), self.hostname).await
+        TlsStream::new(stream, self.connector.clone(), self.hostname.clone()).await
     }
 }
 
