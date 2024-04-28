@@ -119,10 +119,10 @@ mod fixtures {
         use std::fs;
         use std::path::PathBuf;
 
+        use rustls_pki_types::{CertificateDer, ServerName, UnixTime};
         use tokio_rustls::rustls::client::danger::{
             HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
         };
-        use tokio_rustls::rustls::pki_types::{CertificateDer, ServerName, UnixTime};
         use tokio_rustls::rustls::DigitallySignedStruct;
         use tokio_rustls::rustls::Error as RustlsError;
         use tokio_rustls::rustls::SignatureScheme;
