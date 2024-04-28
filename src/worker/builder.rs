@@ -40,7 +40,7 @@ impl<E: 'static> WorkerBuilder<E> {
     /// Set the hostname to use for this worker.
     ///
     /// Defaults to the machine's hostname as reported by the operating system.
-    pub fn hostname(&mut self, hn: String) -> &mut Self {
+    pub fn hostname(mut self, hn: String) -> Self {
         self.opts.hostname = Some(hn);
         self
     }
@@ -48,7 +48,7 @@ impl<E: 'static> WorkerBuilder<E> {
     /// Set a unique identifier for this worker.
     ///
     /// Defaults to a randomly generated 32-char ASCII string.
-    pub fn wid(&mut self, wid: WorkerId) -> &mut Self {
+    pub fn wid(mut self, wid: WorkerId) -> Self {
         self.opts.wid = Some(wid);
         self
     }
@@ -60,7 +60,7 @@ impl<E: 'static> WorkerBuilder<E> {
     /// Note that calling this overrides the labels set previously.
     ///
     /// If you need to extend the labels already set, use [`WorkerBuilder::add_to_labels`] instead.
-    pub fn labels<I>(&mut self, labels: I) -> &mut Self
+    pub fn labels<I>(mut self, labels: I) -> Self
     where
         I: IntoIterator<Item = String>,
     {
@@ -74,7 +74,7 @@ impl<E: 'static> WorkerBuilder<E> {
     /// if no labels have been explicitly set before - to the default `"rust"` label.
     ///
     /// If you need to override the labels set previously, use [`WorkerBuilder::labels`] instead.
-    pub fn add_to_labels<I>(&mut self, labels: I) -> &mut Self
+    pub fn add_to_labels<I>(mut self, labels: I) -> Self
     where
         I: IntoIterator<Item = String>,
     {
@@ -85,7 +85,7 @@ impl<E: 'static> WorkerBuilder<E> {
     /// Set the number of workers to use `run` and `run_to_completion`.
     ///
     /// Defaults to 1.
-    pub fn workers(&mut self, w: usize) -> &mut Self {
+    pub fn workers(mut self, w: usize) -> Self {
         self.workers_count = w;
         self
     }
@@ -97,14 +97,13 @@ impl<E: 'static> WorkerBuilder<E> {
     ///
     /// Note that only one single handler per job kind is supported. Registering another handler
     /// for the same job kind will silently override the handler registered previously.
-    pub fn register_fn<K, H, Fut>(&mut self, kind: K, handler: H) -> &mut Self
+    pub fn register_fn<K, H, Fut>(self, kind: K, handler: H) -> Self
     where
         K: Into<String>,
         H: Fn(Job) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<(), E>> + Send,
     {
-        self.register(kind, Closure(handler));
-        self
+        self.register(kind, Closure(handler))
     }
 
     /// Register a handler for the given job type (`kind`).
@@ -114,7 +113,7 @@ impl<E: 'static> WorkerBuilder<E> {
     ///
     /// Note that only one single handler per job kind is supported. Registering another handler
     /// for the same job kind will silently override the handler registered previously.
-    pub fn register<K, H>(&mut self, kind: K, runner: H) -> &mut Self
+    pub fn register<K, H>(mut self, kind: K, runner: H) -> Self
     where
         K: Into<String>,
         H: JobRunner<Error = E> + 'static,

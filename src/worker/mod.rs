@@ -110,11 +110,12 @@ type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
 ///     Ok(())
 /// }
 ///
-/// let mut w = WorkerBuilder::default();
+/// let mut w = WorkerBuilder::default()
+///     .register_fn("foo", process_job)
+///     .connect(None)
+///     .await
+///     .unwrap();
 ///
-/// w.register_fn("foo", process_job);
-///
-/// let mut w = w.connect(None).await.unwrap();
 /// if let Err(e) = w.run(&["default"]).await {
 ///     println!("worker failed: {}", e);
 /// }
@@ -124,12 +125,17 @@ type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
 /// Handler can be inlined.
 ///
 /// ```no_run
+/// # tokio_test::block_on(async {
 /// # use faktory::WorkerBuilder;
 /// # use std::io;
-/// let mut w = WorkerBuilder::default();
-/// w.register_fn("bar", |job| async move {
-///     println!("{:?}", job);
-///     Ok::<(), io::Error>(())
+/// let _w = WorkerBuilder::default()
+///     .register_fn("bar", |job| async move {
+///         println!("{:?}", job);
+///         Ok::<(), io::Error>(())
+///     })
+///     .connect(None)
+///     .await
+///     .unwrap();
 /// });
 /// ```
 ///

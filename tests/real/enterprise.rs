@@ -42,9 +42,11 @@ async fn ent_expiring_job() {
 
     // prepare a client and a worker:
     let mut p = Client::connect(Some(&url)).await.unwrap();
-    let mut c = WorkerBuilder::default();
-    c.register_fn("AnExpiringJob", print_job);
-    let mut c = c.connect(Some(&url)).await.unwrap();
+    let mut w = WorkerBuilder::default()
+        .register_fn("AnExpiringJob", print_job)
+        .connect(Some(&url))
+        .await
+        .unwrap();
 
     // prepare an expiring job:
     let job_ttl_secs: u64 = 3;
@@ -58,10 +60,10 @@ async fn ent_expiring_job() {
 
     // enqueue and fetch immediately job1:
     p.enqueue(job1).await.unwrap();
-    assert_had_one!(&mut c, "ent_expiring_job");
+    assert_had_one!(&mut w, "ent_expiring_job");
 
     // check that the queue is drained:
-    assert_is_empty!(&mut c, "ent_expiring_job");
+    assert_is_empty!(&mut w, "ent_expiring_job");
 
     // prepare another one:
     let job2 = JobBuilder::new("AnExpiringJob")
@@ -75,7 +77,7 @@ async fn ent_expiring_job() {
     tokio::time::sleep(time::Duration::from_secs(job_ttl_secs * 2)).await;
     // For the non-enterprise edition of Faktory, this assertion will
     // fail, which should be taken into account when running the test suite on CI.
-    assert_is_empty!(&mut c, local);
+    assert_is_empty!(&mut w, local);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -91,9 +93,11 @@ async fn ent_unique_job() {
 
     // prepare client and worker:
     let mut p = Client::connect(Some(&url)).await.unwrap();
-    let mut c = WorkerBuilder::default();
-    c.register_fn(job_type, print_job);
-    let mut c = c.connect(Some(&url)).await.unwrap();
+    let mut w = WorkerBuilder::default()
+        .register_fn(job_type, print_job)
+        .connect(Some(&url))
+        .await
+        .unwrap();
 
     // Reminder. Jobs are considered unique for kind + args + queue.
     // So the following two jobs, will be accepted by Faktory, since we
@@ -113,11 +117,11 @@ async fn ent_unique_job() {
 
     p.enqueue(job2).await.unwrap();
 
-    let had_job = c.run_one(0, &[queue_name]).await.unwrap();
+    let had_job = w.run_one(0, &[queue_name]).await.unwrap();
     assert!(had_job);
-    let had_another_one = c.run_one(0, &[queue_name]).await.unwrap();
+    let had_another_one = w.run_one(0, &[queue_name]).await.unwrap();
     assert!(had_another_one);
-    let and_that_is_it_for_now = !c.run_one(0, &[queue_name]).await.unwrap();
+    let and_that_is_it_for_now = !w.run_one(0, &[queue_name]).await.unwrap();
     assert!(and_that_is_it_for_now);
 
     // let's now create a unique job and followed by a job with
@@ -148,13 +152,13 @@ async fn ent_unique_job() {
     }
 
     // Let's now consume the job which is 'holding' a unique lock:
-    let had_job = c.run_one(0, &[queue_name]).await.unwrap();
+    let had_job = w.run_one(0, &[queue_name]).await.unwrap();
 
     assert!(had_job);
 
     // And check that the queue is really empty (`job2` from above
     // has not been queued indeed):
-    let queue_is_empty = !c.run_one(0, &[queue_name]).await.unwrap();
+    let queue_is_empty = !w.run_one(0, &[queue_name]).await.unwrap();
 
     assert!(queue_is_empty);
 
@@ -176,10 +180,10 @@ async fn ent_unique_job() {
     // ... so the server will accept it:
     p.enqueue(job2).await.unwrap();
 
-    assert_had_one!(&mut c, queue_name);
-    assert_had_one!(&mut c, queue_name);
+    assert_had_one!(&mut w, queue_name);
+    assert_had_one!(&mut w, queue_name);
     // and the queue is empty again:
-    assert_is_empty!(&mut c, queue_name);
+    assert_is_empty!(&mut w, queue_name);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -207,21 +211,23 @@ async fn ent_unique_job_until_success() {
         // will sleep for a corresponding period of time, pretending
         // to work hard:
         let mut client_a = Client::connect(Some(&url1)).await.unwrap();
-        let mut worker_a = WorkerBuilder::default();
-        worker_a.register_fn(job_type, |job| async move {
-            let args = job.args().to_owned();
-            let mut args = args.iter();
-            let diffuculty_level = args
-                .next()
-                .expect("job difficulty level is there")
-                .to_owned();
-            let sleep_secs =
-                serde_json::from_value::<i64>(diffuculty_level).expect("a valid number");
-            time::sleep(time::Duration::from_secs(sleep_secs as u64)).await;
-            eprintln!("{:?}", job);
-            Ok::<(), io::Error>(())
-        });
-        let mut worker_a = worker_a.connect(Some(&url1)).await.unwrap();
+        let mut worker_a = WorkerBuilder::default()
+            .register_fn(job_type, |job| async move {
+                let args = job.args().to_owned();
+                let mut args = args.iter();
+                let diffuculty_level = args
+                    .next()
+                    .expect("job difficulty level is there")
+                    .to_owned();
+                let sleep_secs =
+                    serde_json::from_value::<i64>(diffuculty_level).expect("a valid number");
+                time::sleep(time::Duration::from_secs(sleep_secs as u64)).await;
+                eprintln!("{:?}", job);
+                Ok::<(), io::Error>(())
+            })
+            .connect(Some(&url1))
+            .await
+            .unwrap();
         let job = JobBuilder::new(job_type)
             .args(vec![difficulty_level])
             .queue(queue_name)
@@ -287,21 +293,23 @@ async fn ent_unique_job_until_start() {
     let url1 = url.clone();
     let handle = tokio::spawn(async move {
         let mut client_a = Client::connect(Some(&url1)).await.unwrap();
-        let mut worker_a = WorkerBuilder::default();
-        worker_a.register_fn(job_type, |job| async move {
-            let args = job.args().to_owned();
-            let mut args = args.iter();
-            let diffuculty_level = args
-                .next()
-                .expect("job difficulty level is there")
-                .to_owned();
-            let sleep_secs =
-                serde_json::from_value::<i64>(diffuculty_level).expect("a valid number");
-            time::sleep(time::Duration::from_secs(sleep_secs as u64)).await;
-            eprintln!("{:?}", job);
-            Ok::<(), io::Error>(())
-        });
-        let mut worker_a = worker_a.connect(Some(&url1)).await.unwrap();
+        let mut worker_a = WorkerBuilder::default()
+            .register_fn(job_type, |job| async move {
+                let args = job.args().to_owned();
+                let mut args = args.iter();
+                let diffuculty_level = args
+                    .next()
+                    .expect("job difficulty level is there")
+                    .to_owned();
+                let sleep_secs =
+                    serde_json::from_value::<i64>(diffuculty_level).expect("a valid number");
+                time::sleep(time::Duration::from_secs(sleep_secs as u64)).await;
+                eprintln!("{:?}", job);
+                Ok::<(), io::Error>(())
+            })
+            .connect(Some(&url1))
+            .await
+            .unwrap();
         client_a
             .enqueue(
                 JobBuilder::new(job_type)
@@ -377,9 +385,11 @@ async fn ent_unique_job_bypass_unique_lock() {
 
     // let's consume three times from the queue to verify that the first two jobs
     // have been enqueued for real, while the last one has not.
-    let mut c = WorkerBuilder::default();
-    c.register_fn("order", print_job);
-    let mut c = c.connect(Some(&url)).await.unwrap();
+    let mut c = WorkerBuilder::default()
+        .register_fn("order", print_job)
+        .connect(Some(&url))
+        .await
+        .unwrap();
 
     assert!(c.run_one(0, &[queue_name]).await.unwrap());
     assert!(c.run_one(0, &[queue_name]).await.unwrap());
@@ -422,14 +432,12 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
 
     p.enqueue(job_tackable).await.expect("enqueued");
 
-    let mut c = WorkerBuilder::default();
-
-    {
-        let job_id = job_id.clone();
-        let url = url.clone();
-        c.register_fn("order", move |job| {
-            let job_id = job_id.clone();
-            let url = url.clone();
+    let url_copy = url.clone();
+    let job_id_copy = job_id.clone();
+    let mut c = WorkerBuilder::default()
+        .register_fn("order", move |job| {
+            let job_id = job_id_copy.clone();
+            let url = url_copy.clone();
             Box::pin(async move {
                 let mut t = Client::connect(Some(&url))
                     .await
@@ -473,9 +481,7 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
                 // considering the job done
                 Ok::<(), io::Error>(eprintln!("{:?}", job))
             })
-        });
-    }
-    let mut c = c
+        })
         .connect(Some(&url))
         .await
         .expect("Successfully ran a handshake with 'Faktory'");
@@ -557,10 +563,12 @@ async fn test_batch_of_jobs_can_be_initiated() {
     let url = learn_faktory_url();
 
     let mut p = Client::connect(Some(&url)).await.unwrap();
-    let mut c = WorkerBuilder::default();
-    c.register_fn("thumbnail", |_job| async { Ok::<(), io::Error>(()) });
-    c.register_fn("clean_up", |_job| async { Ok(()) });
-    let mut c = c.connect(Some(&url)).await.unwrap();
+    let mut w = WorkerBuilder::default()
+        .register_fn("thumbnail", |_job| async { Ok::<(), io::Error>(()) })
+        .register_fn("clean_up", |_job| async { Ok(()) })
+        .connect(Some(&url))
+        .await
+        .unwrap();
     let mut t = Client::connect(Some(&url))
         .await
         .expect("job progress tracker created successfully");
@@ -622,9 +630,9 @@ async fn test_batch_of_jobs_can_be_initiated() {
     assert_eq!(s.complete_callback_state, CallbackState::Pending);
 
     // consume and execute job 1 ...
-    assert_had_one!(&mut c, "test_batch_of_jobs_can_be_initiated");
+    assert_had_one!(&mut w, "test_batch_of_jobs_can_be_initiated");
     // ... and try consuming from the "callback" queue:
-    assert_is_empty!(&mut c, "test_batch_of_jobs_can_be_initiated__CALLBACKs");
+    assert_is_empty!(&mut w, "test_batch_of_jobs_can_be_initiated__CALLBACKs");
 
     // let's ask the Faktory server about the batch status after
     // we have consumed one job from this batch:
@@ -640,9 +648,9 @@ async fn test_batch_of_jobs_can_be_initiated() {
     assert_eq!(s.failed, 0);
 
     // now, consume and execute job 2
-    assert_had_one!(&mut c, "test_batch_of_jobs_can_be_initiated");
+    assert_had_one!(&mut w, "test_batch_of_jobs_can_be_initiated");
     // ... and check the callback queue again:
-    assert_is_empty!(&mut c, "test_batch_of_jobs_can_be_initiated__CALLBACKs"); // not just yet ...
+    assert_is_empty!(&mut w, "test_batch_of_jobs_can_be_initiated__CALLBACKs"); // not just yet ...
 
     // let's check batch status once again:
     let s = t
@@ -657,7 +665,7 @@ async fn test_batch_of_jobs_can_be_initiated() {
     assert_eq!(s.failed, 0);
 
     // finally, consume and execute job 3 - the last one from the batch
-    assert_had_one!(&mut c, "test_batch_of_jobs_can_be_initiated");
+    assert_had_one!(&mut w, "test_batch_of_jobs_can_be_initiated");
 
     // let's check batch status to see what happens after
     // all the jobs from the batch have been executed:
@@ -674,7 +682,7 @@ async fn test_batch_of_jobs_can_be_initiated() {
     assert_eq!(s.complete_callback_state, CallbackState::Enqueued);
 
     // let's now successfully consume from the "callback" queue:
-    assert_had_one!(&mut c, "test_batch_of_jobs_can_be_initiated__CALLBACKs");
+    assert_had_one!(&mut w, "test_batch_of_jobs_can_be_initiated__CALLBACKs");
 
     // let's check batch status one last time:
     let s = t
@@ -694,9 +702,11 @@ async fn test_batches_can_be_nested() {
 
     // Set up 'client', 'worker', and 'tracker':
     let mut p = Client::connect(Some(&url)).await.unwrap();
-    let mut c = WorkerBuilder::default();
-    c.register_fn("jobtype", |_job| async { Ok::<(), io::Error>(()) });
-    let mut _c = c.connect(Some(&url)).await.unwrap();
+    let _w = WorkerBuilder::default()
+        .register_fn("jobtype", |_job| async { Ok::<(), io::Error>(()) })
+        .connect(Some(&url))
+        .await
+        .unwrap();
     let mut t = Client::connect(Some(&url))
         .await
         .expect("job progress tracker created successfully");
@@ -715,7 +725,7 @@ async fn test_batches_can_be_nested() {
         .queue("test_batches_can_be_nested")
         .build();
 
-    // Sccording to Faktory docs:
+    // According to Faktory docs:
     // "The callback for a parent batch will not enqueue until the callback for the child batch has finished."
     // See: https://github.com/contribsys/faktory/wiki/Ent-Batches#guarantees
     let parent_cb_job = Job::builder("clean_up")
@@ -795,10 +805,12 @@ async fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
     // prepare a client, a worker of 'order' jobs, and a tracker:
     let mut cl = Client::connect(Some(&url)).await.unwrap();
     let mut tr = Client::connect(Some(&url)).await.unwrap();
-    let mut w = WorkerBuilder::default();
-    w.register_fn("order", |_job| async { Ok(()) });
-    w.register_fn("order_clean_up", |_job| async { Ok::<(), io::Error>(()) });
-    let mut c = w.connect(Some(&url)).await.unwrap();
+    let mut w = WorkerBuilder::default()
+        .register_fn("order", |_job| async { Ok(()) })
+        .register_fn("order_clean_up", |_job| async { Ok::<(), io::Error>(()) })
+        .connect(Some(&url))
+        .await
+        .unwrap();
 
     let mut jobs = some_jobs(
         "order",
@@ -836,14 +848,14 @@ async fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
     // consume those 3 jobs successfully;
     for _ in 0..3 {
         assert_had_one!(
-            &mut c,
+            &mut w,
             "test_callback_will_not_be_queued_unless_batch_gets_committed"
         );
     }
 
     // verify the queue is drained:
     assert_is_empty!(
-        &mut c,
+        &mut w,
         "test_callback_will_not_be_queued_unless_batch_gets_committed"
     );
 
@@ -856,7 +868,7 @@ async fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
 
     // to double-check, let's assert the success callbacks queue is empty:
     assert_is_empty!(
-        &mut c,
+        &mut w,
         "test_callback_will_not_be_queued_unless_batch_gets_committed__CALLBACKs"
     );
 
@@ -869,7 +881,7 @@ async fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
 
     // finally, let's consume from the success callbacks queue ...
     assert_had_one!(
-        &mut c,
+        &mut w,
         "test_callback_will_not_be_queued_unless_batch_gets_committed__CALLBACKs"
     );
 
@@ -927,18 +939,19 @@ async fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
     assert_eq!(s.complete_callback_state, CallbackState::Enqueued);
     assert_eq!(s.success_callback_state, CallbackState::Pending);
 
-    let mut c = WorkerBuilder::default();
-    c.register_fn(complete_cb_jobtype, |_job| async { Ok(()) });
-    c.register_fn(success_cb_jobtype, |_job| async {
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            "we want this one to fail to test the 'CallbackState' behavior",
-        ))
-    });
+    let mut w = WorkerBuilder::default()
+        .register_fn(complete_cb_jobtype, |_job| async { Ok(()) })
+        .register_fn(success_cb_jobtype, |_job| async {
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                "we want this one to fail to test the 'CallbackState' behavior",
+            ))
+        })
+        .connect(Some(&url))
+        .await
+        .unwrap();
 
-    let mut c = c.connect(Some(&url)).await.unwrap();
-
-    assert_had_one!(&mut c, q_name); // complete callback consumed
+    assert_had_one!(&mut w, q_name); // complete callback consumed
 
     let s = tracker
         .get_batch_status(bid.clone())
@@ -954,7 +967,7 @@ async fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
         CallbackState::Enqueued => {}
         _ => panic!("Expected the callback to have been enqueued, since the `complete` callback has already executed"),
     }
-    assert_had_one!(&mut c, q_name); // success callback consumed
+    assert_had_one!(&mut w, q_name); // success callback consumed
 
     let s = tracker
         .get_batch_status(bid.clone())

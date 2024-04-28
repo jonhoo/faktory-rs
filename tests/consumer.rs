@@ -63,8 +63,8 @@ use tokio::{spawn, time::sleep};
 #[tokio::test(flavor = "multi_thread")]
 async fn hello() {
     let mut s = mock::Stream::default();
-    let mut c: WorkerBuilder<io::Error> = WorkerBuilder::default();
-    c.hostname("host".to_string())
+    let w: Worker<_, io::Error> = WorkerBuilder::default()
+        .hostname("host".to_string())
         .wid(WorkerId::new("wid"))
         .labels([
             "will".to_string(),
@@ -73,9 +73,11 @@ async fn hello() {
         ])
         .labels(["foo".to_string(), "bar".to_string()])
         .add_to_labels(["will".to_string()])
-        .add_to_labels(["be".to_string(), "added".to_string()]);
-    c.register_fn("never_called", |_j: Job| async move { unreachable!() });
-    let c = c.connect_with(s.clone(), None).await.unwrap();
+        .add_to_labels(["be".to_string(), "added".to_string()])
+        .register_fn("never_called", |_j: Job| async move { unreachable!() })
+        .connect_with(s.clone(), None)
+        .await
+        .unwrap();
     let written = s.pop_bytes_written(0);
     assert!(written.starts_with(b"HELLO {"));
     let written: serde_json::Value = serde_json::from_slice(&written[b"HELLO ".len()..]).unwrap();
@@ -90,7 +92,7 @@ async fn hello() {
     let labels = written["labels"].as_array().unwrap();
     assert_eq!(labels, &["foo", "bar", "will", "be", "added"]);
 
-    drop(c);
+    drop(w);
     let written = s.pop_bytes_written(0);
     assert_eq!(written, b"END\r\n");
 }
@@ -98,10 +100,8 @@ async fn hello() {
 #[tokio::test(flavor = "multi_thread")]
 async fn hello_pwd() {
     let mut s = mock::Stream::with_salt(1545, "55104dc76695721d");
-
-    let mut c: WorkerBuilder<io::Error> = WorkerBuilder::default();
-    c.register_fn("never_called", |_j: Job| async move { unreachable!() });
-    let c = c
+    let w: Worker<_, io::Error> = WorkerBuilder::default()
+        .register_fn("never_called", |_j: Job| async move { unreachable!() })
         .connect_with(s.clone(), Some("foobar".to_string()))
         .await
         .unwrap();
@@ -113,19 +113,20 @@ async fn hello_pwd() {
         written.get("pwdhash").and_then(|h| h.as_str()),
         Some("6d877f8e5544b1f2598768f817413ab8a357afffa924dedae99eb91472d4ec30")
     );
-
-    drop(c);
+    drop(w);
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn dequeue() {
     let mut s = mock::Stream::default();
-    let mut c = WorkerBuilder::default();
-    c.register_fn("foobar", |job: Job| async move {
-        assert_eq!(job.args(), &["z"]);
-        Ok::<(), io::Error>(())
-    });
-    let mut c = c.connect_with(s.clone(), None).await.unwrap();
+    let mut w = WorkerBuilder::default()
+        .register_fn("foobar", |job: Job| async move {
+            assert_eq!(job.args(), &["z"]);
+            Ok::<(), io::Error>(())
+        })
+        .connect_with(s.clone(), None)
+        .await
+        .unwrap();
     s.ignore(0);
 
     s.push_bytes_to_read(
@@ -143,7 +144,7 @@ async fn dequeue() {
         }\r\n",
     );
     s.ok(0); // for the ACK
-    if let Err(e) = c.run_one(0, &["default"]).await {
+    if let Err(e) = w.run_one(0, &["default"]).await {
         println!("{:?}", e);
         unreachable!();
     }
@@ -159,12 +160,14 @@ async fn dequeue() {
 #[tokio::test(flavor = "multi_thread")]
 async fn dequeue_first_empty() {
     let mut s = mock::Stream::default();
-    let mut c = WorkerBuilder::default();
-    c.register_fn("foobar", |job: Job| async move {
-        assert_eq!(job.args(), &["z"]);
-        Ok::<(), io::Error>(())
-    });
-    let mut c = c.connect_with(s.clone(), None).await.unwrap();
+    let mut w = WorkerBuilder::default()
+        .register_fn("foobar", |job: Job| async move {
+            assert_eq!(job.args(), &["z"]);
+            Ok::<(), io::Error>(())
+        })
+        .connect_with(s.clone(), None)
+        .await
+        .unwrap();
     s.ignore(0);
 
     s.push_bytes_to_read(
@@ -184,7 +187,7 @@ async fn dequeue_first_empty() {
     s.ok(0); // for the ACK
 
     // run once, shouldn't do anything
-    match c.run_one(0, &["default"]).await {
+    match w.run_one(0, &["default"]).await {
         Ok(did_work) => assert!(!did_work),
         Err(e) => {
             println!("{:?}", e);
@@ -192,7 +195,7 @@ async fn dequeue_first_empty() {
         }
     }
     // run again, this time doing the job
-    match c.run_one(0, &["default"]).await {
+    match w.run_one(0, &["default"]).await {
         Ok(did_work) => assert!(did_work),
         Err(e) => {
             println!("{:?}", e);
@@ -214,14 +217,16 @@ async fn dequeue_first_empty() {
 #[tokio::test(flavor = "multi_thread")]
 async fn well_behaved() {
     let mut s = mock::Stream::new(2); // main plus worker
-    let mut c = WorkerBuilder::default();
-    c.wid(WorkerId::new("wid"));
-    c.register_fn("foobar", |_| async move {
-        // NOTE: this time needs to be so that it lands between the first heartbeat and the second
-        sleep(Duration::from_secs(7)).await;
-        Ok::<(), io::Error>(())
-    });
-    let mut c = c.connect_with(s.clone(), None).await.unwrap();
+    let mut w = WorkerBuilder::default()
+        .wid(WorkerId::new("wid"))
+        .register_fn("foobar", |_| async move {
+            // NOTE: this time needs to be so that it lands between the first heartbeat and the second
+            sleep(Duration::from_secs(7)).await;
+            Ok::<(), io::Error>(())
+        })
+        .connect_with(s.clone(), None)
+        .await
+        .unwrap();
     s.ignore(0);
 
     // push a job that'll take a while to run
@@ -240,7 +245,7 @@ async fn well_behaved() {
             }\r\n",
     );
 
-    let jh = spawn(async move { c.run(&["default"]).await });
+    let jh = spawn(async move { w.run(&["default"]).await });
 
     // the running thread won't return for a while. the heartbeat thingy is going to eventually
     // send a heartbeat, and we want to respond to that with a "quiet" to make it not accept any
@@ -279,14 +284,16 @@ async fn well_behaved() {
 #[tokio::test(flavor = "multi_thread")]
 async fn no_first_job() {
     let mut s = mock::Stream::new(2); // main plus worker
-    let mut c = WorkerBuilder::default();
-    c.wid(WorkerId::new("wid"));
-    c.register_fn("foobar", |_| async move {
-        // NOTE: this time needs to be so that it lands between the first heartbeat and the second
-        sleep(Duration::from_secs(7)).await;
-        Ok::<(), io::Error>(())
-    });
-    let mut c = c.connect_with(s.clone(), None).await.unwrap();
+    let mut w = WorkerBuilder::default()
+        .wid(WorkerId::new("wid"))
+        .register_fn("foobar", |_| async move {
+            // NOTE: this time needs to be so that it lands between the first heartbeat and the second
+            sleep(Duration::from_secs(7)).await;
+            Ok::<(), io::Error>(())
+        })
+        .connect_with(s.clone(), None)
+        .await
+        .unwrap();
     s.ignore(0);
 
     // push a job that'll take a while to run
@@ -305,7 +312,7 @@ async fn no_first_job() {
             }\r\n",
     );
 
-    let jh = spawn(async move { c.run(&["default"]).await });
+    let jh = spawn(async move { w.run(&["default"]).await });
 
     // the running thread won't return for a while. the heartbeat thingy is going to eventually
     // send a heartbeat, and we want to respond to that with a "quiet" to make it not accept any
@@ -345,15 +352,17 @@ async fn no_first_job() {
 #[tokio::test(flavor = "multi_thread")]
 async fn well_behaved_many() {
     let mut s = mock::Stream::new(3); // main plus 2 workers
-    let mut w = WorkerBuilder::default();
-    w.workers(2);
-    w.wid(WorkerId::new("wid"));
-    w.register_fn("foobar", |_| async move {
-        // NOTE: this time needs to be so that it lands between the first heartbeat and the second
-        sleep(Duration::from_secs(7)).await;
-        Ok::<(), io::Error>(())
-    });
-    let mut w = w.connect_with(s.clone(), None).await.unwrap();
+    let mut w = WorkerBuilder::default()
+        .workers(2)
+        .wid(WorkerId::new("wid"))
+        .register_fn("foobar", |_| async move {
+            // NOTE: this time needs to be so that it lands between the first heartbeat and the second
+            sleep(Duration::from_secs(7)).await;
+            Ok::<(), io::Error>(())
+        })
+        .connect_with(s.clone(), None)
+        .await
+        .unwrap();
     s.ignore(0);
 
     // push two jobs that'll take a while to run
@@ -426,16 +435,18 @@ async fn terminate() {
     let mut s = mock::Stream::new(2); // main plus worker
 
     // prepare a worker with only never (!) returning handler
-    let mut w: WorkerBuilder<io::Error> = WorkerBuilder::default();
-    w.hostname("machine".into());
-    w.wid(WorkerId::new("wid"));
-    w.register_fn("foobar", |_| async move {
-        loop {
-            sleep(Duration::from_secs(5)).await;
-        }
-    });
+    let mut w: Worker<_, io::Error> = WorkerBuilder::default()
+        .hostname("machine".into())
+        .wid(WorkerId::new("wid"))
+        .register_fn("foobar", |_| async move {
+            loop {
+                sleep(Duration::from_secs(5)).await;
+            }
+        })
+        .connect_with(s.clone(), None)
+        .await
+        .unwrap();
 
-    let mut w = w.connect_with(s.clone(), None).await.unwrap();
     // what now is being ignored on `mine` channel are these written bytes (pid will vary):
     // b"HELLO {\"hostname\":\"machine\",\"wid\":\"wid\",\"pid\":7332,\"labels\":[\"rust\"],\"v\":2}\r\n"
     // this was the HELLO from main (coordinating) worker

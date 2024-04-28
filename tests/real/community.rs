@@ -13,12 +13,14 @@ async fn hello_client() {
 #[tokio::test(flavor = "multi_thread")]
 async fn hello_worker() {
     skip_check!();
-    let mut c = WorkerBuilder::<io::Error>::default();
-    c.hostname("tester".to_string())
-        .labels(vec!["foo".to_string(), "bar".to_string()]);
-    c.register_fn("never_called", |_| async move { unreachable!() });
-    let c = c.connect(None).await.unwrap();
-    drop(c);
+    let w = WorkerBuilder::<io::Error>::default()
+        .hostname("tester".to_string())
+        .labels(vec!["foo".to_string(), "bar".to_string()])
+        .register_fn("never_called", |_| async move { unreachable!() })
+        .connect(None)
+        .await
+        .unwrap();
+    drop(w);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -35,8 +37,7 @@ async fn roundtrip() {
     let local = "roundtrip";
     let jid = JobId::new("x-job-id-0123456782");
 
-    let mut worker = WorkerBuilder::default();
-    worker
+    let mut worker = WorkerBuilder::default()
         .labels(vec!["rust".into(), local.into()])
         .workers(1)
         .wid(WorkerId::random())
@@ -46,8 +47,11 @@ async fn roundtrip() {
             assert_eq!(job.args(), &[Value::from("ISBN-13:9781718501850")]);
             Ok::<(), io::Error>(())
         })
-        .register_fn("image", |_| async move { unreachable!() });
-    let mut worker = worker.connect(None).await.unwrap();
+        .register_fn("image", |_| async move { unreachable!() })
+        .connect(None)
+        .await
+        .unwrap();
+
     let mut client = Client::connect(None).await.unwrap();
     client
         .enqueue(
@@ -73,18 +77,20 @@ async fn multi() {
 
     let (tx, rx) = sync::mpsc::channel();
     let tx = sync::Arc::new(sync::Mutex::new(tx));
-    let mut c = WorkerBuilder::default();
-    c.hostname("tester".to_string()).wid(WorkerId::new(local));
 
-    c.register_fn(local, move |j| {
-        let tx = sync::Arc::clone(&tx);
-        Box::pin(async move {
-            tx.lock().unwrap().send(j).unwrap();
-            Ok::<(), io::Error>(())
+    let mut w = WorkerBuilder::default()
+        .hostname("tester".to_string())
+        .wid(WorkerId::new(local))
+        .register_fn(local, move |j| {
+            let tx = sync::Arc::clone(&tx);
+            Box::pin(async move {
+                tx.lock().unwrap().send(j).unwrap();
+                Ok::<(), io::Error>(())
+            })
         })
-    });
-
-    let mut c = c.connect(None).await.unwrap();
+        .connect(None)
+        .await
+        .unwrap();
 
     let mut p = Client::connect(None).await.unwrap();
     p.enqueue(Job::new(local, vec![Value::from(1), Value::from("foo")]).on_queue(local))
@@ -94,13 +100,13 @@ async fn multi() {
         .await
         .unwrap();
 
-    c.run_one(0, &[local]).await.unwrap();
+    w.run_one(0, &[local]).await.unwrap();
     let job = rx.recv().unwrap();
     assert_eq!(job.queue, local);
     assert_eq!(job.kind(), local);
     assert_eq!(job.args(), &[Value::from(1), Value::from("foo")]);
 
-    c.run_one(0, &[local]).await.unwrap();
+    w.run_one(0, &[local]).await.unwrap();
     let job = rx.recv().unwrap();
     assert_eq!(job.queue, local);
     assert_eq!(job.kind(), local);
@@ -114,18 +120,20 @@ async fn fail() {
 
     let (tx, rx) = sync::mpsc::channel();
     let tx = sync::Arc::new(sync::Mutex::new(tx));
-    let mut c = WorkerBuilder::default();
-    c.hostname("tester".to_string()).wid(WorkerId::new(local));
 
-    c.register_fn(local, move |j| {
-        let tx = sync::Arc::clone(&tx);
-        Box::pin(async move {
-            tx.lock().unwrap().send(j).unwrap();
-            Err(io::Error::new(io::ErrorKind::Other, "nope"))
+    let mut w = WorkerBuilder::default()
+        .hostname("tester".to_string())
+        .wid(WorkerId::new(local))
+        .register_fn(local, move |j| {
+            let tx = sync::Arc::clone(&tx);
+            Box::pin(async move {
+                tx.lock().unwrap().send(j).unwrap();
+                Err(io::Error::new(io::ErrorKind::Other, "nope"))
+            })
         })
-    });
-
-    let mut c = c.connect(None).await.unwrap();
+        .connect(None)
+        .await
+        .unwrap();
 
     let mut p = Client::connect(None).await.unwrap();
 
@@ -137,9 +145,9 @@ async fn fail() {
         .await
         .unwrap();
 
-    c.run_one(0, &[local]).await.unwrap();
-    c.run_one(0, &[local]).await.unwrap();
-    drop(c);
+    w.run_one(0, &[local]).await.unwrap();
+    w.run_one(0, &[local]).await.unwrap();
+    drop(w);
     assert_eq!(rx.into_iter().take(2).count(), 2);
 }
 
@@ -151,13 +159,16 @@ async fn queue() {
     let (tx, rx) = sync::mpsc::channel();
     let tx = sync::Arc::new(sync::Mutex::new(tx));
 
-    let mut c = WorkerBuilder::default();
-    c.hostname("tester".to_string()).wid(WorkerId::new(local));
-    c.register_fn(local, move |_job| {
-        let tx = sync::Arc::clone(&tx);
-        Box::pin(async move { tx.lock().unwrap().send(true) })
-    });
-    let mut c = c.connect(None).await.unwrap();
+    let mut w = WorkerBuilder::default()
+        .hostname("tester".to_string())
+        .wid(WorkerId::new(local))
+        .register_fn(local, move |_job| {
+            let tx = sync::Arc::clone(&tx);
+            Box::pin(async move { tx.lock().unwrap().send(true) })
+        })
+        .connect(None)
+        .await
+        .unwrap();
 
     let mut p = Client::connect(None).await.unwrap();
     p.enqueue(Job::new(local, vec![Value::from(1)]).on_queue(local))
@@ -165,14 +176,14 @@ async fn queue() {
         .unwrap();
     p.queue_pause(&[local]).await.unwrap();
 
-    let had_job = c.run_one(0, &[local]).await.unwrap();
+    let had_job = w.run_one(0, &[local]).await.unwrap();
     assert!(!had_job);
     let worker_executed = rx.try_recv().is_ok();
     assert!(!worker_executed);
 
     p.queue_resume(&[local]).await.unwrap();
 
-    let had_job = c.run_one(0, &[local]).await.unwrap();
+    let had_job = w.run_one(0, &[local]).await.unwrap();
     assert!(had_job);
     let worker_executed = rx.try_recv().is_ok();
     assert!(worker_executed);
@@ -248,13 +259,16 @@ async fn test_jobs_pushed_in_bulk() {
     // Let's check that the two well-formatted jobs
     // have _really_ been enqueued, i.e. that `enqueue_many`
     // is not an  all-or-nothing operation:
-    let mut c = WorkerBuilder::default();
-    c.hostname("tester".to_string()).wid(WorkerId::new(local_3));
-    c.register_fn("very_special", move |_job| async {
-        Ok::<(), io::Error>(())
-    });
-    c.register_fn("broken", move |_job| async { Ok::<(), io::Error>(()) });
-    let mut c = c.connect(None).await.unwrap();
+    let mut c = WorkerBuilder::default()
+        .hostname("tester".to_string())
+        .wid(WorkerId::new(local_3))
+        .register_fn("very_special", move |_job| async {
+            Ok::<(), io::Error>(())
+        })
+        .register_fn("broken", move |_job| async { Ok::<(), io::Error>(()) })
+        .connect(None)
+        .await
+        .unwrap();
 
     // we targeted "very_special" jobs to "local_4" queue
     assert!(c.run_one(0, &[local_4]).await.unwrap());
@@ -282,11 +296,12 @@ async fn test_jobs_created_with_builder() {
 
     // prepare a client and a worker:
     let mut cl = Client::connect(None).await.unwrap();
-    let mut w = WorkerBuilder::default();
-    w.register_fn("rebuild_index", assert_args_empty);
-    w.register_fn("register_order", assert_args_not_empty);
-
-    let mut w = w.connect(None).await.unwrap();
+    let mut w = WorkerBuilder::default()
+        .register_fn("rebuild_index", assert_args_empty)
+        .register_fn("register_order", assert_args_not_empty)
+        .connect(None)
+        .await
+        .unwrap();
 
     // prepare some jobs with JobBuilder:
     let job1 = JobBuilder::new("rebuild_index")

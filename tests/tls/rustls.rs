@@ -21,15 +21,8 @@ async fn roundtrip_tls() {
     if env::var_os("FAKTORY_URL_SECURE").is_none() {
         return;
     }
-
     let local = "roundtrip_tls";
-
     let (tx, rx) = sync::mpsc::channel();
-    let mut c = WorkerBuilder::default();
-
-    c.hostname("tester".to_string()).wid(WorkerId::new(local));
-    c.register(local, fixtures::JobHandler::new(tx));
-
     let tls = || async {
         let verifier = fixtures::TestServerCertVerifier::new(
             SignatureScheme::RSA_PSS_SHA512,
@@ -52,12 +45,23 @@ async fn roundtrip_tls() {
         .unwrap()
     };
 
-    let mut c = c.connect_with(tls().await, None).await.unwrap();
-    let mut p = Client::connect_with(tls().await, None).await.unwrap();
-    p.enqueue(Job::new(local, vec!["z"]).on_queue(local))
+    let mut worker = WorkerBuilder::default()
+        .hostname("tester".to_string())
+        .wid(WorkerId::new(local))
+        .register(local, fixtures::JobHandler::new(tx))
+        .connect_with(tls().await, None)
         .await
         .unwrap();
-    c.run_one(0, &[local]).await.unwrap();
+
+    // "one-shot" client
+    Client::connect_with(tls().await, None)
+        .await
+        .unwrap()
+        .enqueue(Job::new(local, vec!["z"]).on_queue(local))
+        .await
+        .unwrap();
+
+    worker.run_one(0, &[local]).await.unwrap();
 
     let job = rx.recv().unwrap();
     assert_eq!(job.queue, local);

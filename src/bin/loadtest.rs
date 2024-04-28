@@ -58,19 +58,20 @@ async fn main() {
         set.spawn(async move {
             // make producer and consumer
             let mut p = Client::connect(None).await.unwrap();
-            let mut c = WorkerBuilder::default();
-            c.register_fn("SomeJob", |_| {
-                Box::pin(async move {
-                    let mut rng = rand::thread_rng();
-                    if rng.gen_bool(0.01) {
-                        Err(io::Error::new(io::ErrorKind::Other, "worker closed"))
-                    } else {
-                        Ok(())
-                    }
+            let mut worker = WorkerBuilder::default()
+                .register_fn("SomeJob", |_| {
+                    Box::pin(async move {
+                        let mut rng = rand::thread_rng();
+                        if rng.gen_bool(0.01) {
+                            Err(io::Error::new(io::ErrorKind::Other, "worker closed"))
+                        } else {
+                            Ok(())
+                        }
+                    })
                 })
-            });
-            let mut c = c.connect(None).await.unwrap();
-
+                .connect(None)
+                .await
+                .unwrap();
             let mut rng = rand::rngs::OsRng;
             let mut random_queues = Vec::from(QUEUES);
             random_queues.shuffle(&mut rng);
@@ -89,7 +90,7 @@ async fn main() {
                     }
                 } else {
                     // pop
-                    c.run_one(0, &random_queues[..]).await?;
+                    worker.run_one(0, &random_queues[..]).await?;
                     if popped.fetch_add(1, atomic::Ordering::SeqCst) >= jobs {
                         return Ok(idx);
                     }
