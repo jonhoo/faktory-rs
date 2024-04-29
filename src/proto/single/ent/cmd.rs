@@ -1,7 +1,7 @@
 use super::ProgressUpdate;
 use crate::error::Error;
 use crate::proto::{single::FaktoryCommand, JobId};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 #[derive(Debug, Clone)]
 pub enum Track {
@@ -11,7 +11,7 @@ pub enum Track {
 
 #[async_trait::async_trait]
 impl FaktoryCommand for Track {
-    async fn issue<W: AsyncWriteExt + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
         match self {
             Self::Set(upd) => {
                 w.write_all(b"TRACK SET ").await?;

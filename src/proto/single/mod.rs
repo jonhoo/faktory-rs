@@ -2,7 +2,7 @@ use crate::Error;
 use chrono::{DateTime, Utc};
 use derive_builder::Builder;
 use std::collections::HashMap;
-use tokio::io::{AsyncBufRead, AsyncWriteExt};
+use tokio::io::{AsyncBufRead, AsyncWrite, AsyncWriteExt};
 
 mod cmd;
 mod id;
@@ -260,7 +260,8 @@ impl Job {
         &self.failure
     }
 }
-pub async fn write_command<W: AsyncWriteExt + Unpin + Send, C: FaktoryCommand>(
+
+pub async fn write_command<W: AsyncWrite + Unpin + Send, C: FaktoryCommand>(
     w: &mut W,
     command: &C,
 ) -> Result<(), Error> {
@@ -269,7 +270,7 @@ pub async fn write_command<W: AsyncWriteExt + Unpin + Send, C: FaktoryCommand>(
 }
 
 pub async fn write_command_and_await_ok<
-    S: AsyncBufRead + AsyncWriteExt + Unpin + Send,
+    S: AsyncBufRead + AsyncWrite + Unpin + Send,
     C: FaktoryCommand,
 >(
     stream: &mut S,
@@ -289,7 +290,7 @@ mod test {
         let job_args = vec!["ISBN-13:9781718501850"];
         let job = JobBuilder::new(job_kind).args(job_args.clone()).build();
 
-        assert!(job.jid != "".into());
+        assert!(&job.jid != "");
         assert!(job.queue == JOB_DEFAULT_QUEUE.to_string());
         assert_eq!(job.kind, job_kind);
         assert_eq!(job.args, job_args);

@@ -15,7 +15,7 @@ impl WorkerState {
         self.last_job_result.take()
     }
 
-    pub(crate) fn take_cuurently_running(&mut self) -> Option<JobId> {
+    pub(crate) fn take_currently_running(&mut self) -> Option<JobId> {
         self.running_job.take()
     }
 
@@ -39,6 +39,24 @@ impl DerefMut for WorkerStatesRegistry {
     }
 }
 
+impl<'a> IntoIterator for &'a WorkerStatesRegistry {
+    type Item = &'a Mutex<WorkerState>;
+    type IntoIter = <&'a Vec<Mutex<WorkerState>> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut WorkerStatesRegistry {
+    type Item = &'a mut Mutex<WorkerState>;
+    type IntoIter = <&'a mut Vec<Mutex<WorkerState>> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter_mut()
+    }
+}
+
 impl WorkerStatesRegistry {
     pub(crate) fn new(workers_count: usize) -> Self {
         Self((0..workers_count).map(|_| Default::default()).collect())
@@ -55,11 +73,11 @@ impl WorkerStatesRegistry {
             .save_last_result(Ok(jid));
     }
 
-    pub(crate) fn register_failure(&self, worker: usize, f: &Fail) {
+    pub(crate) fn register_failure(&self, worker: usize, f: Fail) {
         self[worker]
             .lock()
             .expect("lock acquired")
-            .save_last_result(Err(f.clone()));
+            .save_last_result(Err(f));
     }
 
     pub(crate) fn reset(&self, worker: usize) {

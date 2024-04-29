@@ -5,17 +5,26 @@ use std::{
     sync::{atomic, Arc},
     time,
 };
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufRead, AsyncWrite};
 use tokio::time::sleep as tokio_sleep;
 
-impl<
-        S: AsyncBufReadExt + AsyncWriteExt + Reconnect + Send + Unpin + 'static,
-        E: StdError + 'static + Send,
-    > Worker<S, E>
+impl<S, E> Worker<S, E>
+where
+    S: AsyncBufRead + AsyncWrite + Reconnect + Send + Unpin + 'static,
+    E: StdError + 'static + Send,
 {
+    /// Send beats to Fakotry and quiet/terminate workers if signalled so.
+    ///
+    /// Some core details:
+    /// - beats should be sent to Faktory at least every 15 seconds;
+    /// - a worker's lifecycle is "running -> quiet -> terminate";
+    /// - STATUS_QUIET means the worker should not consume any new jobs,
+    ///   but should _continue_ processing its current job (if any);
+    ///
+    /// See more details [here](https://github.com/contribsys/faktory/blob/b4a93227a3323ab4b1365b0c37c2fac4f9588cc8/server/workers.go#L13-L49).
     pub(crate) async fn listen_for_heartbeats(
         &mut self,
-        statuses: &Vec<Arc<atomic::AtomicUsize>>,
+        statuses: &[Arc<atomic::AtomicUsize>],
     ) -> Result<bool, Error> {
         let mut target = STATUS_RUNNING;
 
@@ -58,7 +67,7 @@ impl<
                             // tell the workers to terminate
                             // *and* fail the current job and immediately return
                             for s in statuses {
-                                s.store(STATUS_QUIET, atomic::Ordering::SeqCst);
+                                s.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
                             }
                             break Ok(true);
                         }

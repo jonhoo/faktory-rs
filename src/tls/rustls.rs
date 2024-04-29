@@ -5,10 +5,12 @@ use crate::{proto::utils, Error, Reconnect};
 use std::fmt::Debug;
 use std::io;
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream as TokioTcpStream;
-use tokio_native_tls::TlsStream as NativeTlsStream;
-use tokio_native_tls::{native_tls::TlsConnector, TlsConnector as AsyncTlsConnector};
+use tokio_rustls::client::TlsStream as RustlsStream;
+use tokio_rustls::rustls::{ClientConfig, RootCertStore};
+use tokio_rustls::TlsConnector;
 
 /// A reconnectable stream encrypted with TLS.
 ///
@@ -19,7 +21,8 @@ use tokio_native_tls::{native_tls::TlsConnector, TlsConnector as AsyncTlsConnect
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// use faktory::{Client, TlsStream};
+/// use faktory::Client;
+/// use faktory::rustls::TlsStream;
 /// let tls = TlsStream::connect(None).await.unwrap();
 /// let cl = Client::connect_with(tls, None).await.unwrap();
 /// # drop(cl);
@@ -28,10 +31,10 @@ use tokio_native_tls::{native_tls::TlsConnector, TlsConnector as AsyncTlsConnect
 ///
 #[pin_project::pin_project]
 pub struct TlsStream<S> {
-    connector: AsyncTlsConnector,
+    connector: TlsConnector,
     hostname: String,
     #[pin]
-    stream: NativeTlsStream<S>,
+    stream: RustlsStream<S>,
 }
 
 impl TlsStream<TokioTcpStream> {
@@ -48,15 +51,28 @@ impl TlsStream<TokioTcpStream> {
     /// ```
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
+    ///
+    /// Internally creates a `ClientConfig` with an empty root certificates store and no client
+    /// authentication. Use [`with_client_config`](TlsStream::with_client_config)
+    /// or [`with_connector`](TlsStream::with_connector) for customized
+    /// `ClientConfig` and `TlsConnector` accordingly.
     pub async fn connect(url: Option<&str>) -> Result<Self, Error> {
-        TlsStream::with_connector(
-            TlsConnector::builder().build().map_err(Error::TlsStream)?,
-            url,
-        )
-        .await
+        let conf = ClientConfig::builder()
+            .with_root_certificates(RootCertStore::empty())
+            .with_no_client_auth();
+        let con = TlsConnector::from(Arc::new(conf));
+        TlsStream::with_connector(con, url).await
     }
 
     /// Create a new TLS connection over TCP using a non-default TLS configuration.
+    ///
+    /// See `connect` for details about the `url` parameter.
+    pub async fn with_client_config(conf: ClientConfig, url: Option<&str>) -> Result<Self, Error> {
+        let con = TlsConnector::from(Arc::new(conf));
+        TlsStream::with_connector(con, url).await
+    }
+
+    /// Create a new TLS connection over TCP using a connector with a non-default TLS configuration.
     ///
     /// See `connect` for details about the `url` parameter.
     pub async fn with_connector(connector: TlsConnector, url: Option<&str>) -> Result<Self, Error> {
@@ -64,9 +80,10 @@ impl TlsStream<TokioTcpStream> {
             Some(url) => utils::url_parse(url),
             None => utils::url_parse(&utils::get_env_url()),
         }?;
-        let hostname = utils::host_from_url(&url);
-        let tcp_stream = TokioTcpStream::connect(&hostname).await?;
-        Ok(TlsStream::new(tcp_stream, connector, &hostname).await?)
+        let host_and_port = utils::host_from_url(&url);
+        let tcp_stream = TokioTcpStream::connect(&host_and_port).await?;
+        let host = url.host_str().unwrap().to_string();
+        Ok(TlsStream::new(tcp_stream, connector, host).await?)
     }
 }
 
@@ -78,30 +95,27 @@ where
     ///
     /// Internally creates a `ClientConfig` with an empty root certificates store and no client
     /// authentication. Use [`new`](TlsStream::new) for a customized `TlsConnector`.
-    /// Create a new TLS connection on an existing stream.
-    pub async fn default(stream: S, hostname: &str) -> io::Result<Self> {
-        let connector = TlsConnector::builder()
-            .build()
-            .map_err(Error::TlsStream)
-            .unwrap();
-        Self::new(stream, connector, hostname).await
+    pub async fn default(stream: S, hostname: String) -> io::Result<Self> {
+        let conf = ClientConfig::builder()
+            .with_root_certificates(RootCertStore::empty())
+            .with_no_client_auth();
+
+        Self::new(stream, TlsConnector::from(Arc::new(conf)), hostname).await
     }
 
     /// Create a new TLS connection on an existing stream with a non-default TLS configuration.
-    pub async fn new(
-        stream: S,
-        connector: impl Into<AsyncTlsConnector>,
-        hostname: &str,
-    ) -> io::Result<Self> {
-        let domain = hostname.try_into().expect("a valid DNS name or IP address");
-        let connector = connector.into();
+    pub async fn new(stream: S, connector: TlsConnector, hostname: String) -> io::Result<Self> {
+        let server_name = hostname
+            .clone()
+            .try_into()
+            .expect("a valid DNS name or IP address");
         let tls_stream = connector
-            .connect(domain, stream)
+            .connect(server_name, stream)
             .await
             .map_err(|e| io::Error::new(io::ErrorKind::ConnectionAborted, e))?;
         Ok(TlsStream {
             connector,
-            hostname: hostname.into(),
+            hostname,
             stream: tls_stream,
         })
     }
@@ -113,19 +127,13 @@ where
     S: AsyncRead + AsyncWrite + Send + Unpin + Reconnect + Debug + 'static + Sync,
 {
     async fn reconnect(&mut self) -> io::Result<Self> {
-        let stream = self
-            .stream
-            .get_mut()
-            .get_mut()
-            .get_mut()
-            .reconnect()
-            .await?;
-        Self::new(stream, self.connector.clone(), &self.hostname).await
+        let stream = self.stream.get_mut().0.reconnect().await?;
+        TlsStream::new(stream, self.connector.clone(), self.hostname.clone()).await
     }
 }
 
 impl<S> Deref for TlsStream<S> {
-    type Target = NativeTlsStream<S>;
+    type Target = RustlsStream<S>;
     fn deref(&self) -> &Self::Target {
         &self.stream
     }

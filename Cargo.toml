@@ -15,7 +15,8 @@ exclude = [".github", "docker", ".gitignore", "Makefile"]
 
 [features]
 default = []
-tls = ["dep:tokio-native-tls", "dep:pin-project"]
+native_tls = ["dep:pin-project", "dep:tokio-native-tls"]
+rustls = ["dep:pin-project", "dep:tokio-rustls"]
 binaries = ["dep:clap", "tokio/macros"]
 ent = []
 
@@ -44,20 +45,31 @@ tokio = { version = "1.35.1", features = [
     "time",
 ] }
 tokio-native-tls = { version = "0.3.1", optional = true }
+tokio-rustls = { version = "0.25.0", optional = true }
 url = "2"
 
 [dev-dependencies]
+rustls-pki-types = "1.0.1"
 tokio = { version = "1.35.1", features = ["rt", "macros"] }
 tokio-test = "0.4.3"
 x509-parser = "0.15.1"
 
 # to make -Zminimal-versions work
 [target.'cfg(any())'.dependencies]
-openssl = { version = "0.10.60", optional = true }
+chrono = "0.4.32"
 native-tls = { version = "0.2.4", optional = true }
 num-bigint = "0.4.2"
 oid-registry = "0.6.1"
-chrono = "0.4.32"
+openssl = { version = "0.10.60", optional = true }
+
+# TryFrom<String> for ServerName<'static> has been implemented:
+# https://github.com/rustls/pki-types/compare/rustls:3793627...rustls:1303efa#
+rustls-pki-types = { version = "1.0.1", optional = true }
+
+# Lockstep between `serde` and `serde_derive` was introduced with the "pinned" release:
+# https://github.com/serde-rs/serde/compare/v1.0.185...v1.0.186#diff-2843fc1320fa24a059f5ca967ee45d116110116263a8ba311a3aca3793c562f0R34-R41
+# Without this pin our `#[serde(transparent)]` and `#[derive(Serialize, Deserialize)] do not play well together.
+serde = "1.0.186"
 
 [[bin]]
 name = "loadtest"

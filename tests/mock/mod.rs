@@ -100,6 +100,10 @@ impl Stream {
         };
         let mine = inner.take_stream().unwrap();
 
+        // So if they asked for two stream (see `consumer::terminate` test),
+        // the first one will be `mine` while they both will be accessible
+        // internally via `all` (since `Inner::take_stream` is not actually
+        // taking, it is rather _cloning_).
         Stream {
             mine,
             all: Arc::new(Mutex::new(inner)),

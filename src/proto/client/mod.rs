@@ -10,8 +10,7 @@ use super::{utils, PushBulk};
 use crate::error::{self, Error};
 use crate::{Job, WorkerId};
 use std::collections::HashMap;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
-use tokio::io::{AsyncRead, AsyncWrite, BufStream};
+use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
 mod options;
@@ -104,7 +103,7 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// ```no_run
 /// # tokio_test::block_on(async {
 /// use faktory::{Client, JobId, ent::JobState};
-/// let job_id = JobId::from("W8qyVle9vXzUWQOf");
+/// let job_id = JobId::new("W8qyVle9vXzUWQOf");
 /// let mut cl = Client::connect(None).await?;
 /// if let Some(progress) = cl.get_progress(job_id).await? {
 ///     if let JobState::Success = progress.state {
@@ -122,7 +121,7 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// ```no_run
 /// # tokio_test::block_on(async {
 /// use faktory::{Client, JobId, ent::ProgressUpdateBuilder};
-/// let jid = JobId::from("W8qyVle9vXzUWQOf");
+/// let jid = JobId::new("W8qyVle9vXzUWQOf");
 /// let mut cl = Client::connect(None).await?;
 /// let progress = ProgressUpdateBuilder::new(jid)
 ///     .desc("Almost done...".to_owned())
@@ -138,7 +137,7 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// ```no_run
 /// # tokio_test::block_on(async {
 /// use faktory::{Client, ent::BatchId};
-/// let bid = BatchId::from("W8qyVle9vXzUWQOg");
+/// let bid = BatchId::new("W8qyVle9vXzUWQOg");
 /// let mut cl = Client::connect(None).await?;
 /// if let Some(status) = cl.get_batch_status(bid).await? {
 ///     println!("This batch created at {}", status.created_at);
@@ -146,14 +145,14 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// # Ok::<(), faktory::Error>(())
 /// });
 /// ```
-pub struct Client<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin> {
+pub struct Client<S: AsyncWrite + Unpin + Send> {
     stream: S,
     opts: ClientOptions,
 }
 
 impl<S> Client<S>
 where
-    S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send + Reconnect,
+    S: AsyncBufRead + AsyncWrite + Unpin + Send + Reconnect,
 {
     pub(crate) async fn connect_again(&mut self) -> Result<Self, Error> {
         let s = self.stream.reconnect().await?;
@@ -168,7 +167,7 @@ where
 
 impl<S> Drop for Client<S>
 where
-    S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send,
+    S: AsyncWrite + Unpin + Send,
 {
     fn drop(&mut self) {
         tokio::task::block_in_place(|| {
@@ -223,7 +222,7 @@ impl Client<BufStream<TokioStream>> {
 
 impl<S> Client<S>
 where
-    S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send,
+    S: AsyncBufRead + AsyncWrite + Unpin + Send,
 {
     async fn init(&mut self) -> Result<(), Error> {
         let hi = single::read_hi(&mut self.stream).await?;
@@ -331,9 +330,9 @@ where
 
 impl<S> Client<S>
 where
-    S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send,
+    S: AsyncBufRead + AsyncWrite + Unpin + Send,
 {
-    /// Asynchronously enqueue the given job on the Faktory server.
+    /// Enqueue the given job on the Faktory server.
     ///
     /// Returns `Ok` if the job was successfully queued by the Faktory server.
     pub async fn enqueue(&mut self, job: Job) -> Result<(), Error> {
@@ -438,9 +437,9 @@ where
 
 pub struct ReadToken<'a, S>(pub(crate) &'a mut Client<S>)
 where
-    S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send;
+    S: AsyncBufRead + AsyncWrite + Unpin + Send;
 
-impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> ReadToken<'a, S> {
+impl<'a, S: AsyncBufRead + AsyncWrite + Unpin + Send> ReadToken<'a, S> {
     pub(crate) async fn read_ok(self) -> Result<(), Error> {
         single::read_ok(&mut self.0.stream).await
     }

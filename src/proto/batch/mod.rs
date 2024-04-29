@@ -220,6 +220,8 @@ mod test {
 
     use chrono::{DateTime, Utc};
 
+    use crate::JobId;
+
     use super::*;
 
     #[test]
@@ -255,7 +257,7 @@ mod test {
     #[test]
     fn test_batch_serialized_correctly() {
         let prepare_test_job = |jobtype: String| {
-            let jid = "LFluKy1Baak83p54";
+            let jid = JobId::new("LFluKy1Baak83p54");
             let dt = "2023-12-22T07:00:52.546258624Z";
             let created_at = DateTime::<Utc>::from_str(dt).unwrap();
             Job::builder(jobtype)
