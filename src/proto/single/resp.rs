@@ -185,7 +185,7 @@ pub struct FaktoryServerProcessStats {
 /// use faktory::Client;
 ///
 /// let mut client = Client::connect(None).await.unwrap();
-/// let _server_state = client.info().await.unwrap();
+/// let _server_state = client.current_info().await.unwrap();
 /// # });
 /// ```
 #[derive(Serialize, Deserialize, Debug, Clone)]

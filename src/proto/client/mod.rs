@@ -375,7 +375,7 @@ where
     /// Retrieve [information](crate::ServerState) about the running server.
     ///
     /// The returned value is the result of running the `INFO` command on the server.
-    pub async fn info(&mut self) -> Result<single::ServerState, Error> {
+    pub async fn current_info(&mut self) -> Result<single::ServerState, Error> {
         self.issue(&Info)
             .await?
             .read_json()
