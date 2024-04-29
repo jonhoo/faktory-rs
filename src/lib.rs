@@ -76,8 +76,7 @@ mod worker;
 
 pub use crate::error::Error;
 pub use crate::proto::{
-    Client, FaktoryServerProcessStats, FaktoryServiceStats, Job, JobBuilder, JobId, Reconnect,
-    ServerState, WorkerId,
+    Client, DataSnapshot, FaktoryState, Job, JobBuilder, JobId, Reconnect, ServerSnapshot, WorkerId,
 };
 pub use crate::worker::{JobRunner, Worker, WorkerBuilder};
 

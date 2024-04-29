@@ -88,7 +88,7 @@ async fn server_state() {
 
     // examine server state before pushing anything
     let server_state = client.current_info().await.unwrap();
-    assert!(server_state.faktory.queues.get(local).is_none());
+    assert!(server_state.data.queues.get(local).is_none());
     // the following two assertions are not super-helpful but
     // there is not much info we can make meaningful assetions on anyhow
     // (like memusage, server description string, version, etc.)
@@ -108,11 +108,10 @@ async fn server_state() {
 
     // we only pushed 1 job on this queue
     let server_state = client.current_info().await.unwrap();
-    assert_eq!(*server_state.faktory.queues.get(local).unwrap(), 1);
-    assert!(server_state.faktory.total_enqueued >= 1); // at least 1 job from this test
-    assert!(server_state.faktory.total_queues >= 1); // at least 1 qeueu from this test
-
-    // let's know consume that job ...
+    assert_eq!(*server_state.data.queues.get(local).unwrap(), 1);
+    assert!(server_state.data.total_enqueued >= 1); // at least 1 job from this test
+    assert!(server_state.data.total_queues >= 1); // at least 1 qeueu from this test
+                                                  // let's know consume that job ...
     assert!(w.run_one(0, &[local]).await.unwrap());
 
     // ... and verify the queue has got 0 pending jobs
@@ -124,8 +123,8 @@ async fn server_state() {
     // and then deleting the queue programmatically, so there is normally no need to prune docker
     // volumes to perform the next test run. Also note that on CI we are always starting a-fresh.
     let server_state = client.current_info().await.unwrap();
-    assert_eq!(*server_state.faktory.queues.get(local).unwrap(), 0);
-    assert!(server_state.faktory.total_processed >= 1); // at least 1 job from this test
+    assert_eq!(*server_state.data.queues.get(local).unwrap(), 0);
+    assert!(server_state.data.total_processed >= 1); // at least 1 job from this test
 
     client.queue_remove(&[local]).await.unwrap();
 
@@ -133,7 +132,7 @@ async fn server_state() {
         .current_info()
         .await
         .unwrap()
-        .faktory
+        .data
         .queues
         .get(local)
         .is_none());
@@ -305,7 +304,7 @@ async fn queue_control_actions() {
 
     // let's inspect the sever state
     let server_state = client.current_info().await.unwrap();
-    let queues = &server_state.faktory.queues;
+    let queues = &server_state.data.queues;
     assert_eq!(*queues.get(local_1).unwrap(), 1); // 1 job remaining
     assert_eq!(*queues.get(local_2).unwrap(), 1); // also 1 job remaining
 
@@ -320,7 +319,7 @@ async fn queue_control_actions() {
 
     // let's inspect the sever state again
     let server_state = client.current_info().await.unwrap();
-    let queues = &server_state.faktory.queues;
+    let queues = &server_state.data.queues;
     // our queue are not even mentioned in the server report:
     assert!(queues.get(local_1).is_none());
     assert!(queues.get(local_2).is_none());
@@ -387,7 +386,7 @@ async fn queue_control_actions_wildcard() {
 
     // let's inspect the sever state
     let server_state = client.current_info().await.unwrap();
-    let queues = &server_state.faktory.queues;
+    let queues = &server_state.data.queues;
     assert_eq!(*queues.get(local_1).unwrap(), 1); // 1 job remaining
     assert_eq!(*queues.get(local_2).unwrap(), 1); // also 1 job remaining
 
@@ -402,7 +401,7 @@ async fn queue_control_actions_wildcard() {
 
     // let's inspect the sever state again
     let server_state = client.current_info().await.unwrap();
-    let queues = &server_state.faktory.queues;
+    let queues = &server_state.data.queues;
     // our queue are not even mentioned in the server report:
     assert!(queues.get(local_1).is_none());
     assert!(queues.get(local_2).is_none());

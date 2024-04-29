@@ -125,7 +125,8 @@ pub async fn read_ok<R: AsyncBufRead + Unpin>(r: R) -> Result<(), Error> {
 
 /// Faktory service stats.
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct FaktoryServiceStats {
+#[non_exhaustive]
+pub struct DataSnapshot {
     /// Total number of job failures.
     pub total_failures: u64,
 
@@ -145,21 +146,23 @@ pub struct FaktoryServiceStats {
     /// registered in the Faktory service.
     pub queues: HashMap<String, u64>,
 
-    /// Faktory's task runner stats.
+    /// ***Deprecated***. Faktory's task runner stats.
     ///
     /// Note that this is exposed as a "generic" `serde_json::Value` since this info
     /// belongs to deep implementation details of the Faktory service.
+    #[deprecated]
     pub tasks: serde_json::Value,
 }
 
 /// Faktory's server process stats.
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct FaktoryServerProcessStats {
+pub struct ServerSnapshot {
     /// Faktory's description (e.g. "Faktory").
     pub description: String,
 
     /// Faktory's version as semver (e.g. "1.8.0").
-    pub faktory_version: String,
+    #[serde(rename = "faktory_version")]
+    pub version: String,
 
     /// Faktory server process uptime in seconds.
     pub uptime: u64,
@@ -189,7 +192,7 @@ pub struct FaktoryServerProcessStats {
 /// # });
 /// ```
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ServerState {
+pub struct FaktoryState {
     /// Server time.
     pub now: DateTime<Utc>,
 
@@ -197,10 +200,11 @@ pub struct ServerState {
     pub server_utc_time: String,
 
     /// Faktory service stats.
-    pub faktory: FaktoryServiceStats,
+    #[serde(rename = "faktory")]
+    pub data: DataSnapshot,
 
     /// Faktory's server process stats.
-    pub server: FaktoryServerProcessStats,
+    pub server: ServerSnapshot,
 }
 
 // ----------------------------------------------
