@@ -5,7 +5,7 @@ use fnv::FnvHashMap;
 use std::sync::{atomic, Arc};
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
 use tokio::io::{AsyncBufRead, AsyncWrite};
-use tokio::task::{AbortHandle, JoinSet};
+use tokio::task::{spawn_blocking, AbortHandle, JoinSet};
 
 mod builder;
 mod health;
@@ -19,7 +19,12 @@ pub(crate) const STATUS_RUNNING: usize = 0;
 pub(crate) const STATUS_QUIET: usize = 1;
 pub(crate) const STATUS_TERMINATING: usize = 2;
 
-type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
+pub(crate) enum Callback<E> {
+    Async(runner::BoxedJobRunner<E>),
+    Sync(Arc<dyn Fn(Job) -> Result<(), E> + Sync + Send + 'static>),
+}
+
+type CallbacksRegistry<E> = FnvHashMap<String, Callback<E>>;
 
 /// `Worker` is used to run a worker that processes jobs provided by Faktory.
 ///
@@ -177,7 +182,16 @@ impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> 
             .callbacks
             .get(job.kind())
             .ok_or(Failed::BadJobType(job.kind().to_string()))?;
-        handler.run(job).await.map_err(Failed::Application)
+        match handler {
+            Callback::Async(cb) => cb.run(job).await.map_err(Failed::Application),
+            Callback::Sync(cb) => {
+                let cb = Arc::clone(cb);
+                spawn_blocking(move || cb(job))
+                    .await
+                    .expect("joined ok")
+                    .map_err(Failed::Application)
+            }
+        }
     }
 
     async fn report_on_all_workers(&mut self) -> Result<(), Error> {

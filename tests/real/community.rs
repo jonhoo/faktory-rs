@@ -1,7 +1,7 @@
 use crate::skip_check;
 use faktory::{Client, Job, JobBuilder, JobId, WorkerBuilder, WorkerId};
 use serde_json::Value;
-use std::{io, sync};
+use std::{io, sync, time::Duration};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn hello_client() {
@@ -339,4 +339,48 @@ async fn test_jobs_created_with_builder() {
         .await
         .unwrap();
     assert!(had_job);
+}
+
+// It is generally not ok to mix blocking and not blocking tasks,
+// we are doing so in this test simply to demonstrate it is _possible_.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_jobs_with_blocking_handlers() {
+    skip_check!();
+
+    let local = "test_jobs_with_blocking_handlers";
+
+    let mut w = WorkerBuilder::default()
+        .register_blocking_fn("cpu_intensive", |_j| {
+            // Imaging some compute heavy operations:serializing, sorting, matrix multiplication, etc.
+            std::thread::sleep(Duration::from_millis(1000));
+            Ok::<(), io::Error>(())
+        })
+        .register_fn("io_intensive", |_j| async move {
+            // Imagine fetching data for this user from various origins,
+            // updating an entry on them in the database, and then sending them
+            // an email and pushing a follow-up task on the Faktory queue
+            Ok::<(), io::Error>(())
+        })
+        .register_fn(
+            "general_workload",
+            |_j| async move { Ok::<(), io::Error>(()) },
+        )
+        .connect(None)
+        .await
+        .unwrap();
+
+    Client::connect(None)
+        .await
+        .unwrap()
+        .enqueue_many([
+            Job::builder("cpu_intensive").queue(local).build(),
+            Job::builder("io_intensive").queue(local).build(),
+            Job::builder("general_workload").queue(local).build(),
+        ])
+        .await
+        .unwrap();
+
+    for _ in 0..2 {
+        assert!(w.run_one(0, &[local]).await.unwrap());
+    }
 }
