@@ -290,7 +290,7 @@ mod test {
         let job_args = vec!["ISBN-13:9781718501850"];
         let job = JobBuilder::new(job_kind).args(job_args.clone()).build();
 
-        assert!(&job.jid != "");
+        assert_ne!(&job.jid, "");
         assert!(job.queue == JOB_DEFAULT_QUEUE.to_string());
         assert_eq!(job.kind, job_kind);
         assert_eq!(job.args, job_args);
