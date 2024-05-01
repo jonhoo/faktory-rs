@@ -50,12 +50,13 @@
 //! # tokio_test::block_on(async {
 //! use faktory::WorkerBuilder;
 //! use std::io;
-//! let mut w = WorkerBuilder::default();
-//! w.register("foobar", |job| async move {
-//!     println!("{:?}", job);
-//!     Ok::<(), io::Error>(())
-//! });
-//! let mut w = w.connect(None).await.unwrap();
+//! let mut w = WorkerBuilder::default()
+//!     .register_fn("foobar", |job| async move {
+//!         println!("{:?}", job);
+//!         Ok::<(), io::Error>(())
+//!     })
+//!     .connect(None).await.unwrap();
+//!
 //! if let Err(e) = w.run(&["default"], None).await {
 //!     println!("worker failed: {}", e);
 //! }
@@ -87,9 +88,8 @@ pub mod ent {
     };
 }
 
-#[cfg(feature = "tls")]
+#[cfg(any(feature = "native_tls", feature = "rustls"))]
 mod tls;
 
-#[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
-pub use tls::TlsStream;
+#[cfg(any(feature = "native_tls", feature = "rustls"))]
+pub use tls::*;

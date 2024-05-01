@@ -12,7 +12,7 @@ const QUEUES: &[&str] = &["queue0", "queue1", "queue2", "queue3", "queue4"];
 
 #[tokio::main]
 async fn main() {
-    let matches = Command::new("My Super Program (Async)")
+    let matches = Command::new("My Super Program")
         .version("0.1")
         .about("Benchmark the performance of Rust Faktory async workers and client")
         .arg(
@@ -58,19 +58,20 @@ async fn main() {
         set.spawn(async move {
             // make producer and consumer
             let mut p = Client::connect(None).await.unwrap();
-            let mut c = WorkerBuilder::default();
-            c.register("SomeJob", |_| {
-                Box::pin(async move {
-                    let mut rng = rand::thread_rng();
-                    if rng.gen_bool(0.01) {
-                        Err(io::Error::new(io::ErrorKind::Other, "worker closed"))
-                    } else {
-                        Ok(())
-                    }
+            let mut worker = WorkerBuilder::default()
+                .register_fn("SomeJob", |_| {
+                    Box::pin(async move {
+                        let mut rng = rand::thread_rng();
+                        if rng.gen_bool(0.01) {
+                            Err(io::Error::new(io::ErrorKind::Other, "worker closed"))
+                        } else {
+                            Ok(())
+                        }
+                    })
                 })
-            });
-            let mut c = c.connect(None).await.unwrap();
-
+                .connect(None)
+                .await
+                .unwrap();
             let mut rng = rand::rngs::OsRng;
             let mut random_queues = Vec::from(QUEUES);
             random_queues.shuffle(&mut rng);
@@ -89,7 +90,7 @@ async fn main() {
                     }
                 } else {
                     // pop
-                    c.run_one(0, &random_queues[..]).await?;
+                    worker.run_one(0, &random_queues[..]).await?;
                     if popped.fetch_add(1, atomic::Ordering::SeqCst) >= jobs {
                         return Ok(idx);
                     }
@@ -99,9 +100,9 @@ async fn main() {
         });
     }
 
-    let mut _ops_count = Vec::with_capacity(threads);
+    let mut ops_count = Vec::with_capacity(threads);
     while let Some(res) = set.join_next().await {
-        _ops_count.push(res.unwrap())
+        ops_count.push(res.unwrap())
     }
 
     let stop = start.elapsed();
@@ -115,5 +116,8 @@ async fn main() {
         stop_secs,
         jobs as f64 / stop_secs,
     );
-    println!("{:?}", _ops_count);
+    println!(
+        "Number of operations (pushes and pops) per thread: {:?}",
+        ops_count
+    );
 }

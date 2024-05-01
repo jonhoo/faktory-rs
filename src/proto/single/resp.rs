@@ -2,7 +2,7 @@
 use crate::ent::BatchId;
 
 use crate::error::{self, Error};
-use tokio::io::{AsyncBufReadExt, AsyncReadExt};
+use tokio::io::AsyncBufRead;
 
 pub fn bad(expected: &'static str, got: &RawResponse) -> error::Protocol {
     let stringy = match *got {
@@ -31,7 +31,7 @@ pub fn bad(expected: &'static str, got: &RawResponse) -> error::Protocol {
 
 // ----------------------------------------------
 
-pub async fn read_json<R: AsyncBufReadExt + Unpin, T: serde::de::DeserializeOwned>(
+pub async fn read_json<R: AsyncBufRead + Unpin, T: serde::de::DeserializeOwned>(
     r: R,
 ) -> Result<Option<T>, Error> {
     let rr = read(r).await?;
@@ -65,19 +65,20 @@ pub async fn read_json<R: AsyncBufReadExt + Unpin, T: serde::de::DeserializeOwne
 // ----------------------------------------------
 
 #[cfg(feature = "ent")]
-pub async fn read_bid<R: AsyncBufReadExt + Unpin>(r: R) -> Result<BatchId, Error> {
+pub async fn read_bid<R: AsyncBufRead + Unpin>(r: R) -> Result<BatchId, Error> {
     match read(r).await? {
         RawResponse::Blob(ref b) if b.is_empty() => Err(error::Protocol::BadType {
             expected: "non-empty blob representation of batch id",
             received: "empty blob".into(),
         }
         .into()),
-        RawResponse::Blob(ref b) => Ok(std::str::from_utf8(b)
-            .map_err(|_| error::Protocol::BadType {
+        RawResponse::Blob(ref b) => {
+            let raw = std::str::from_utf8(b).map_err(|_| error::Protocol::BadType {
                 expected: "valid blob representation of batch id",
                 received: "unprocessable blob".into(),
-            })?
-            .into()),
+            })?;
+            Ok(BatchId::new(raw))
+        }
         something_else => Err(bad("id", &something_else).into()),
     }
 }
@@ -94,7 +95,7 @@ pub struct Hi {
     pub salt: Option<String>,
 }
 
-pub async fn read_hi<R: AsyncBufReadExt + Unpin>(r: R) -> Result<Hi, Error> {
+pub async fn read_hi<R: AsyncBufRead + Unpin>(r: R) -> Result<Hi, Error> {
     let rr = read(r).await?;
     if let RawResponse::String(ref s) = rr {
         if let Some(s) = s.strip_prefix("HI ") {
@@ -106,7 +107,7 @@ pub async fn read_hi<R: AsyncBufReadExt + Unpin>(r: R) -> Result<Hi, Error> {
 
 // ----------------------------------------------
 
-pub async fn read_ok<R: AsyncBufReadExt + Unpin>(r: R) -> Result<(), Error> {
+pub async fn read_ok<R: AsyncBufRead + Unpin>(r: R) -> Result<(), Error> {
     let rr = read(r).await?;
     if let RawResponse::String(ref s) = rr {
         if s == "OK" {
@@ -131,9 +132,10 @@ pub enum RawResponse {
     Null,
 }
 
+use tokio::io::{AsyncBufReadExt, AsyncReadExt};
 async fn read<R>(mut r: R) -> Result<RawResponse, Error>
 where
-    R: AsyncReadExt + AsyncBufReadExt + Unpin,
+    R: AsyncBufRead + Unpin,
 {
     let mut cmdbuf = [0u8; 1];
     r.read_exact(&mut cmdbuf).await?;
@@ -259,9 +261,9 @@ mod test {
     use crate::error::{self, Error};
     use serde_json::{Map, Value};
     use std::io::Cursor;
-    use tokio::io::AsyncBufReadExt;
+    use tokio::io::AsyncBufRead;
 
-    async fn read_json<C: AsyncBufReadExt + Unpin>(c: C) -> Result<Option<Value>, Error> {
+    async fn read_json<C: AsyncBufRead + Unpin>(c: C) -> Result<Option<Value>, Error> {
         super::read_json(c).await
     }
 

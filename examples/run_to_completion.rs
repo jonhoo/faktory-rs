@@ -7,20 +7,18 @@ async fn main() {
         .with_max_level(tracing::Level::TRACE)
         .init();
 
-    // create a worker
-    let mut w = WorkerBuilder::default();
-    // register a handler
-    w.register("job_type", |j| async move {
-        println!("{:?}", j);
-        Ok::<(), IOError>(())
-    });
-
-    // connect to Faktrory server
-    let w = w.connect(None).await.expect("Connected to server");
-
     // this will terminate under one of the following conditions:
     // - signal from the Faktory server;
     // - ctrl+c signal;
     // - worker panic;
-    w.run_to_completion(&["default"]).await
+    WorkerBuilder::default()
+        .register_fn("job_type", |j| async move {
+            println!("{:?}", j);
+            Ok::<(), IOError>(())
+        })
+        .connect(None)
+        .await
+        .expect("Connected to server")
+        .run_to_completion(&["default"])
+        .await
 }

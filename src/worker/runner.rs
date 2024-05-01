@@ -32,12 +32,16 @@ use std::future::Future;
 ///   }
 /// }
 ///
-/// let mut w = WorkerBuilder::default();
 /// let handler = MyHandler {
 ///    config: "bar".to_string(),
 /// };
-/// w.register_runner("foo", handler);
-/// let mut w = w.connect(None).await.unwrap();
+///
+/// let mut w = WorkerBuilder::default()
+///     .register("foo", handler)
+///     .connect(None)
+///     .await
+///     .unwrap();
+///
 /// if let Err(e) = w.run(&["default"], None).await {
 ///     println!("worker failed: {}", e);
 /// }
@@ -77,6 +81,30 @@ where
     }
 }
 
+#[async_trait::async_trait]
+impl<'a, E, F, Fut> JobRunner for &'a mut F
+where
+    F: Send + Sync + Fn(Job) -> Fut,
+    Fut: Future<Output = Result<(), E>> + Send,
+{
+    type Error = E;
+    async fn run(&self, job: Job) -> Result<(), E> {
+        (self as &F)(job).await
+    }
+}
+
+/// A "transparent" wrapper for a handler.
+///
+/// The `Closure` newtype is introduced to avoid having to box a job handler:
+/// we can now use `Closure(handler)` instead of `Box::new(handler)` and make
+/// the compiler happy.
+///
+/// The `repr(transparent)` macro is to guarantee that this single-field struct
+/// and the wrapped handler have the same layout and so it is safe to operate on
+/// the in-memory representations of _the_ handler (submitted to us
+/// from the user code) and its enclosed (by us) self.
+///
+/// Ref: https://github.com/jonhoo/faktory-rs/pull/51
 #[repr(transparent)]
 pub(crate) struct Closure<F>(pub F);
 

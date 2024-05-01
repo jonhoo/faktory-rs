@@ -1,13 +1,14 @@
 use super::proto::{Client, Reconnect};
 use crate::error::Error;
-use crate::proto::{Ack, Fail, Job, JobId};
+use crate::proto::{Ack, Fail, Job};
 use fnv::FnvHashMap;
 use std::process;
 use std::sync::{atomic, Arc};
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
+use tokio::io::{AsyncBufRead, AsyncWrite};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tokio::sync::oneshot::Receiver;
-use tokio::task::JoinHandle;
+use tokio::task::{AbortHandle, JoinSet};
 use tokio::time::sleep as tokio_sleep;
 use tokio::time::Duration as TokioDuration;
 
@@ -116,11 +117,12 @@ type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
 ///     Ok(())
 /// }
 ///
-/// let mut w = WorkerBuilder::default();
+/// let mut w = WorkerBuilder::default()
+///     .register_fn("foo", process_job)
+///     .connect(None)
+///     .await
+///     .unwrap();
 ///
-/// w.register("foo", process_job);
-///
-/// let mut w = w.connect(None).await.unwrap();
 /// if let Err(e) = w.run(&["default"], None).await {
 ///     println!("worker failed: {}", e);
 /// }
@@ -130,19 +132,24 @@ type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
 /// Handler can be inlined.
 ///
 /// ```no_run
+/// # tokio_test::block_on(async {
 /// # use faktory::WorkerBuilder;
 /// # use std::io;
-/// let mut w = WorkerBuilder::default();
-/// w.register("bar", |job| async move {
-///     println!("{:?}", job);
-///     Ok::<(), io::Error>(())
+/// let _w = WorkerBuilder::default()
+///     .register_fn("bar", |job| async move {
+///         println!("{:?}", job);
+///         Ok::<(), io::Error>(())
+///     })
+///     .connect(None)
+///     .await
+///     .unwrap();
 /// });
 /// ```
 ///
 /// You can also register anything that implements [`JobRunner`] to handle jobs
-/// with [`register_runner`](WorkerBuilder::register_runner).
+/// with [`register`](WorkerBuilder::register).
 ///
-pub struct Worker<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> {
+pub struct Worker<S: AsyncWrite + Send + Unpin, E> {
     c: Client<S>,
     worker_states: Arc<state::WorkerStatesRegistry>,
     callbacks: Arc<CallbacksRegistry<E>>,
@@ -151,7 +158,7 @@ pub struct Worker<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E> {
     shutdown_timeout: u64,
 }
 
-impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin + Reconnect, E> Worker<S, E> {
+impl<S: AsyncBufRead + AsyncWrite + Send + Unpin + Reconnect, E> Worker<S, E> {
     async fn reconnect(&mut self) -> Result<(), Error> {
         self.c.reconnect().await
     }
@@ -180,7 +187,7 @@ enum Failed<E: StdError> {
     BadJobType(String),
 }
 
-impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + Send> Worker<S, E> {
+impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> Worker<S, E> {
     async fn run_job(&mut self, job: Job) -> Result<(), Failed<E>> {
         let handler = self
             .callbacks
@@ -189,21 +196,13 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
         handler.run(job).await.map_err(Failed::Application)
     }
 
-    async fn report_failure_to_server(&mut self, f: &Fail) -> Result<(), Error> {
-        self.c.issue(f).await?.read_ok().await
-    }
-
-    async fn report_success_to_server(&mut self, jid: JobId) -> Result<(), Error> {
-        self.c.issue(&Ack::new(jid)).await?.read_ok().await
-    }
-
     async fn report_on_all_workers(&mut self) -> Result<(), Error> {
         let worker_states = Arc::get_mut(&mut self.worker_states)
             .expect("all workers are scoped to &mut of the user-code-visible Worker");
 
         // retry delivering notification about our last job result.
         // we know there's no leftover thread at this point, so there's no race on the option.
-        for wstate in worker_states.iter_mut() {
+        for wstate in worker_states {
             let wstate = wstate.get_mut().unwrap();
             if let Some(res) = wstate.take_last_result() {
                 let r = match res {
@@ -235,19 +234,21 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
         Ok(())
     }
 
-    // FAIL currently running jobs even though they're still running.
-    // Returns the number of workers that may still be processing jobs.
-    // We are ignoring any FAIL command issue errors, since this is already
-    // an "emergency" case.
+    /// Fail currently running jobs.
+    ///
+    /// This will FAIL _all_ the jobs even though they're still running.
+    /// Returns the number of workers that may still be processing jobs.
     async fn force_fail_all_workers(&mut self, reason: &str) -> usize {
         let mut running = 0;
-        for wstate in self.worker_states.iter() {
+        for wstate in &*self.worker_states {
             let may_be_jid = wstate.lock().unwrap().take_currently_running();
             if let Some(jid) = may_be_jid {
                 running += 1;
-                let f = Fail::new(jid, "unknown", reason);
+                let f = Fail::generic(jid, reason);
                 let _ = match self.c.issue(&f).await {
                     Ok(r) => r.read_ok().await,
+                    // We are ignoring any FAIL command issue errors, since this is already
+                    // an "emergency" case.
                     Err(_) => continue,
                 }
                 .is_ok();
@@ -273,15 +274,15 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
         match self.run_job(job).await {
             Ok(_) => {
                 self.worker_states.register_success(worker, jid.clone());
-                self.report_success_to_server(jid).await?;
+                self.c.issue(&Ack::new(jid)).await?.read_ok().await?;
             }
             Err(e) => {
                 let fail = match e {
                     Failed::BadJobType(jt) => Fail::generic(jid, format!("No handler for {}", jt)),
                     Failed::Application(e) => Fail::generic_with_backtrace(jid, e),
                 };
-                self.worker_states.register_failure(worker, &fail);
-                self.report_failure_to_server(&fail).await?;
+                self.worker_states.register_failure(worker, fail.clone());
+                self.c.issue(&fail).await?.read_ok().await?;
             }
         }
 
@@ -292,12 +293,25 @@ impl<S: AsyncBufReadExt + AsyncWriteExt + Send + Unpin, E: StdError + 'static + 
 }
 
 impl<
-        S: AsyncBufReadExt + AsyncWriteExt + Reconnect + Send + Unpin + 'static,
+        S: AsyncBufRead + AsyncWrite + Reconnect + Send + Unpin + 'static,
         E: StdError + 'static + Send,
     > Worker<S, E>
 {
     async fn for_worker(&mut self) -> Result<Self, Error> {
         Ok(Worker {
+            // We actually only need:
+            //
+            // 1) a connected client;
+            // 2) access to callback registry;
+            // 3) access to this worker's state (not all of them)
+            //
+            // For simplicity, we are currently creating a processing worker as a full replica
+            // of the coordinating worker.
+            //
+            // In the future though this can be updated to strip off `terminated` from
+            // the processing worker (as unused) and disallow access to other processing workers'
+            // states from inside this processing worker (as privilege not needed).
+            //
             c: self.c.connect_again().await?,
             callbacks: Arc::clone(&self.callbacks),
             worker_states: Arc::clone(&self.worker_states),
@@ -307,18 +321,19 @@ impl<
         })
     }
 
-    async fn spawn_worker<Q>(
+    async fn spawn_worker_into<Q>(
         &mut self,
+        set: &mut JoinSet<Result<(), Error>>,
         status: Arc<AtomicUsize>,
         worker: usize,
         queues: &[Q],
-    ) -> Result<JoinHandle<Result<(), Error>>, Error>
+    ) -> Result<AbortHandle, Error>
     where
         Q: AsRef<str>,
     {
         let mut w = self.for_worker().await?;
         let queues: Vec<_> = queues.iter().map(|s| s.as_ref().to_string()).collect();
-        Ok(tokio::spawn(async move {
+        Ok(set.spawn(async move {
             while status.load(atomic::Ordering::SeqCst) == STATUS_RUNNING {
                 if let Err(e) = w.run_one(worker, &queues[..]).await {
                     status.store(STATUS_TERMINATING, atomic::Ordering::SeqCst);
@@ -349,10 +364,10 @@ impl<
     /// let mut cl = Client::connect(None).await.unwrap();
     /// cl.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
     ///
-    /// let mut w = WorkerBuilder::default();
-    /// w.graceful_shutdown_period(5_000);
-    /// w.register("foobar", |_j| async { Ok::<(), std::io::Error>(()) });
-    /// let mut w = w.connect(None).await.unwrap();
+    /// let mut w = WorkerBuilder::default()
+    ///     .graceful_shutdown_period(5_000)
+    ///     .register_fn("foobar", |_j| async { Ok::<(), std::io::Error>(()) })
+    ///     .connect(None).await.unwrap();
     ///
     /// let (tx, rx) = channel();
     /// let _handle = tokio::spawn(async move { w.run(&["qname"], Some(rx)).await });
@@ -369,9 +384,11 @@ impl<
     /// let mut cl = Client::connect(None).await.unwrap();
     /// cl.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
     ///
-    /// let mut w = WorkerBuilder::default();
-    /// w.register("foobar", |_j| async { Ok::<(), std::io::Error>(()) });
-    /// let mut w = w.connect(None).await.unwrap();
+    /// let mut w = WorkerBuilder::default()
+    ///     .register_fn("foobar", |_j| async { Ok::<(), std::io::Error>(()) })
+    ///     .connect(None)
+    ///     .await
+    ///     .unwrap();
     ///
     /// let _handle = tokio::spawn(async move { w.run(&["qname"], None).await });
     /// # });
@@ -384,7 +401,10 @@ impl<
     where
         Q: AsRef<str>,
     {
-        assert!(!self.terminated, "do not re-run a terminated worker");
+        assert!(
+            !self.terminated,
+            "do not re-run a terminated worker (coordinator)"
+        );
         self.report_on_all_workers().await?;
 
         let nworkers = self.worker_states.len();
@@ -394,12 +414,11 @@ impl<
             .map(|_| Arc::new(atomic::AtomicUsize::new(STATUS_RUNNING)))
             .collect();
 
-        let mut workers = Vec::with_capacity(nworkers);
-        for (worker, status) in statuses.iter().enumerate().take(nworkers) {
-            let handle = self
-                .spawn_worker(Arc::clone(status), worker, queues)
+        let mut join_set = JoinSet::new();
+        for (worker, status) in statuses.iter().enumerate() {
+            let _abort_handle = self
+                .spawn_worker_into(&mut join_set, Arc::clone(status), worker, queues)
                 .await?;
-            workers.push(handle)
         }
 
         let report = tokio::select! {
@@ -421,7 +440,7 @@ impl<
                     }
                 }
             },
-            // Message from userland code received.
+            // Message from user code received.
             from_channel = async { let ch = channel.unwrap(); ch.await }, if channel.is_some() => {
                 if from_channel.is_err() {
                     tracing::info!("The sender dropped");
@@ -459,11 +478,8 @@ impl<
                     _ => unreachable!("ExitNow and ReturnControlNow variants are already handled above.")
                 }
             },
-            // Instruction from Faktory received or error occurred.
-            // Though this is not cancellation safe, we _are_ ok, since we are effectively running a one-time race in this select
-            // (without any looping) and, besides, we are mutating `statuses` atomically inside this method, so even if one the other
-            // select arms were to utilize the `statuses` state, it would be just fine to do so.
-            exit = self.listen_for_heartbeats(&statuses) => {
+           // Instruction from Faktory received or error occurred:
+           exit = self.listen_for_heartbeats(&statuses) => {
                 // there are a couple of cases here:
                 //  - we got TERMINATE, so we should just return, even if a worker is still running
                 //  - we got TERMINATE and all workers has exited
@@ -479,18 +495,17 @@ impl<
 
                 // we want to expose worker errors, or otherwise the heartbeat error
                 let mut results = Vec::with_capacity(nworkers);
-                for w in workers {
-                    results.push(w.await.expect("joined ok"));
+                while let Some(res) = join_set.join_next().await {
+                    results.push(res.expect("joined ok"));
                 }
-                let aggregated = results.into_iter().collect::<Result<Vec<_>, _>>();
+                let results = results.into_iter().collect::<Result<Vec<_>, _>>();
 
                 match exit {
-                    Ok(_) => aggregated.map(|_| 0),
-                    Err(e) => aggregated.and(Err(e)),
+                    Ok(_) => results.map(|_| 0),
+                    Err(e) => results.and(Err(e)),
                 }
-            },
+            }
         };
-
         report
     }
 

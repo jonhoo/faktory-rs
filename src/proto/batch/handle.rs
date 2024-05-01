@@ -1,23 +1,27 @@
 use crate::error::Error;
 use crate::proto::{Batch, BatchId, Client, Job};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufRead, AsyncWrite};
 
 /// Represents a newly started or re-opened batch of jobs.
-pub struct BatchHandle<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> {
+pub struct BatchHandle<'a, S: AsyncWrite + Unpin + Send> {
     bid: BatchId,
     c: &'a mut Client<S>,
 }
 
-impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> BatchHandle<'a, S> {
+impl<'a, S: AsyncWrite + Unpin + Send> BatchHandle<'a, S> {
+    pub(crate) fn new(bid: BatchId, c: &mut Client<S>) -> BatchHandle<'_, S> {
+        BatchHandle { bid, c }
+    }
+}
+
+impl<'a, S: AsyncWrite + Unpin + Send> BatchHandle<'a, S> {
     /// ID issued by the Faktory server to this batch.
     pub fn id(&self) -> &BatchId {
         &self.bid
     }
+}
 
-    pub(crate) fn new(bid: BatchId, c: &mut Client<S>) -> BatchHandle<'_, S> {
-        BatchHandle { bid, c }
-    }
-
+impl<'a, S: AsyncBufRead + AsyncWrite + Unpin + Send> BatchHandle<'a, S> {
     /// Add the given job to the batch.
     ///
     /// Should the submitted job - for whatever reason - already have a `bid` key present in its custom hash,
@@ -41,6 +45,6 @@ impl<'a, S: AsyncBufReadExt + AsyncWriteExt + Unpin + Send> BatchHandle<'a, S> {
     /// Once committed, the batch can still be re-opened with [open_batch](Client::open_batch),
     /// and extra jobs can be added to it.
     pub async fn commit(self) -> Result<(), Error> {
-        self.c.commit_batch(self.bid).await
+        self.c.commit_batch(&self.bid).await
     }
 }

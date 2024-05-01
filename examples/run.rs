@@ -8,19 +8,15 @@ async fn main() {
         .init();
 
     // create a worker
-    let mut w = WorkerBuilder::default();
-
-    // customize graceful shutdown time-out
-    w.graceful_shutdown_period(2_000);
-
-    // register a handler
-    w.register("job_type", |j| async move {
-        println!("{:?}", j);
-        Ok::<(), IOError>(())
-    });
-
-    // connect to the Faktrory server
-    let mut w = w.connect(None).await.expect("Connected to server");
+    let mut w = WorkerBuilder::default()
+        .graceful_shutdown_period(2_000)
+        .register_fn("job_type", |j| async move {
+            println!("{:?}", j);
+            Ok::<(), IOError>(())
+        })
+        .connect(None)
+        .await
+        .expect("Connected to server");
 
     // create a channel to send a signal to the worker
     let (tx, rx) = channel();

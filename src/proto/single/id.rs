@@ -1,14 +1,15 @@
 use super::utils;
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 
 macro_rules! string_wrapper_impls {
     ($new_type:ident) => {
-        impl<S> From<S> for $new_type
-        where
-            S: AsRef<str>,
-        {
-            fn from(value: S) -> Self {
-                $new_type(value.as_ref().to_owned())
+        impl $new_type {
+            /// Create a new entity identifier.
+            pub fn new<S>(inner: S) -> Self
+            where
+                S: Into<String>,
+            {
+                Self(inner.into())
             }
         }
 
@@ -19,9 +20,21 @@ macro_rules! string_wrapper_impls {
             }
         }
 
-        impl DerefMut for $new_type {
-            fn deref_mut(&mut self) -> &mut Self::Target {
-                &mut self.0
+        impl AsRef<str> for $new_type {
+            fn as_ref(&self) -> &str {
+                self.deref().as_ref()
+            }
+        }
+
+        impl AsRef<$new_type> for $new_type {
+            fn as_ref(&self) -> &$new_type {
+                &self
+            }
+        }
+
+        impl PartialEq<str> for $new_type {
+            fn eq(&self, other: &str) -> bool {
+                self.deref().eq(other)
             }
         }
     };
@@ -35,6 +48,7 @@ macro_rules! string_wrapper_impls {
 /// If you do not have any domain, product or organisation specific requirements, you may prefer
 /// to have a random job identifier generated for you with [`random`](JobId::random).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct JobId(String);
 
 impl JobId {
@@ -56,6 +70,7 @@ string_wrapper_impls!(JobId);
 /// If you do not have any domain, product or organisation specific requirements, you may prefer
 /// to have a random job identifier generated for you with [`random`](WorkerId::random).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct WorkerId(String);
 
 impl WorkerId {
@@ -74,6 +89,7 @@ string_wrapper_impls!(WorkerId);
 /// This is a wrapper over the string identifier issued by the Faktory server.
 /// Only used for operations with [`Batch`](struct.Batch.html) in Enterprise Faktory.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct BatchId(String);
 
 string_wrapper_impls!(BatchId);
