@@ -42,7 +42,7 @@ pub enum Error {
     #[error("serialization")]
     Serialization(#[source] serde_json::Error),
 
-    /// Indicates an error in the underlying non-standard stream, e.g. TSL stream.
+    /// Indicates an error in the underlying non-standard stream, e.g. TLS stream.
     #[cfg(any(feature = "native_tls", feature = "rustls"))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "native_tls", feature = "rustls"))))]
     #[error("tls stream")]
@@ -169,11 +169,11 @@ pub enum Stream {
     #[cfg(feature = "native_tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "native_tls")))]
     #[error("underlying tls stream")]
-    NativeTLS(#[source] tokio_native_tls::native_tls::Error),
+    NativeTls(#[source] tokio_native_tls::native_tls::Error),
 
     /// Error in the underlying rustls powered stream.
     #[cfg(feature = "rustls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
     #[error("underlying tls stream")]
-    RustTLS(#[source] tokio_rustls::rustls::Error),
+    RustTls(#[source] tokio_rustls::rustls::Error),
 }

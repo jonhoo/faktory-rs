@@ -54,7 +54,7 @@ impl TlsStream<TokioTcpStream> {
         TlsStream::with_connector(
             TlsConnector::builder()
                 .build()
-                .map_err(error::Stream::NativeTLS)?,
+                .map_err(error::Stream::NativeTls)?,
             url,
         )
         .await
@@ -86,7 +86,7 @@ where
     pub async fn default(stream: S, hostname: String) -> io::Result<Self> {
         let connector = TlsConnector::builder()
             .build()
-            .map_err(error::Stream::NativeTLS)
+            .map_err(error::Stream::NativeTls)
             .unwrap();
         Self::new(stream, connector, hostname).await
     }
