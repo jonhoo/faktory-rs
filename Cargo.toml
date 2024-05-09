@@ -56,9 +56,6 @@ x509-parser = "0.15.1"
 
 # to make -Zminimal-versions work
 [target.'cfg(any())'.dependencies]
-# Non-panicking `Duration::try_<unit>` methods (as opposed to panicking `Duration::<unit>`) have been released
-# in `chrono` v0.4.32 (https://github.com/chronotope/chrono/releases/tag/v0.4.32) and we are encouraged to use them
-chrono = "0.4.32"
 native-tls = { version = "0.2.4", optional = true }
 num-bigint = "0.4.2"
 oid-registry = "0.6.1"

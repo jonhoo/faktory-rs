@@ -100,7 +100,7 @@ mod test {
 
     #[test]
     fn test_expiration_feature_for_enterprise_faktory() {
-        let five_min = chrono::Duration::try_seconds(299).unwrap();
+        let five_min = chrono::Duration::seconds(299);
         let exp_at = Utc::now() + five_min;
         let job0 = half_stuff().expires_at(exp_at).build();
         let stored = job0.custom.get("expires_at").unwrap();
@@ -126,8 +126,8 @@ mod test {
 
     #[test]
     fn test_same_purpose_setters_applied_simultaneously() {
-        let expires_at0 = Utc::now() + chrono::Duration::try_seconds(300).unwrap();
-        let expires_at1 = Utc::now() + chrono::Duration::try_seconds(300).unwrap();
+        let expires_at0 = Utc::now() + chrono::Duration::seconds(300);
+        let expires_at1 = Utc::now() + chrono::Duration::seconds(300);
         let job = half_stuff()
             .unique_for(59)
             .add_to_custom_data("unique_for", 599)
