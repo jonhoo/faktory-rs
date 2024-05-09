@@ -1,5 +1,5 @@
 use crate::skip_check;
-use faktory::{Client, Job, JobBuilder, JobId, WorkerBuilder, WorkerId};
+use faktory::{Client, Job, JobBuilder, JobId, Worker, WorkerBuilder, WorkerId};
 use serde_json::Value;
 use std::{io, sync};
 
@@ -13,7 +13,7 @@ async fn hello_client() {
 #[tokio::test(flavor = "multi_thread")]
 async fn hello_worker() {
     skip_check!();
-    let w = WorkerBuilder::<io::Error>::default()
+    let w = Worker::builder::<io::Error>()
         .hostname("tester".to_string())
         .labels(vec!["foo".to_string(), "bar".to_string()])
         .register_fn("never_called", |_| async move { unreachable!() })
@@ -37,7 +37,7 @@ async fn roundtrip() {
     let local = "roundtrip";
     let jid = JobId::new("x-job-id-0123456782");
 
-    let mut worker = WorkerBuilder::default()
+    let mut worker = Worker::builder()
         .labels(vec!["rust".into(), local.into()])
         .workers(1)
         .wid(WorkerId::random())
@@ -296,7 +296,7 @@ async fn test_jobs_created_with_builder() {
 
     // prepare a client and a worker:
     let mut cl = Client::connect(None).await.unwrap();
-    let mut w = WorkerBuilder::default()
+    let mut w = Worker::builder()
         .register_fn("rebuild_index", assert_args_empty)
         .register_fn("register_order", assert_args_not_empty)
         .connect(None)

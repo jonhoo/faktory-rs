@@ -93,7 +93,7 @@ where
     }
 }
 
-/// A closure that implements [JobRunner].
+/// A closure that implements [`JobRunner`].
 ///
 /// The `Closure` newtype is introduced to avoid having to box a job handler:
 /// we can now use `Closure(handler)` instead of `Box::new(handler)` and make
