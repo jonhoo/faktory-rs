@@ -15,33 +15,60 @@ exclude = [".github", "docker", ".gitignore", "Makefile"]
 
 [features]
 default = []
-tls = ["native-tls"]
-binaries = ["clap"]
+native_tls = ["dep:pin-project", "dep:tokio-native-tls"]
+rustls = ["dep:pin-project", "dep:tokio-rustls"]
+binaries = ["dep:clap", "tokio/macros"]
 ent = []
 
 [dependencies]
-bufstream = "0.1"
-chrono = { version = "0.4", features = ["serde", "clock"], default-features = false }
+async-trait = "0.1.77"
 clap = { version = "4.4.10", optional = true }
-derive_builder = "0.20.0"
+chrono = { version = "0.4", features = [
+    "serde",
+    "clock",
+], default-features = false }
+derive_builder = "0.12.0"
 fnv = "1.0.5"
 hostname = "0.3"
-libc = "0.2"
-native-tls = { version = "0.2", optional = true }
+pin-project = { version = "1.1.4", optional = true }
 rand = "0.8"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
 sha2 = "0.10.0"
 thiserror = "1.0.30"
+tokio = { version = "1.35.1", features = [
+    "io-util",
+    "net",
+    "rt",
+    "rt-multi-thread",
+    "time",
+] }
+tokio-native-tls = { version = "0.3.1", optional = true }
+tokio-rustls = { version = "0.25.0", optional = true }
 url = "2"
 
 [dev-dependencies]
-mockstream = "0.0.3"
+rustls-pki-types = "1.0.1"
+tokio = { version = "1.35.1", features = ["rt", "macros"] }
+tokio-test = "0.4.3"
+x509-parser = "0.15.1"
 
 # to make -Zminimal-versions work
 [target.'cfg(any())'.dependencies]
+native-tls = { version = "0.2.4", optional = true }
+num-bigint = "0.4.2"
+oid-registry = "0.6.1"
 openssl = { version = "0.10.60", optional = true }
+
+# TryFrom<String> for ServerName<'static> has been implemented:
+# https://github.com/rustls/pki-types/compare/rustls:3793627...rustls:1303efa#
+rustls-pki-types = { version = "1.0.1", optional = true }
+
+# Lockstep between `serde` and `serde_derive` was introduced with the "pinned" release:
+# https://github.com/serde-rs/serde/compare/v1.0.185...v1.0.186#diff-2843fc1320fa24a059f5ca967ee45d116110116263a8ba311a3aca3793c562f0R34-R41
+# Without this pin our `#[serde(transparent)]` and `#[derive(Serialize, Deserialize)] do not play well together.
+serde = "1.0.186"
 
 [[bin]]
 name = "loadtest"

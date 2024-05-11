@@ -1,40 +1,27 @@
-extern crate faktory;
-extern crate serde_json;
-extern crate url;
-
+use crate::skip_if_not_enterprise;
+use crate::utils::learn_faktory_url;
 use chrono::Utc;
 use faktory::ent::*;
 use faktory::*;
 use serde_json::Value;
 use std::io;
+use tokio::time;
 
-macro_rules! skip_if_not_enterprise {
-    () => {
-        if std::env::var_os("FAKTORY_ENT").is_none() {
-            return;
-        }
-    };
+async fn print_job(j: Job) -> io::Result<()> {
+    Ok(eprintln!("{:?}", j))
 }
-
 macro_rules! assert_had_one {
     ($c:expr, $q:expr) => {
-        let had_one_job = $c.run_one(0, &[$q]).unwrap();
+        let had_one_job = $c.run_one(0, &[$q]).await.unwrap();
         assert!(had_one_job);
     };
 }
 
 macro_rules! assert_is_empty {
     ($c:expr, $q:expr) => {
-        let had_one_job = $c.run_one(0, &[$q]).unwrap();
+        let had_one_job = $c.run_one(0, &[$q]).await.unwrap();
         assert!(!had_one_job);
     };
-}
-
-fn learn_faktory_url() -> String {
-    let url = std::env::var_os("FAKTORY_URL").expect(
-        "Enterprise Faktory should be running for this test, and 'FAKTORY_URL' environment variable should be provided",
-    );
-    url.to_str().expect("Is a utf-8 string").to_owned()
 }
 
 fn some_jobs<S>(kind: S, q: S, count: usize) -> impl Iterator<Item = Job>
@@ -46,21 +33,20 @@ where
         .map(move |_| Job::builder(kind.clone()).queue(q.clone()).build())
 }
 
-#[test]
-fn ent_expiring_job() {
-    use std::{thread, time};
-
+#[tokio::test(flavor = "multi_thread")]
+async fn ent_expiring_job() {
     skip_if_not_enterprise!();
 
     let url = learn_faktory_url();
+    let local = "ent_expiring_job";
 
-    // prepare a producer ("client" in Faktory terms) and consumer ("worker"):
-    let mut p = Producer::connect(Some(&url)).unwrap();
-    let mut c = ConsumerBuilder::default();
-    c.register("AnExpiringJob", move |job| -> io::Result<_> {
-        Ok(eprintln!("{:?}", job))
-    });
-    let mut c = c.connect(Some(&url)).unwrap();
+    // prepare a client and a worker:
+    let mut p = Client::connect(Some(&url)).await.unwrap();
+    let mut w = WorkerBuilder::default()
+        .register_fn("AnExpiringJob", print_job)
+        .connect(Some(&url))
+        .await
+        .unwrap();
 
     // prepare an expiring job:
     let job_ttl_secs: u64 = 3;
@@ -68,35 +54,34 @@ fn ent_expiring_job() {
     let ttl = chrono::Duration::seconds(job_ttl_secs as i64);
     let job1 = JobBuilder::new("AnExpiringJob")
         .args(vec!["ISBN-13:9781718501850"])
-        .queue("ent_expiring_job")
+        .queue(local)
         .expires_at(chrono::Utc::now() + ttl)
         .build();
 
     // enqueue and fetch immediately job1:
-    p.enqueue(job1).unwrap();
-    assert_had_one!(&mut c, "ent_expiring_job");
+    p.enqueue(job1).await.unwrap();
+    assert_had_one!(&mut w, "ent_expiring_job");
 
     // check that the queue is drained:
-    assert_is_empty!(&mut c, "ent_expiring_job");
+    assert_is_empty!(&mut w, "ent_expiring_job");
 
     // prepare another one:
     let job2 = JobBuilder::new("AnExpiringJob")
         .args(vec!["ISBN-13:9781718501850"])
-        .queue("ent_expiring_job")
+        .queue(local)
         .expires_at(chrono::Utc::now() + ttl)
         .build();
 
     // enqueue and then fetch job2, but after ttl:
-    p.enqueue(job2).unwrap();
-    thread::sleep(time::Duration::from_secs(job_ttl_secs * 2));
-
+    p.enqueue(job2).await.unwrap();
+    tokio::time::sleep(time::Duration::from_secs(job_ttl_secs * 2)).await;
     // For the non-enterprise edition of Faktory, this assertion will
     // fail, which should be taken into account when running the test suite on CI.
-    assert_is_empty!(&mut c, "ent_expiring_job");
+    assert_is_empty!(&mut w, local);
 }
 
-#[test]
-fn ent_unique_job() {
+#[tokio::test(flavor = "multi_thread")]
+async fn ent_unique_job() {
     use faktory::error;
     use serde_json::Value;
 
@@ -106,13 +91,13 @@ fn ent_unique_job() {
 
     let job_type = "order";
 
-    // prepare producer and consumer:
-    let mut p = Producer::connect(Some(&url)).unwrap();
-    let mut c = ConsumerBuilder::default();
-    c.register(job_type, |job| -> io::Result<_> {
-        Ok(eprintln!("{:?}", job))
-    });
-    let mut c = c.connect(Some(&url)).unwrap();
+    // prepare client and worker:
+    let mut p = Client::connect(Some(&url)).await.unwrap();
+    let mut w = WorkerBuilder::default()
+        .register_fn(job_type, print_job)
+        .connect(Some(&url))
+        .await
+        .unwrap();
 
     // Reminder. Jobs are considered unique for kind + args + queue.
     // So the following two jobs, will be accepted by Faktory, since we
@@ -123,18 +108,20 @@ fn ent_unique_job() {
         .args(args.clone())
         .queue(queue_name)
         .build();
-    p.enqueue(job1).unwrap();
+
+    p.enqueue(job1).await.unwrap();
     let job2 = JobBuilder::new(job_type)
         .args(args.clone())
         .queue(queue_name)
         .build();
-    p.enqueue(job2).unwrap();
 
-    let had_job = c.run_one(0, &[queue_name]).unwrap();
+    p.enqueue(job2).await.unwrap();
+
+    let had_job = w.run_one(0, &[queue_name]).await.unwrap();
     assert!(had_job);
-    let had_another_one = c.run_one(0, &[queue_name]).unwrap();
+    let had_another_one = w.run_one(0, &[queue_name]).await.unwrap();
     assert!(had_another_one);
-    let and_that_is_it_for_now = !c.run_one(0, &[queue_name]).unwrap();
+    let and_that_is_it_for_now = !w.run_one(0, &[queue_name]).await.unwrap();
     assert!(and_that_is_it_for_now);
 
     // let's now create a unique job and followed by a job with
@@ -146,7 +133,9 @@ fn ent_unique_job() {
         .queue(queue_name)
         .unique_for(unique_for_secs)
         .build();
-    p.enqueue(job1).unwrap();
+
+    p.enqueue(job1).await.unwrap();
+
     // this one is a 'duplicate' ...
     let job2 = Job::builder(job_type)
         .args(args.clone())
@@ -154,7 +143,8 @@ fn ent_unique_job() {
         .unique_for(unique_for_secs)
         .build();
     // ... so the server will respond accordingly:
-    let res = p.enqueue(job2).unwrap_err();
+    let res = p.enqueue(job2).await.unwrap_err();
+
     if let error::Error::Protocol(error::Protocol::UniqueConstraintViolation { msg }) = res {
         assert_eq!(msg, "Job not unique");
     } else {
@@ -162,12 +152,14 @@ fn ent_unique_job() {
     }
 
     // Let's now consume the job which is 'holding' a unique lock:
-    let had_job = c.run_one(0, &[queue_name]).unwrap();
+    let had_job = w.run_one(0, &[queue_name]).await.unwrap();
+
     assert!(had_job);
 
     // And check that the queue is really empty (`job2` from above
     // has not been queued indeed):
-    let queue_is_empty = !c.run_one(0, &[queue_name]).unwrap();
+    let queue_is_empty = !w.run_one(0, &[queue_name]).await.unwrap();
+
     assert!(queue_is_empty);
 
     // Now let's repeat the latter case, but providing different args to job2:
@@ -176,7 +168,9 @@ fn ent_unique_job() {
         .queue(queue_name)
         .unique_for(unique_for_secs)
         .build();
-    p.enqueue(job1).unwrap();
+
+    p.enqueue(job1).await.unwrap();
+
     // this one is *NOT* a 'duplicate' ...
     let job2 = JobBuilder::new(job_type)
         .args(vec![Value::from("ISBN-13:9781718501850"), Value::from(101)])
@@ -184,19 +178,19 @@ fn ent_unique_job() {
         .unique_for(unique_for_secs)
         .build();
     // ... so the server will accept it:
-    p.enqueue(job2).unwrap();
+    p.enqueue(job2).await.unwrap();
 
-    assert_had_one!(&mut c, queue_name);
-    assert_had_one!(&mut c, queue_name);
+    assert_had_one!(&mut w, queue_name);
+    assert_had_one!(&mut w, queue_name);
     // and the queue is empty again:
-    assert_is_empty!(&mut c, queue_name);
+    assert_is_empty!(&mut w, queue_name);
 }
 
-#[test]
-fn ent_unique_job_until_success() {
+#[tokio::test(flavor = "multi_thread")]
+async fn ent_unique_job_until_success() {
     use faktory::error;
-    use std::thread;
-    use std::time;
+    use std::io;
+    use tokio::time;
 
     skip_if_not_enterprise!();
 
@@ -211,42 +205,45 @@ fn ent_unique_job_until_success() {
     let unique_for = 4;
 
     let url1 = url.clone();
-    let handle = thread::spawn(move || {
-        // prepare producer and consumer, where the former can
+    let handle = tokio::spawn(async move {
+        // prepare client and worker, where the former can
         // send a job difficulty level as a job's args and the lattter
         // will sleep for a corresponding period of time, pretending
         // to work hard:
-        let mut producer_a = Producer::connect(Some(&url1)).unwrap();
-        let mut consumer_a = ConsumerBuilder::default();
-        consumer_a.register(job_type, |job| -> io::Result<_> {
-            let args = job.args().to_owned();
-            let mut args = args.iter();
-            let diffuculty_level = args
-                .next()
-                .expect("job difficulty level is there")
-                .to_owned();
-            let sleep_secs =
-                serde_json::from_value::<i64>(diffuculty_level).expect("a valid number");
-            thread::sleep(time::Duration::from_secs(sleep_secs as u64));
-            Ok(eprintln!("{:?}", job))
-        });
-        let mut consumer_a = consumer_a.connect(Some(&url1)).unwrap();
+        let mut client_a = Client::connect(Some(&url1)).await.unwrap();
+        let mut worker_a = WorkerBuilder::default()
+            .register_fn(job_type, |job| async move {
+                let args = job.args().to_owned();
+                let mut args = args.iter();
+                let diffuculty_level = args
+                    .next()
+                    .expect("job difficulty level is there")
+                    .to_owned();
+                let sleep_secs =
+                    serde_json::from_value::<i64>(diffuculty_level).expect("a valid number");
+                time::sleep(time::Duration::from_secs(sleep_secs as u64)).await;
+                eprintln!("{:?}", job);
+                Ok::<(), io::Error>(())
+            })
+            .connect(Some(&url1))
+            .await
+            .unwrap();
         let job = JobBuilder::new(job_type)
             .args(vec![difficulty_level])
             .queue(queue_name)
             .unique_for(unique_for)
             .unique_until_success() // Faktory's default
             .build();
-        producer_a.enqueue(job).unwrap();
-        let had_job = consumer_a.run_one(0, &[queue_name]).unwrap();
+        client_a.enqueue(job).await.unwrap();
+        let had_job = worker_a.run_one(0, &[queue_name]).await.unwrap();
         assert!(had_job);
     });
 
     // let spawned thread gain momentum:
-    thread::sleep(time::Duration::from_secs(1));
+    time::sleep(time::Duration::from_secs(1)).await;
 
     // continue
-    let mut producer_b = Producer::connect(Some(&url)).unwrap();
+    let mut client_b = Client::connect(Some(&url)).await.unwrap();
 
     // this one is a 'duplicate' because the job is still
     // being executed in the spawned thread:
@@ -257,18 +254,18 @@ fn ent_unique_job_until_success() {
         .build();
 
     // as a result:
-    let res = producer_b.enqueue(job).unwrap_err();
+    let res = client_b.enqueue(job).await.unwrap_err();
     if let error::Error::Protocol(error::Protocol::UniqueConstraintViolation { msg }) = res {
         assert_eq!(msg, "Job not unique");
     } else {
         panic!("Expected protocol error.")
     }
 
-    handle.join().expect("should join successfully");
+    handle.await.expect("should join successfully");
 
     // Now that the job submitted in a spawned thread has been successfully executed
     // (with ACK sent to server), the producer 'B' can push another one:
-    producer_b
+    client_b
         .enqueue(
             JobBuilder::new(job_type)
                 .args(vec![difficulty_level])
@@ -276,13 +273,13 @@ fn ent_unique_job_until_success() {
                 .unique_for(unique_for)
                 .build(),
         )
+        .await
         .unwrap();
 }
 
-#[test]
-fn ent_unique_job_until_start() {
-    use std::thread;
-    use std::time;
+#[tokio::test(flavor = "multi_thread")]
+async fn ent_unique_job_until_start() {
+    use tokio::time;
 
     skip_if_not_enterprise!();
 
@@ -294,23 +291,26 @@ fn ent_unique_job_until_start() {
     let unique_for = 4;
 
     let url1 = url.clone();
-    let handle = thread::spawn(move || {
-        let mut producer_a = Producer::connect(Some(&url1)).unwrap();
-        let mut consumer_a = ConsumerBuilder::default();
-        consumer_a.register(job_type, |job| -> io::Result<_> {
-            let args = job.args().to_owned();
-            let mut args = args.iter();
-            let diffuculty_level = args
-                .next()
-                .expect("job difficulty level is there")
-                .to_owned();
-            let sleep_secs =
-                serde_json::from_value::<i64>(diffuculty_level).expect("a valid number");
-            thread::sleep(time::Duration::from_secs(sleep_secs as u64));
-            Ok(eprintln!("{:?}", job))
-        });
-        let mut consumer_a = consumer_a.connect(Some(&url1)).unwrap();
-        producer_a
+    let handle = tokio::spawn(async move {
+        let mut client_a = Client::connect(Some(&url1)).await.unwrap();
+        let mut worker_a = WorkerBuilder::default()
+            .register_fn(job_type, |job| async move {
+                let args = job.args().to_owned();
+                let mut args = args.iter();
+                let diffuculty_level = args
+                    .next()
+                    .expect("job difficulty level is there")
+                    .to_owned();
+                let sleep_secs =
+                    serde_json::from_value::<i64>(diffuculty_level).expect("a valid number");
+                time::sleep(time::Duration::from_secs(sleep_secs as u64)).await;
+                eprintln!("{:?}", job);
+                Ok::<(), io::Error>(())
+            })
+            .connect(Some(&url1))
+            .await
+            .unwrap();
+        client_a
             .enqueue(
                 JobBuilder::new(job_type)
                     .args(vec![difficulty_level])
@@ -319,18 +319,19 @@ fn ent_unique_job_until_start() {
                     .unique_until_start() // NB!
                     .build(),
             )
+            .await
             .unwrap();
         // as soon as the job is fetched, the unique lock gets released
-        let had_job = consumer_a.run_one(0, &[queue_name]).unwrap();
+        let had_job = worker_a.run_one(0, &[queue_name]).await.unwrap();
         assert!(had_job);
     });
 
     // let spawned thread gain momentum:
-    thread::sleep(time::Duration::from_secs(1));
+    time::sleep(time::Duration::from_secs(1)).await;
 
     // the unique lock has been released by this time, so the job is enqueued successfully:
-    let mut producer_b = Producer::connect(Some(&url)).unwrap();
-    producer_b
+    let mut client_b = Client::connect(Some(&url)).await.unwrap();
+    client_b
         .enqueue(
             JobBuilder::new(job_type)
                 .args(vec![difficulty_level])
@@ -338,20 +339,20 @@ fn ent_unique_job_until_start() {
                 .unique_for(unique_for)
                 .build(),
         )
+        .await
         .unwrap();
 
-    handle.join().expect("should join successfully");
+    handle.await.expect("should join successfully");
 }
 
-#[test]
-fn ent_unique_job_bypass_unique_lock() {
+#[tokio::test(flavor = "multi_thread")]
+async fn ent_unique_job_bypass_unique_lock() {
     use faktory::error;
 
     skip_if_not_enterprise!();
 
     let url = learn_faktory_url();
-
-    let mut producer = Producer::connect(Some(&url)).unwrap();
+    let mut producer = Client::connect(Some(&url)).await.unwrap();
     let queue_name = "ent_unique_job_bypass_unique_lock";
     let job1 = Job::builder("order")
         .queue(queue_name)
@@ -365,8 +366,8 @@ fn ent_unique_job_bypass_unique_lock() {
         .queue(queue_name) // same queue
         .build(); // NB: `unique_for` not set
 
-    producer.enqueue(job1).unwrap();
-    producer.enqueue(job2).unwrap(); // bypassing the lock!
+    producer.enqueue(job1).await.unwrap();
+    producer.enqueue(job2).await.unwrap(); // bypassing the lock!
 
     // This _is_ a 'duplicate'.
     let job3 = Job::builder("order")
@@ -374,7 +375,7 @@ fn ent_unique_job_bypass_unique_lock() {
         .unique_for(60) // NB
         .build();
 
-    let res = producer.enqueue(job3).unwrap_err(); // NOT bypassing the lock!
+    let res = producer.enqueue(job3).await.unwrap_err(); // NOT bypassing the lock!
 
     if let error::Error::Protocol(error::Protocol::UniqueConstraintViolation { msg }) = res {
         assert_eq!(msg, "Job not unique");
@@ -384,19 +385,20 @@ fn ent_unique_job_bypass_unique_lock() {
 
     // let's consume three times from the queue to verify that the first two jobs
     // have been enqueued for real, while the last one has not.
-    let mut c = ConsumerBuilder::default();
-    c.register("order", |j| -> io::Result<_> { Ok(eprintln!("{:?}", j)) });
-    let mut c = c.connect(Some(&url)).unwrap();
+    let mut c = WorkerBuilder::default()
+        .register_fn("order", print_job)
+        .connect(Some(&url))
+        .await
+        .unwrap();
 
-    assert!(c.run_one(0, &[queue_name]).unwrap());
-    assert!(c.run_one(0, &[queue_name]).unwrap());
-    assert!(!c.run_one(0, &[queue_name]).unwrap()); // empty;
+    assert!(c.run_one(0, &[queue_name]).await.unwrap());
+    assert!(c.run_one(0, &[queue_name]).await.unwrap());
+    assert!(!c.run_one(0, &[queue_name]).await.unwrap()); // empty;
 }
 
-#[test]
-fn test_tracker_can_send_and_retrieve_job_execution_progress() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
     use std::{
-        io,
         sync::{Arc, Mutex},
         thread, time,
     };
@@ -406,12 +408,12 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
     let url = learn_faktory_url();
 
     let t = Arc::new(Mutex::new(
-        Client::connect(Some(&url)).expect("job progress tracker created successfully"),
+        Client::connect(Some(&url))
+            .await
+            .expect("job progress tracker created successfully"),
     ));
 
-    let t_captured = Arc::clone(&t);
-
-    let mut p = Producer::connect(Some(&url)).unwrap();
+    let mut p = Client::connect(Some(&url)).await.unwrap();
 
     let job_tackable = JobBuilder::new("order")
         .args(vec![Value::from("ISBN-13:9781718501850")])
@@ -427,56 +429,61 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
 
     // let's remember this job's id:
     let job_id = job_tackable.id().to_owned();
-    let job_id_captured = job_id.clone();
 
-    p.enqueue(job_tackable).expect("enqueued");
+    p.enqueue(job_tackable).await.expect("enqueued");
 
-    let mut c = ConsumerBuilder::default();
-    c.register("order", move |job| -> io::Result<_> {
-        // trying to set progress on a community edition of Faktory will give:
-        // 'an internal server error occurred: tracking subsystem is only available in Faktory Enterprise'
-        assert!(t_captured
-            .lock()
-            .expect("lock acquired")
-            .set_progress(
-                ProgressUpdate::builder(&job_id_captured)
-                    .desc("Still processing...".to_owned())
-                    .percent(32)
-                    .build(),
-            )
-            .is_ok());
-        // Let's update the progress once again, to check the 'set_progress' shortcut:
-        assert!(t_captured
-            .lock()
-            .unwrap()
-            .set_progress(ProgressUpdate::set(&job_id_captured, 33))
-            .is_ok());
+    let url_copy = url.clone();
+    let job_id_copy = job_id.clone();
+    let mut c = WorkerBuilder::default()
+        .register_fn("order", move |job| {
+            let job_id = job_id_copy.clone();
+            let url = url_copy.clone();
+            Box::pin(async move {
+                let mut t = Client::connect(Some(&url))
+                    .await
+                    .expect("job progress tracker created successfully");
 
-        // let's sleep for a while ...
-        thread::sleep(time::Duration::from_secs(2));
+                // trying to set progress on a community edition of Faktory will give:
+                // 'an internal server error occurred: tracking subsystem is only available in Faktory Enterprise'
+                assert!(t
+                    .set_progress(
+                        ProgressUpdate::builder(job_id.clone())
+                            .desc("Still processing...".to_owned())
+                            .percent(32)
+                            .build(),
+                    )
+                    .await
+                    .is_ok());
+                // Let's update the progress once again, to check the 'set_progress' shortcut:
+                assert!(t
+                    .set_progress(ProgressUpdate::set(job_id.clone(), 33))
+                    .await
+                    .is_ok());
 
-        // ... and read the progress info
-        let result = t_captured
-            .lock()
-            .expect("lock acquired")
-            .get_progress(job_id_captured.clone())
-            .expect("Retrieved progress update over the wire");
+                // let's sleep for a while ...
+                thread::sleep(time::Duration::from_secs(2));
 
-        assert!(result.is_some());
-        let result = result.unwrap();
-        assert_eq!(result.jid, job_id_captured.clone());
-        match result.state {
-            JobState::Working => {}
-            _ => panic!("expected job's state to be 'working'"),
-        }
-        assert!(result.updated_at.is_some());
-        assert_eq!(result.percent, Some(33));
-        // considering the job done
-        Ok(eprintln!("{:?}", job))
-    });
+                // ... and read the progress info
+                let result = t
+                    .get_progress(job_id.clone())
+                    .await
+                    .expect("Retrieved progress update over the wire");
 
-    let mut c = c
+                assert!(result.is_some());
+                let result = result.unwrap();
+                assert_eq!(result.jid, job_id.clone());
+                match result.state {
+                    JobState::Working => {}
+                    _ => panic!("expected job's state to be 'working'"),
+                }
+                assert!(result.updated_at.is_some());
+                assert_eq!(result.percent, Some(33));
+                // considering the job done
+                Ok::<(), io::Error>(eprintln!("{:?}", job))
+            })
+        })
         .connect(Some(&url))
+        .await
         .expect("Successfully ran a handshake with 'Faktory'");
     assert_had_one!(&mut c, "test_tracker_can_send_progress_update");
 
@@ -484,6 +491,7 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
         .lock()
         .expect("lock acquired successfully")
         .get_progress(job_id.clone())
+        .await
         .expect("Retrieved progress update over the wire once again")
         .expect("Some progress");
 
@@ -491,7 +499,7 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
     // 'Faktory' will be keeping last known update for at least 30 minutes:
     assert_eq!(progress.percent, Some(33));
 
-    // But it actually knows the job's real status, since the consumer (worker)
+    // But it actually knows the job's real status, since the worker
     // informed it immediately after finishing with the job:
     assert_eq!(progress.state, JobState::Success);
 
@@ -502,19 +510,20 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
         .desc("Final stage.".to_string())
         .percent(99)
         .build();
-    assert!(t.lock().unwrap().set_progress(upd).is_ok());
+    assert!(t.lock().unwrap().set_progress(upd).await.is_ok());
 
     let progress = t
         .lock()
         .unwrap()
         .get_progress(job_id)
+        .await
         .expect("Retrieved progress update over the wire once again")
         .expect("Some progress");
 
     if progress.percent != Some(100) {
         let upd = progress.update_percent(100);
         assert_eq!(upd.desc, progress.desc);
-        assert!(t.lock().unwrap().set_progress(upd).is_ok())
+        assert!(t.lock().unwrap().set_progress(upd).await.is_ok())
     }
 
     // What about 'ordinary' job ?
@@ -522,6 +531,7 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
 
     // Sending it ...
     p.enqueue(job_ordinary)
+        .await
         .expect("Successfuly send to Faktory");
 
     // ... and asking for its progress
@@ -529,6 +539,7 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
         .lock()
         .expect("lock acquired")
         .get_progress(job_id.clone())
+        .await
         .expect("Retrieved progress update over the wire once again")
         .expect("Some progress");
 
@@ -546,17 +557,21 @@ fn test_tracker_can_send_and_retrieve_job_execution_progress() {
     assert!(progress.desc.is_none());
 }
 
-#[test]
-fn test_batch_of_jobs_can_be_initiated() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_batch_of_jobs_can_be_initiated() {
     skip_if_not_enterprise!();
     let url = learn_faktory_url();
 
-    let mut p = Producer::connect(Some(&url)).unwrap();
-    let mut c = ConsumerBuilder::default();
-    c.register("thumbnail", move |_job| -> io::Result<_> { Ok(()) });
-    c.register("clean_up", move |_job| -> io::Result<_> { Ok(()) });
-    let mut c = c.connect(Some(&url)).unwrap();
-    let mut t = Client::connect(Some(&url)).expect("job progress tracker created successfully");
+    let mut p = Client::connect(Some(&url)).await.unwrap();
+    let mut w = WorkerBuilder::default()
+        .register_fn("thumbnail", |_job| async { Ok::<(), io::Error>(()) })
+        .register_fn("clean_up", |_job| async { Ok(()) })
+        .connect(Some(&url))
+        .await
+        .unwrap();
+    let mut t = Client::connect(Some(&url))
+        .await
+        .expect("job progress tracker created successfully");
 
     let job_1 = Job::builder("thumbnail")
         .args(vec!["path/to/original/image1"])
@@ -582,21 +597,22 @@ fn test_batch_of_jobs_can_be_initiated() {
 
     let time_just_before_batch_init = Utc::now();
 
-    let mut b = p.start_batch(batch).unwrap();
+    let mut b = p.start_batch(batch).await.unwrap();
 
     // let's remember batch id:
-    let bid = b.id().to_string();
+    let bid = b.id().to_owned();
 
-    assert!(b.add(job_1).unwrap().is_none());
-    assert!(b.add(job_2).unwrap().is_none());
-    assert_eq!(b.add(job_3).unwrap().unwrap(), "check-check");
-    b.commit().unwrap();
+    assert!(b.add(job_1).await.unwrap().is_none());
+    assert!(b.add(job_2).await.unwrap().is_none());
+    assert_eq!(b.add(job_3).await.unwrap().unwrap(), "check-check");
+    b.commit().await.unwrap();
 
     // The batch has been committed, let's see its status:
     let time_just_before_getting_status = Utc::now();
 
     let s = t
         .get_batch_status(bid.clone())
+        .await
         .expect("successfully fetched batch status from server...")
         .expect("...and it's not none");
 
@@ -614,14 +630,15 @@ fn test_batch_of_jobs_can_be_initiated() {
     assert_eq!(s.complete_callback_state, CallbackState::Pending);
 
     // consume and execute job 1 ...
-    assert_had_one!(&mut c, "test_batch_of_jobs_can_be_initiated");
+    assert_had_one!(&mut w, "test_batch_of_jobs_can_be_initiated");
     // ... and try consuming from the "callback" queue:
-    assert_is_empty!(&mut c, "test_batch_of_jobs_can_be_initiated__CALLBACKs");
+    assert_is_empty!(&mut w, "test_batch_of_jobs_can_be_initiated__CALLBACKs");
 
     // let's ask the Faktory server about the batch status after
     // we have consumed one job from this batch:
     let s = t
         .get_batch_status(bid.clone())
+        .await
         .expect("successfully fetched batch status from server...")
         .expect("...and it's not none");
 
@@ -631,13 +648,14 @@ fn test_batch_of_jobs_can_be_initiated() {
     assert_eq!(s.failed, 0);
 
     // now, consume and execute job 2
-    assert_had_one!(&mut c, "test_batch_of_jobs_can_be_initiated");
+    assert_had_one!(&mut w, "test_batch_of_jobs_can_be_initiated");
     // ... and check the callback queue again:
-    assert_is_empty!(&mut c, "test_batch_of_jobs_can_be_initiated__CALLBACKs"); // not just yet ...
+    assert_is_empty!(&mut w, "test_batch_of_jobs_can_be_initiated__CALLBACKs"); // not just yet ...
 
     // let's check batch status once again:
     let s = t
         .get_batch_status(bid.clone())
+        .await
         .expect("successfully fetched batch status from server...")
         .expect("...and it's not none");
 
@@ -647,12 +665,13 @@ fn test_batch_of_jobs_can_be_initiated() {
     assert_eq!(s.failed, 0);
 
     // finally, consume and execute job 3 - the last one from the batch
-    assert_had_one!(&mut c, "test_batch_of_jobs_can_be_initiated");
+    assert_had_one!(&mut w, "test_batch_of_jobs_can_be_initiated");
 
     // let's check batch status to see what happens after
     // all the jobs from the batch have been executed:
     let s = t
         .get_batch_status(bid.clone())
+        .await
         .expect("successfully fetched batch status from server...")
         .expect("...and it's not none");
 
@@ -663,11 +682,12 @@ fn test_batch_of_jobs_can_be_initiated() {
     assert_eq!(s.complete_callback_state, CallbackState::Enqueued);
 
     // let's now successfully consume from the "callback" queue:
-    assert_had_one!(&mut c, "test_batch_of_jobs_can_be_initiated__CALLBACKs");
+    assert_had_one!(&mut w, "test_batch_of_jobs_can_be_initiated__CALLBACKs");
 
     // let's check batch status one last time:
     let s = t
         .get_batch_status(bid.clone())
+        .await
         .expect("successfully fetched batch status from server...")
         .expect("...and it's not none");
 
@@ -675,17 +695,21 @@ fn test_batch_of_jobs_can_be_initiated() {
     assert_eq!(s.complete_callback_state, CallbackState::FinishedOk);
 }
 
-#[test]
-fn test_batches_can_be_nested() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_batches_can_be_nested() {
     skip_if_not_enterprise!();
     let url = learn_faktory_url();
 
-    // Set up 'producer', 'consumer', and 'tracker':
-    let mut p = Producer::connect(Some(&url)).unwrap();
-    let mut c = ConsumerBuilder::default();
-    c.register("jobtype", move |_job| -> io::Result<_> { Ok(()) });
-    let mut _c = c.connect(Some(&url)).unwrap();
-    let mut t = Client::connect(Some(&url)).expect("job progress tracker created successfully");
+    // Set up 'client', 'worker', and 'tracker':
+    let mut p = Client::connect(Some(&url)).await.unwrap();
+    let _w = WorkerBuilder::default()
+        .register_fn("jobtype", |_job| async { Ok::<(), io::Error>(()) })
+        .connect(Some(&url))
+        .await
+        .unwrap();
+    let mut t = Client::connect(Some(&url))
+        .await
+        .expect("job progress tracker created successfully");
 
     // Prepare some jobs:
     let parent_job1 = Job::builder("jobtype")
@@ -701,7 +725,7 @@ fn test_batches_can_be_nested() {
         .queue("test_batches_can_be_nested")
         .build();
 
-    // Sccording to Faktory docs:
+    // According to Faktory docs:
     // "The callback for a parent batch will not enqueue until the callback for the child batch has finished."
     // See: https://github.com/contribsys/faktory/wiki/Ent-Batches#guarantees
     let parent_cb_job = Job::builder("clean_up")
@@ -718,44 +742,53 @@ fn test_batches_can_be_nested() {
     let parent_batch = Batch::builder()
         .description("Parent batch")
         .with_success_callback(parent_cb_job);
-    let mut parent_batch = p.start_batch(parent_batch).unwrap();
+    let mut parent_batch = p.start_batch(parent_batch).await.unwrap();
     let parent_batch_id = parent_batch.id().to_owned();
-    parent_batch.add(parent_job1).unwrap();
+    parent_batch.add(parent_job1).await.unwrap();
 
     let child_batch = Batch::builder()
         .description("Child batch")
         .with_success_callback(child_cb_job);
-    let mut child_batch = parent_batch.start_batch(child_batch).unwrap();
+    let mut child_batch = parent_batch.start_batch(child_batch).await.unwrap();
     let child_batch_id = child_batch.id().to_owned();
-    child_batch.add(child_job_1).unwrap();
-    child_batch.add(child_job_2).unwrap();
+    child_batch.add(child_job_1).await.unwrap();
+    child_batch.add(child_job_2).await.unwrap();
 
     let grandchild_batch = Batch::builder()
         .description("Grandchild batch")
         .with_success_callback(grandchild_cb_job);
-    let mut grandchild_batch = child_batch.start_batch(grandchild_batch).unwrap();
+    let mut grandchild_batch = child_batch.start_batch(grandchild_batch).await.unwrap();
     let grandchild_batch_id = grandchild_batch.id().to_owned();
-    grandchild_batch.add(grand_child_job_1).unwrap();
+    grandchild_batch.add(grand_child_job_1).await.unwrap();
 
-    grandchild_batch.commit().unwrap();
-    child_batch.commit().unwrap();
-    parent_batch.commit().unwrap();
+    grandchild_batch.commit().await.unwrap();
+    child_batch.commit().await.unwrap();
+    parent_batch.commit().await.unwrap();
     // batches finish
 
     let parent_status = t
         .get_batch_status(parent_batch_id.clone())
+        .await
         .unwrap()
         .unwrap();
     assert_eq!(parent_status.description, Some("Parent batch".to_string()));
     assert_eq!(parent_status.total, 1);
     assert_eq!(parent_status.parent_bid, None);
 
-    let child_status = t.get_batch_status(child_batch_id.clone()).unwrap().unwrap();
+    let child_status = t
+        .get_batch_status(child_batch_id.clone())
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(child_status.description, Some("Child batch".to_string()));
     assert_eq!(child_status.total, 2);
     assert_eq!(child_status.parent_bid, Some(parent_batch_id));
 
-    let grandchild_status = t.get_batch_status(grandchild_batch_id).unwrap().unwrap();
+    let grandchild_status = t
+        .get_batch_status(grandchild_batch_id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(
         grandchild_status.description,
         Some("Grandchild batch".to_string())
@@ -764,18 +797,20 @@ fn test_batches_can_be_nested() {
     assert_eq!(grandchild_status.parent_bid, Some(child_batch_id));
 }
 
-#[test]
-fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
     skip_if_not_enterprise!();
     let url = learn_faktory_url();
 
-    // prepare a producer, a consumer of 'order' jobs, and a tracker:
-    let mut p = Producer::connect(Some(&url)).unwrap();
-    let mut c = ConsumerBuilder::default();
-    c.register("order", move |_job| -> io::Result<_> { Ok(()) });
-    c.register("order_clean_up", move |_job| -> io::Result<_> { Ok(()) });
-    let mut c = c.connect(Some(&url)).unwrap();
-    let mut t = Client::connect(Some(&url)).unwrap();
+    // prepare a client, a worker of 'order' jobs, and a tracker:
+    let mut cl = Client::connect(Some(&url)).await.unwrap();
+    let mut tr = Client::connect(Some(&url)).await.unwrap();
+    let mut w = WorkerBuilder::default()
+        .register_fn("order", |_job| async { Ok(()) })
+        .register_fn("order_clean_up", |_job| async { Ok::<(), io::Error>(()) })
+        .connect(Some(&url))
+        .await
+        .unwrap();
 
     let mut jobs = some_jobs(
         "order",
@@ -789,22 +824,23 @@ fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
     );
 
     // start a 'batch':
-    let mut b = p
+    let mut b = cl
         .start_batch(
             Batch::builder()
                 .description("Orders processing workload")
                 .with_success_callback(callbacks.next().unwrap()),
         )
+        .await
         .unwrap();
-    let bid = b.id().to_string();
+    let bid = b.id().to_owned();
 
     // push 3 jobs onto this batch, but DO NOT commit the batch:
     for _ in 0..3 {
-        b.add(jobs.next().unwrap()).unwrap();
+        b.add(jobs.next().unwrap()).await.unwrap();
     }
 
     // check this batch's status:
-    let s = t.get_batch_status(bid.clone()).unwrap().unwrap();
+    let s = tr.get_batch_status(bid.clone()).await.unwrap().unwrap();
     assert_eq!(s.total, 3);
     assert_eq!(s.pending, 3);
     assert_eq!(s.success_callback_state, CallbackState::Pending);
@@ -812,19 +848,19 @@ fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
     // consume those 3 jobs successfully;
     for _ in 0..3 {
         assert_had_one!(
-            &mut c,
+            &mut w,
             "test_callback_will_not_be_queued_unless_batch_gets_committed"
         );
     }
 
     // verify the queue is drained:
     assert_is_empty!(
-        &mut c,
+        &mut w,
         "test_callback_will_not_be_queued_unless_batch_gets_committed"
     );
 
     // check this batch's status again:
-    let s = t.get_batch_status(bid.clone()).unwrap().unwrap();
+    let s = tr.get_batch_status(bid.clone()).await.unwrap().unwrap();
     assert_eq!(s.total, 3);
     assert_eq!(s.pending, 0);
     assert_eq!(s.failed, 0);
@@ -832,61 +868,70 @@ fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
 
     // to double-check, let's assert the success callbacks queue is empty:
     assert_is_empty!(
-        &mut c,
+        &mut w,
         "test_callback_will_not_be_queued_unless_batch_gets_committed__CALLBACKs"
     );
 
     // now let's COMMIT the batch ...
-    b.commit().unwrap();
+    b.commit().await.unwrap();
 
     // ... and check batch status:
-    let s = t.get_batch_status(bid.clone()).unwrap().unwrap();
+    let s = cl.get_batch_status(bid.clone()).await.unwrap().unwrap();
     assert_eq!(s.success_callback_state, CallbackState::Enqueued);
 
     // finally, let's consume from the success callbacks queue ...
     assert_had_one!(
-        &mut c,
+        &mut w,
         "test_callback_will_not_be_queued_unless_batch_gets_committed__CALLBACKs"
     );
 
     // ... and see the final status:
-    let s = t.get_batch_status(bid.clone()).unwrap().unwrap();
+    let s = cl.get_batch_status(bid.clone()).await.unwrap().unwrap();
     assert_eq!(s.success_callback_state, CallbackState::FinishedOk);
 }
 
-#[test]
-fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
     use std::{thread, time};
 
     skip_if_not_enterprise!();
     let url = learn_faktory_url();
-    let mut p = Producer::connect(Some(&url)).unwrap();
-    let mut t = Client::connect(Some(&url)).unwrap();
+    let mut cl = Client::connect(Some(&url)).await.unwrap();
+    let mut tracker = Client::connect(Some(&url)).await.unwrap();
     let q_name = "test_callback_will_be_queued_upon_commit_even_if_batch_is_empty";
     let complete_cb_jobtype = "complete_callback_jobtype";
     let success_cb_jobtype = "success_cb_jobtype";
     let complete_cb = some_jobs(complete_cb_jobtype, q_name, 1).next().unwrap();
     let success_cb = some_jobs(success_cb_jobtype, q_name, 1).next().unwrap();
-    let b = p
+    let b = cl
         .start_batch(
             Batch::builder()
                 .description("Orders processing workload")
                 .with_callbacks(success_cb, complete_cb),
         )
+        .await
         .unwrap();
     let bid = b.id().to_owned();
 
-    let s = t.get_batch_status(bid.clone()).unwrap().unwrap();
+    let s = tracker
+        .get_batch_status(bid.clone())
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(s.total, 0); // no jobs in the batch;
     assert_eq!(s.success_callback_state, CallbackState::Pending);
     assert_eq!(s.complete_callback_state, CallbackState::Pending);
 
-    b.commit().unwrap();
+    b.commit().await.unwrap();
 
     // let's give the Faktory server some time:
     thread::sleep(time::Duration::from_secs(2));
 
-    let s = t.get_batch_status(bid.clone()).unwrap().unwrap();
+    let s = tracker
+        .get_batch_status(bid.clone())
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(s.total, 0); // again, there are no jobs in the batch ...
 
     // The docs say "If you don't push any jobs into the batch, any callbacks will fire immediately upon BATCH COMMIT."
@@ -894,20 +939,25 @@ fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
     assert_eq!(s.complete_callback_state, CallbackState::Enqueued);
     assert_eq!(s.success_callback_state, CallbackState::Pending);
 
-    let mut c = ConsumerBuilder::default();
-    c.register(complete_cb_jobtype, move |_job| -> io::Result<_> { Ok(()) });
-    c.register(success_cb_jobtype, move |_job| -> io::Result<_> {
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            "we want this one to fail to test the 'CallbackState' behavior",
-        ))
-    });
+    let mut w = WorkerBuilder::default()
+        .register_fn(complete_cb_jobtype, |_job| async { Ok(()) })
+        .register_fn(success_cb_jobtype, |_job| async {
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                "we want this one to fail to test the 'CallbackState' behavior",
+            ))
+        })
+        .connect(Some(&url))
+        .await
+        .unwrap();
 
-    let mut c = c.connect(Some(&url)).unwrap();
+    assert_had_one!(&mut w, q_name); // complete callback consumed
 
-    assert_had_one!(&mut c, q_name); // complete callback consumed
-
-    let s = t.get_batch_status(bid.clone()).unwrap().unwrap();
+    let s = tracker
+        .get_batch_status(bid.clone())
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(s.total, 0);
     match s.complete_callback_state {
         CallbackState::FinishedOk => {}
@@ -917,9 +967,13 @@ fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
         CallbackState::Enqueued => {}
         _ => panic!("Expected the callback to have been enqueued, since the `complete` callback has already executed"),
     }
-    assert_had_one!(&mut c, q_name); // success callback consumed
+    assert_had_one!(&mut w, q_name); // success callback consumed
 
-    let s = t.get_batch_status(bid.clone()).unwrap().unwrap();
+    let s = tracker
+        .get_batch_status(bid.clone())
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(s.total, 0);
     assert_eq!(s.complete_callback_state, CallbackState::FinishedOk);
     // Still `Enqueued` due to the fact that it was not finished with success.
@@ -928,12 +982,12 @@ fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
     assert_eq!(s.success_callback_state, CallbackState::Enqueued);
 }
 
-#[test]
-fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
     skip_if_not_enterprise!();
     let url = learn_faktory_url();
-    let mut p = Producer::connect(Some(&url)).unwrap();
-    let mut t = Client::connect(Some(&url)).unwrap();
+    let mut p = Client::connect(Some(&url)).await.unwrap();
+    let mut t = Client::connect(Some(&url)).await.unwrap();
     let mut jobs = some_jobs("order", "test_batch_can_be_reopned_add_extra_jobs_added", 4);
     let mut callbacks = some_jobs(
         "order_clean_up",
@@ -945,18 +999,21 @@ fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
         .description("Orders processing workload")
         .with_success_callback(callbacks.next().unwrap());
 
-    let mut b = p.start_batch(b).unwrap();
-    let bid = b.id().to_string();
-    b.add(jobs.next().unwrap()).unwrap(); // 1 job
-    b.add(jobs.next().unwrap()).unwrap(); // 2 jobs
+    let mut b = p.start_batch(b).await.unwrap();
+    let bid = b.id().to_owned();
+    b.add(jobs.next().unwrap()).await.unwrap(); // 1 job
+    b.add(jobs.next().unwrap()).await.unwrap(); // 2 jobs
 
-    let status = t.get_batch_status(bid.clone()).unwrap().unwrap();
+    let status = t.get_batch_status(bid.clone()).await.unwrap().unwrap();
     assert_eq!(status.total, 2);
     assert_eq!(status.pending, 2);
 
     // ############################## SUBTEST 0 ##########################################
     // Let's try to open/reopen a batch we have never declared:
-    let b = p.open_batch(String::from("non-existent-batch-id")).unwrap();
+    let b = p
+        .open_batch(BatchId::new("non-existent-batch-id"))
+        .await
+        .unwrap();
     // The server will error back on this, with "No such batch <provided batch id>", but
     // we are handling this case for the end-user and returning `Ok(None)` instead, indicating
     // this way that there is not such batch.
@@ -967,12 +1024,12 @@ fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
     // Let's fist of all try to open the batch we have not committed yet:
     // [We can use `producer::open_batch` specifying a bid OR - even we previously retrived
     // a status for this batch, we can go with `status::open` providing an exclusive ref to producer]
-    let mut b = status.open(&mut p).unwrap().unwrap();
-    b.add(jobs.next().unwrap()).unwrap(); // 3 jobs
+    let mut b = status.open(&mut p).await.unwrap().unwrap();
+    b.add(jobs.next().unwrap()).await.unwrap(); // 3 jobs
 
-    b.commit().unwrap(); // committig the batch
+    b.commit().await.unwrap(); // committig the batch
 
-    let status = t.get_batch_status(bid.clone()).unwrap().unwrap();
+    let status = t.get_batch_status(bid.clone()).await.unwrap().unwrap();
     assert_eq!(status.total, 3);
     assert_eq!(status.pending, 3);
 
@@ -991,12 +1048,13 @@ fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
     // Let's try to open an already committed batch:
     let mut b = p
         .open_batch(bid.clone())
+        .await
         .expect("no error")
         .expect("is some");
-    b.add(jobs.next().unwrap()).unwrap(); // 4 jobs
-    b.commit().unwrap(); // committing the batch again!
+    b.add(jobs.next().unwrap()).await.unwrap(); // 4 jobs
+    b.commit().await.unwrap(); // committing the batch again!
 
-    let s = t.get_batch_status(bid.clone()).unwrap().unwrap();
+    let s = t.get_batch_status(bid.clone()).await.unwrap().unwrap();
     assert_eq!(s.total, 4);
     assert_eq!(s.pending, 4);
 
@@ -1007,7 +1065,7 @@ fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
     // ############################## SUBTEST 3 ############################################
     // Let's see if we will be able to - again - open the committed batch "from outside" and
     // add a nested batch to it.
-    let mut b = p.open_batch(bid.clone()).unwrap().expect("is some");
+    let mut b = p.open_batch(bid.clone()).await.unwrap().expect("is some");
     let mut nested_callbacks = some_jobs(
         "order_clean_up__NESTED",
         "test_batch_can_be_reopned_add_extra_jobs_added__CALLBACKs__NESTED",
@@ -1019,13 +1077,17 @@ fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
             nested_callbacks.next().unwrap(),
             nested_callbacks.next().unwrap(),
         );
-    let nested_batch = b.start_batch(nested_batch_declaration).unwrap();
-    let nested_bid = nested_batch.id().to_string();
+    let nested_batch = b.start_batch(nested_batch_declaration).await.unwrap();
+    let nested_bid = nested_batch.id().to_owned();
     // committing the nested batch without any jobs
     // since those are just not relevant for this test:
-    nested_batch.commit().unwrap();
+    nested_batch.commit().await.unwrap();
 
-    let s = t.get_batch_status(nested_bid.clone()).unwrap().unwrap();
+    let s = t
+        .get_batch_status(nested_bid.clone())
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(s.total, 0);
     assert_eq!(s.parent_bid, Some(bid)); // this is really our child batch
     assert_eq!(s.complete_callback_state, CallbackState::Enqueued);
@@ -1048,6 +1110,7 @@ fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
     // Let's try to re-open the nested batch that we have already committed and add some jobs to it.
     let mut b = p
         .open_batch(nested_bid.clone())
+        .await
         .expect("no error")
         .expect("is some");
     let mut more_jobs = some_jobs(
@@ -1055,11 +1118,15 @@ fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
         "test_batch_can_be_reopned_add_extra_jobs_added__NESTED",
         2,
     );
-    b.add(more_jobs.next().unwrap()).unwrap();
-    b.add(more_jobs.next().unwrap()).unwrap();
-    b.commit().unwrap();
+    b.add(more_jobs.next().unwrap()).await.unwrap();
+    b.add(more_jobs.next().unwrap()).await.unwrap();
+    b.commit().await.unwrap();
 
-    let s = t.get_batch_status(nested_bid.clone()).unwrap().unwrap();
+    let s = t
+        .get_batch_status(nested_bid.clone())
+        .await
+        .unwrap()
+        .unwrap();
     match s.complete_callback_state {
         CallbackState::Enqueued => {}
         _ => panic!("Expected the callback to have been enqueued"),

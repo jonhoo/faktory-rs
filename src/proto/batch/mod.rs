@@ -1,14 +1,17 @@
 #[cfg(doc)]
 use crate::Client;
 
-use crate::{Error, Job, Producer};
-use chrono::{DateTime, Utc};
+use crate::proto::{BatchId, Job};
 use derive_builder::Builder;
-use std::io::{Read, Write};
 
 mod cmd;
+mod handle;
+mod status;
 
-pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
+pub use handle::BatchHandle;
+pub use status::{BatchStatus, CallbackState};
+
+pub(crate) use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 
 /// Batch of jobs.
 ///
@@ -27,10 +30,11 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 ///
 /// Here is how you can create a simple batch:
 /// ```no_run
+/// # tokio_test::block_on(async {
 /// # use faktory::Error;
-/// use faktory::{Producer, Job, ent::Batch};
+/// use faktory::{Client, Job, ent::Batch};
 ///
-/// let mut prod = Producer::connect(None)?;
+/// let mut cl = Client::connect(None).await?;
 /// let job1 = Job::builder("job_type").build();
 /// let job2 = Job::builder("job_type").build();
 /// let job_cb = Job::builder("callback_job_type").build();
@@ -39,19 +43,21 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 ///     .description("Batch description")
 ///     .with_complete_callback(job_cb);
 ///
-/// let mut batch = prod.start_batch(batch)?;
-/// batch.add(job1)?;
-/// batch.add(job2)?;
-/// batch.commit()?;
+/// let mut batch = cl.start_batch(batch).await?;
+/// batch.add(job1).await?;
+/// batch.add(job2).await?;
+/// batch.commit().await?;
 ///
 /// # Ok::<(), Error>(())
+/// # });
 /// ```
 ///
 /// Nested batches are also supported:
 /// ```no_run
-/// # use faktory::{Producer, Job, Error};
+/// # tokio_test::block_on(async {
+/// # use faktory::{Client, Job, Error};
 /// # use faktory::ent::Batch;
-/// # let mut prod = Producer::connect(None)?;
+/// # let mut cl = Client::connect(None).await?;
 /// let parent_job1 = Job::builder("job_type").build();
 /// let parent_job2 = Job::builder("another_job_type").build();
 /// let parent_cb = Job::builder("callback_job_type").build();
@@ -67,17 +73,18 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 ///     .description("Child batch description")
 ///     .with_success_callback(child_cb);
 ///
-/// let mut parent = prod.start_batch(parent_batch)?;
-/// parent.add(parent_job1)?;
-/// parent.add(parent_job2)?;
-/// let mut child = parent.start_batch(child_batch)?;
-/// child.add(child_job1)?;
-/// child.add(child_job2)?;
+/// let mut parent = cl.start_batch(parent_batch).await?;
+/// parent.add(parent_job1).await?;
+/// parent.add(parent_job2).await?;
+/// let mut child = parent.start_batch(child_batch).await?;
+/// child.add(child_job1).await?;
+/// child.add(child_job2).await?;
 ///
-/// child.commit()?;
-/// parent.commit()?;
+/// child.commit().await?;
+/// parent.commit().await?;
 ///
 /// # Ok::<(), Error>(())
+/// });
 /// ```
 ///
 /// In the example above, there is a single level nesting, but you can nest those batches as deep as you wish,
@@ -87,22 +94,23 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// You can retieve the batch status using a [`Client`]:
 /// ```no_run
 /// # use faktory::Error;
-/// # use faktory::{Producer, Job, Client};
+/// # use faktory::{Job, Client};
 /// # use faktory::ent::{Batch, CallbackState};
-/// let mut prod = Producer::connect(None)?;
+/// # tokio_test::block_on(async {
+/// let mut cl = Client::connect(None).await?;
 /// let job = Job::builder("job_type").build();
 /// let cb_job = Job::builder("callback_job_type").build();
 /// let b = Batch::builder()
 ///     .description("Batch description")
 ///     .with_complete_callback(cb_job);
 ///
-/// let mut b = prod.start_batch(b)?;
-/// let bid = b.id().to_string();
-/// b.add(job)?;
-/// b.commit()?;
+/// let mut b = cl.start_batch(b).await?;
+/// let bid = b.id().to_owned();
+/// b.add(job).await?;
+/// b.commit().await?;
 ///
-/// let mut t = Client::connect(None)?;
-/// let s = t.get_batch_status(bid)?.unwrap();
+/// let mut t = Client::connect(None).await?;
+/// let s = t.get_batch_status(bid).await?.unwrap();
 /// assert_eq!(s.total, 1);
 /// assert_eq!(s.pending, 1);
 /// assert_eq!(s.description, Some("Batch description".into()));
@@ -112,8 +120,9 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 ///     _ => panic!("The jobs of this batch have not executed, so the callback job is expected to _not_ have fired"),
 /// }
 /// # Ok::<(), Error>(())
+/// });
 /// ```
-#[derive(Builder, Debug, Serialize)]
+#[derive(Builder, Default, Debug, Serialize)]
 #[builder(
     custom_constructor,
     pattern = "owned",
@@ -123,7 +132,7 @@ pub use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 pub struct Batch {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[builder(setter(skip))]
-    parent_bid: Option<String>,
+    parent_bid: Option<BatchId>,
 
     /// Batch description for Faktory WEB UI.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -146,6 +155,12 @@ pub struct Batch {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[builder(setter(skip))]
     pub(crate) complete: Option<Job>,
+}
+
+impl Default for BatchBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Batch {
@@ -197,140 +212,11 @@ impl BatchBuilder {
 impl Clone for BatchBuilder {
     fn clone(&self) -> Self {
         BatchBuilder {
-            parent_bid: self.parent_bid.clone(),
+            parent_bid: self.parent_bid,
             description: self.description.clone(),
-            success: self.success.clone(),
-            complete: self.complete.clone(),
+            success: self.success,
+            complete: self.complete,
         }
-    }
-}
-
-/// Represents a newly started or re-opened batch of jobs.
-pub struct BatchHandle<'a, S: Read + Write> {
-    bid: String,
-    prod: &'a mut Producer<S>,
-}
-
-impl<'a, S: Read + Write> BatchHandle<'a, S> {
-    /// ID issued by the Faktory server to this batch.
-    pub fn id(&self) -> &str {
-        self.bid.as_ref()
-    }
-
-    pub(crate) fn new(bid: String, prod: &mut Producer<S>) -> BatchHandle<'_, S> {
-        BatchHandle { bid, prod }
-    }
-
-    /// Add the given job to the batch.
-    ///
-    /// Should the submitted job - for whatever reason - already have a `bid` key present in its custom hash,
-    /// this value will be overwritten by the ID of the batch this job is being added to with the old value
-    /// returned as `Some(<old value here>)`.
-    pub fn add(&mut self, mut job: Job) -> Result<Option<serde_json::Value>, Error> {
-        let bid = job.custom.insert("bid".into(), self.bid.clone().into());
-        self.prod.enqueue(job).map(|_| bid)
-    }
-
-    /// Initiate a child batch of jobs.
-    pub fn start_batch(&mut self, mut batch: Batch) -> Result<BatchHandle<'_, S>, Error> {
-        batch.parent_bid = Some(self.bid.clone());
-        self.prod.start_batch(batch)
-    }
-
-    /// Commit this batch.
-    ///
-    /// The Faktory server will not queue any callbacks, unless the batch is committed.
-    /// Committing an empty batch will make the server queue the callback(s) right away.
-    /// Once committed, the batch can still be re-opened with [open_batch](Producer::open_batch),
-    /// and extra jobs can be added to it.
-    pub fn commit(self) -> Result<(), Error> {
-        self.prod.commit_batch(self.bid)
-    }
-}
-
-// Not documented, but existing de fakto and also mentioned in the official client
-// https://github.com/contribsys/faktory/blob/main/client/batch.go#L17-L19
-/// State of a `callback` job of a [`Batch`].
-#[derive(Copy, Clone, Debug, Deserialize, Eq, PartialEq)]
-#[non_exhaustive]
-pub enum CallbackState {
-    /// Not enqueued yet.
-    #[serde(rename = "")]
-    Pending,
-    /// Enqueued by the server, because the jobs belonging to this batch have finished executing.
-    /// If a callback has been consumed, it's status is still `Enqueued`.
-    /// If a callback has finished with failure, it's status remains `Enqueued`.
-    #[serde(rename = "1")]
-    Enqueued,
-    /// The enqueued callback job has been consumed and successfully executed.
-    #[serde(rename = "2")]
-    FinishedOk,
-}
-
-impl std::fmt::Display for CallbackState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use CallbackState::*;
-        let s = match self {
-            Pending => "Pending",
-            Enqueued => "Enqueued",
-            FinishedOk => "FinishedOk",
-        };
-        write!(f, "{}", s)
-    }
-}
-
-/// Batch status retrieved from Faktory server.
-#[derive(Deserialize, Debug)]
-pub struct BatchStatus {
-    // Fields "bid", "created_at", "description", "total", "pending", and "failed"
-    // are described in the docs: https://github.com/contribsys/faktory/wiki/Ent-Batches#status
-    /// Id of this batch.
-    pub bid: String,
-
-    /// Batch creation date and time.
-    pub created_at: DateTime<Utc>,
-
-    /// Batch description, if any.
-    pub description: Option<String>,
-
-    /// Number of jobs in this batch.
-    pub total: usize,
-
-    /// Number of pending jobs.
-    pub pending: usize,
-
-    /// Number of failed jobs.
-    pub failed: usize,
-
-    // The official golang client also mentions "parent_bid', "complete_st", and "success_st":
-    // https://github.com/contribsys/faktory/blob/main/client/batch.go#L8-L22
-    /// Id of the parent batch, provided this batch is a child ("nested") batch.
-    pub parent_bid: Option<String>,
-
-    /// State of the `complete` callback.
-    ///
-    /// See [with_complete_callback](struct.BatchBuilder.html#method.with_complete_callback).
-    #[serde(rename = "complete_st")]
-    pub complete_callback_state: CallbackState,
-
-    /// State of the `success` callback.
-    ///
-    /// See [with_success_callback](struct.BatchBuilder.html#method.with_success_callback).
-    #[serde(rename = "success_st")]
-    pub success_callback_state: CallbackState,
-}
-
-#[cfg(feature = "ent")]
-#[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
-impl<'a> BatchStatus {
-    /// Open the batch for which this `BatchStatus` has been retrieved.
-    ///
-    /// See [`open_batch`](Producer::open_batch).
-    pub fn open<S: Read + Write>(
-        &self,
-        prod: &'a mut Producer<S>,
-    ) -> Result<Option<BatchHandle<'a, S>>, Error> {
-        prod.open_batch(self.bid.clone())
     }
 }
 
@@ -339,6 +225,8 @@ mod test {
     use std::str::FromStr;
 
     use chrono::{DateTime, Utc};
+
+    use crate::JobId;
 
     use super::*;
 
@@ -375,7 +263,7 @@ mod test {
     #[test]
     fn test_batch_serialized_correctly() {
         let prepare_test_job = |jobtype: String| {
-            let jid = "LFluKy1Baak83p54";
+            let jid = JobId::new("LFluKy1Baak83p54");
             let dt = "2023-12-22T07:00:52.546258624Z";
             let created_at = DateTime::<Utc>::from_str(dt).unwrap();
             Job::builder(jobtype)

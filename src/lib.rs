@@ -20,43 +20,47 @@
 //!
 //! In this crate, you will find bindings both for submitting jobs (clients that *produce* jobs)
 //! and for executing jobs (workers that *consume* jobs). The former can be done by making a
-//! `Producer`, whereas the latter is done with a `Consumer`. See the documentation for each for
+//! `Client`, whereas the latter is done with a `Worker`. See the documentation for each for
 //! more details on how to use them.
 //!
 //! # Encrypted connections (TLS)
 //!
 //! To connect to a Faktory server hosted over TLS, add the `tls` feature, and see the
-//! documentation for `TlsStream`, which can be supplied to `Producer::connect_with` and
-//! `Consumer::connect_with`.
+//! documentation for `TlsStream`, which can be supplied to [`Client::connect_with`] and
+//! [`WorkerBuilder::connect_with`].
 //!
 //! # Examples
 //!
-//! If you want to **submit** jobs to Faktory, use `Producer`.
+//! If you want to **submit** jobs to Faktory, use `Client`.
 //!
 //! ```no_run
-//! use faktory::{Producer, Job};
-//! let mut p = Producer::connect(None).unwrap();
-//! p.enqueue(Job::new("foobar", vec!["z"])).unwrap();
+//! # tokio_test::block_on(async {
+//! use faktory::{Client, Job};
+//! let mut client = Client::connect(None).await.unwrap();
+//! client.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
 //!
-//! let (enqueued_count, errors) = p.enqueue_many(vec![Job::new("foobar", vec!["z"]), Job::new("foobar", vec!["z"])]).unwrap();
+//! let (enqueued_count, errors) = client.enqueue_many([Job::new("foobar", vec!["z"]), Job::new("foobar", vec!["z"])]).await.unwrap();
 //! assert_eq!(enqueued_count, 2);
 //! assert_eq!(errors, None);
+//! });
 //! ```
-//!
-//! If you want to **accept** jobs from Faktory, use `Consumer`.
+//! If you want to **accept** jobs from Faktory, use `Worker`.
 //!
 //! ```no_run
-//! use faktory::ConsumerBuilder;
+//! # tokio_test::block_on(async {
+//! use faktory::WorkerBuilder;
 //! use std::io;
-//! let mut c = ConsumerBuilder::default();
-//! c.register("foobar", |job| -> io::Result<()> {
-//!     println!("{:?}", job);
-//!     Ok(())
-//! });
-//! let mut c = c.connect(None).unwrap();
-//! if let Err(e) = c.run(&["default"]) {
+//! let mut w = WorkerBuilder::default()
+//!     .register_fn("foobar", |job| async move {
+//!         println!("{:?}", job);
+//!         Ok::<(), io::Error>(())
+//!     })
+//!     .connect(None).await.unwrap();
+//!
+//! if let Err(e) = w.run(&["default"]).await {
 //!     println!("worker failed: {}", e);
 //! }
+//! # });
 //! ```
 #![deny(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -67,29 +71,25 @@ extern crate serde_derive;
 
 pub mod error;
 
-mod consumer;
-mod producer;
 mod proto;
+mod worker;
 
-pub use crate::consumer::{Consumer, ConsumerBuilder, JobRunner};
 pub use crate::error::Error;
-pub use crate::producer::Producer;
-pub use crate::proto::{Client, Job, JobBuilder, Reconnect};
+pub use crate::proto::{Client, Job, JobBuilder, JobId, Reconnect, WorkerId};
+pub use crate::worker::{JobRunner, Worker, WorkerBuilder};
 
 #[cfg(feature = "ent")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
 /// Constructs only available with the enterprise version of Faktory.
 pub mod ent {
     pub use crate::proto::{
-        Batch, BatchBuilder, BatchHandle, BatchStatus, CallbackState, JobState, Progress,
+        Batch, BatchBuilder, BatchHandle, BatchId, BatchStatus, CallbackState, JobState, Progress,
         ProgressUpdate, ProgressUpdateBuilder,
     };
 }
 
-#[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
+#[cfg(any(feature = "native_tls", feature = "rustls"))]
 mod tls;
 
-#[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
-pub use tls::TlsStream;
+#[cfg(any(feature = "native_tls", feature = "rustls"))]
+pub use tls::*;

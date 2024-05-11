@@ -1,21 +1,25 @@
+use crate::Error;
 use chrono::{DateTime, Utc};
 use derive_builder::Builder;
 use std::collections::HashMap;
-use std::io::prelude::*;
+use tokio::io::{AsyncBufRead, AsyncWrite, AsyncWriteExt};
 
 mod cmd;
+mod id;
 mod resp;
 mod utils;
+
+pub use cmd::*;
+pub use id::{JobId, WorkerId};
+pub use resp::*;
 
 #[cfg(feature = "ent")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
 pub mod ent;
 
-pub use self::cmd::*;
-pub use self::resp::*;
-use crate::error::Error;
-
-pub(crate) use self::utils::gen_random_wid;
+#[cfg(feature = "ent")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
+pub use id::BatchId;
 
 const JOB_DEFAULT_QUEUE: &str = "default";
 const JOB_DEFAULT_RESERVED_FOR_SECS: usize = 600;
@@ -66,8 +70,8 @@ const JOB_DEFAULT_BACKTRACE: usize = 0;
 )]
 pub struct Job {
     /// The job's unique identifier.
-    #[builder(default = "utils::gen_random_jid()")]
-    pub(crate) jid: String,
+    #[builder(default = "JobId::random()")]
+    pub(crate) jid: JobId,
 
     /// The queue this job belongs to. Usually `default`.
     #[builder(default = "JOB_DEFAULT_QUEUE.into()")]
@@ -76,7 +80,7 @@ pub struct Job {
     /// The job's type. Called `kind` because `type` is reserved.
     #[serde(rename = "jobtype")]
     #[builder(setter(custom))]
-    pub(crate) kind: String,
+    pub kind: String,
 
     /// The arguments provided for this job.
     #[builder(setter(custom), default = "Vec::new()")]
@@ -159,9 +163,10 @@ impl JobBuilder {
     }
 
     /// Setter for the arguments provided for this job.
-    pub fn args<A>(&mut self, args: Vec<A>) -> &mut Self
+    pub fn args<I, V>(&mut self, args: I) -> &mut Self
     where
-        A: Into<serde_json::Value>,
+        I: IntoIterator<Item = V>,
+        V: Into<serde_json::Value>,
     {
         self.args = Some(args.into_iter().map(|s| s.into()).collect());
         self
@@ -236,7 +241,7 @@ impl Job {
     }
 
     /// This job's id.
-    pub fn id(&self) -> &str {
+    pub fn id(&self) -> &JobId {
         &self.jid
     }
 
@@ -256,17 +261,23 @@ impl Job {
     }
 }
 
-pub fn write_command<W: Write, C: FaktoryCommand>(w: &mut W, command: &C) -> Result<(), Error> {
-    command.issue::<W>(w)?;
-    Ok(w.flush()?)
-}
-
-pub fn write_command_and_await_ok<X: BufRead + Write, C: FaktoryCommand>(
-    x: &mut X,
+pub async fn write_command<W: AsyncWrite + Unpin + Send, C: FaktoryCommand>(
+    w: &mut W,
     command: &C,
 ) -> Result<(), Error> {
-    write_command(x, command)?;
-    read_ok(x)
+    command.issue::<W>(w).await?;
+    Ok(w.flush().await?)
+}
+
+pub async fn write_command_and_await_ok<
+    S: AsyncBufRead + AsyncWrite + Unpin + Send,
+    C: FaktoryCommand,
+>(
+    stream: &mut S,
+    command: &C,
+) -> Result<(), Error> {
+    write_command(stream, command).await?;
+    read_ok(stream).await
 }
 
 #[cfg(test)]
@@ -279,7 +290,7 @@ mod test {
         let job_args = vec!["ISBN-13:9781718501850"];
         let job = JobBuilder::new(job_kind).args(job_args.clone()).build();
 
-        assert!(job.jid != "".to_owned());
+        assert_ne!(&job.jid, "");
         assert!(job.queue == JOB_DEFAULT_QUEUE.to_string());
         assert_eq!(job.kind, job_kind);
         assert_eq!(job.args, job_args);

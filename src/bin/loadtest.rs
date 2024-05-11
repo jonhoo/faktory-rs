@@ -5,15 +5,16 @@ use rand::prelude::*;
 use std::io;
 use std::process;
 use std::sync::{self, atomic};
-use std::thread;
 use std::time;
+use tokio::task;
 
 const QUEUES: &[&str] = &["queue0", "queue1", "queue2", "queue3", "queue4"];
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let matches = Command::new("My Super Program")
         .version("0.1")
-        .about("Benchmark the performance of Rust Faktory consumers and producers")
+        .about("Benchmark the performance of Rust Faktory async workers and client")
         .arg(
             Arg::new("jobs")
                 .help("Number of jobs to run")
@@ -23,7 +24,7 @@ fn main() {
         )
         .arg(
             Arg::new("threads")
-                .help("Number of consumers/producers to run")
+                .help("Number of workers/clients to run")
                 .value_parser(value_parser!(usize))
                 .index(2)
                 .default_value("10"),
@@ -37,8 +38,10 @@ fn main() {
         jobs, threads
     );
 
-    // ensure that we can actually connect to the server
-    if let Err(e) = Producer::connect(None) {
+    // ensure that we can actually connect to the server;
+    // will create a client, run a handshake with Faktory,
+    // and drop the cliet immediately afterwards;
+    if let Err(e) = Client::connect(None).await {
         println!("{}", e);
         process::exit(1);
     }
@@ -47,55 +50,63 @@ fn main() {
     let popped = sync::Arc::new(atomic::AtomicUsize::new(0));
 
     let start = time::Instant::now();
-    let threads: Vec<thread::JoinHandle<Result<_, Error>>> = (0..threads)
-        .map(|_| {
-            let pushed = sync::Arc::clone(&pushed);
-            let popped = sync::Arc::clone(&popped);
-            thread::spawn(move || {
-                // make producer and consumer
-                let mut p = Producer::connect(None).unwrap();
-                let mut c = ConsumerBuilder::default();
-                c.register("SomeJob", |_| {
-                    let mut rng = rand::thread_rng();
-                    if rng.gen_bool(0.01) {
-                        Err(io::Error::new(io::ErrorKind::Other, "worker closed"))
-                    } else {
-                        Ok(())
-                    }
-                });
-                let mut c = c.connect(None).unwrap();
 
-                let mut rng = rand::thread_rng();
-                let mut random_queues = Vec::from(QUEUES);
-                random_queues.shuffle(&mut rng);
-                for idx in 0..jobs {
-                    if idx % 2 == 0 {
-                        // push
-                        let mut job = Job::new(
-                            "SomeJob",
-                            vec![serde_json::Value::from(1), "string".into(), 3.into()],
-                        );
-                        job.priority = Some(rng.gen_range(1..10));
-                        job.queue = QUEUES.choose(&mut rng).unwrap().to_string();
-                        p.enqueue(job)?;
-                        if pushed.fetch_add(1, atomic::Ordering::SeqCst) >= jobs {
-                            return Ok(idx);
+    let mut set = task::JoinSet::new();
+    for _ in 0..threads {
+        let pushed = sync::Arc::clone(&pushed);
+        let popped = sync::Arc::clone(&popped);
+        set.spawn(async move {
+            // make producer and consumer
+            let mut p = Client::connect(None).await.unwrap();
+            let mut worker = WorkerBuilder::default()
+                .register_fn("SomeJob", |_| {
+                    Box::pin(async move {
+                        let mut rng = rand::thread_rng();
+                        if rng.gen_bool(0.01) {
+                            Err(io::Error::new(io::ErrorKind::Other, "worker closed"))
+                        } else {
+                            Ok(())
                         }
-                    } else {
-                        // pop
-                        c.run_one(0, &random_queues[..])?;
-                        if popped.fetch_add(1, atomic::Ordering::SeqCst) >= jobs {
-                            return Ok(idx);
-                        }
+                    })
+                })
+                .connect(None)
+                .await
+                .unwrap();
+            let mut rng = rand::rngs::OsRng;
+            let mut random_queues = Vec::from(QUEUES);
+            random_queues.shuffle(&mut rng);
+            for idx in 0..jobs {
+                if idx % 2 == 0 {
+                    // push
+                    let mut job = Job::new(
+                        "SomeJob",
+                        vec![serde_json::Value::from(1), "string".into(), 3.into()],
+                    );
+                    job.priority = Some(rng.gen_range(1..10));
+                    job.queue = QUEUES.choose(&mut rng).unwrap().to_string();
+                    p.enqueue(job).await?;
+                    if pushed.fetch_add(1, atomic::Ordering::SeqCst) >= jobs {
+                        return Ok::<usize, Error>(idx);
+                    }
+                } else {
+                    // pop
+                    worker.run_one(0, &random_queues[..]).await?;
+                    if popped.fetch_add(1, atomic::Ordering::SeqCst) >= jobs {
+                        return Ok(idx);
                     }
                 }
-                Ok(jobs)
-            })
-        })
-        .collect();
+            }
+            Ok(jobs)
+        });
+    }
 
-    let _ops_count: Result<Vec<_>, _> = threads.into_iter().map(|jt| jt.join().unwrap()).collect();
+    let mut ops_count = Vec::with_capacity(threads);
+    while let Some(res) = set.join_next().await {
+        ops_count.push(res.unwrap())
+    }
+
     let stop = start.elapsed();
+
     let stop_secs = stop.as_secs() * 1_000_000_000 + u64::from(stop.subsec_nanos());
     let stop_secs = stop_secs as f64 / 1_000_000_000.0;
     println!(
@@ -105,5 +116,8 @@ fn main() {
         stop_secs,
         jobs as f64 / stop_secs,
     );
-    // println!("{:?}", _ops_count);
+    println!(
+        "Number of operations (pushes and pops) per thread: {:?}",
+        ops_count
+    );
 }
