@@ -51,7 +51,7 @@ async fn ent_expiring_job() {
     // prepare an expiring job:
     let job_ttl_secs: u64 = 3;
 
-    let ttl = chrono::Duration::try_seconds(job_ttl_secs as i64).unwrap();
+    let ttl = chrono::Duration::seconds(job_ttl_secs as i64);
     let job1 = JobBuilder::new("AnExpiringJob")
         .args(vec!["ISBN-13:9781718501850"])
         .queue(local)
