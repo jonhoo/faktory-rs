@@ -3,27 +3,36 @@ use crate::error::Error;
 use crate::proto::{single::FaktoryCommand, JobId};
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
+#[async_trait::async_trait]
+impl<P> FaktoryCommand for P
+where
+    P: AsRef<ProgressUpdate> + Sync,
+{
+    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+        w.write_all(b"TRACK SET ").await?;
+        let r = serde_json::to_vec(self.as_ref()).map_err(Error::Serialization)?;
+        w.write_all(&r).await?;
+        Ok(w.write_all(b"\r\n").await?)
+    }
+}
+
 #[derive(Debug, Clone)]
-pub enum Track {
-    Set(ProgressUpdate),
-    Get(JobId),
+pub(crate) struct FetchProgress<J>(J);
+
+impl<J> FetchProgress<J> {
+    pub fn new(j: J) -> Self {
+        Self(j)
+    }
 }
 
 #[async_trait::async_trait]
-impl FaktoryCommand for Track {
+impl<J> FaktoryCommand for FetchProgress<J>
+where
+    J: AsRef<JobId> + Sync,
+{
     async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
-        match self {
-            Self::Set(upd) => {
-                w.write_all(b"TRACK SET ").await?;
-                let r = serde_json::to_vec(upd).map_err(Error::Serialization)?;
-                w.write_all(&r).await?;
-                Ok(w.write_all(b"\r\n").await?)
-            }
-            Self::Get(jid) => {
-                w.write_all(b"TRACK GET ").await?;
-                w.write_all(jid.as_bytes()).await?;
-                Ok(w.write_all(b"\r\n").await?)
-            }
-        }
+        w.write_all(b"TRACK GET ").await?;
+        w.write_all(self.0.as_ref().as_bytes()).await?;
+        Ok(w.write_all(b"\r\n").await?)
     }
 }

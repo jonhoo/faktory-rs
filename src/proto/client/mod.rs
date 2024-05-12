@@ -127,7 +127,7 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 ///     .desc("Almost done...".to_owned())
 ///     .percent(99)
 ///     .build();
-/// cl.set_progress(progress).await?;
+/// cl.set_progress(&progress).await?;
 /// # Ok::<(), faktory::Error>(())
 /// });
 ///````

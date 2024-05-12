@@ -16,7 +16,10 @@ pub(crate) use single::{Ack, Fail, Info, Push, PushBulk, QueueAction, QueueContr
 pub(crate) mod utils;
 
 #[cfg(feature = "ent")]
-pub use self::single::ent::{JobState, Progress, ProgressUpdate, ProgressUpdateBuilder, Track};
+pub use self::single::ent::{JobState, Progress, ProgressUpdate, ProgressUpdateBuilder};
+
+#[cfg(feature = "ent")]
+pub(crate) use self::single::ent::FetchProgress;
 
 #[cfg(feature = "ent")]
 pub use self::single::BatchId;

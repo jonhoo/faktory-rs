@@ -38,6 +38,12 @@ pub struct ProgressUpdate {
     pub reserve_until: Option<DateTime<Utc>>,
 }
 
+impl AsRef<Self> for ProgressUpdate {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+
 impl ProgressUpdate {
     /// Create an instance of `ProgressUpdate` for the job with this ID specifying its completion percentage.
     pub fn set(jid: JobId, percent: u8) -> ProgressUpdate {
