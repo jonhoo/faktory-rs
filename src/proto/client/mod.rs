@@ -437,7 +437,7 @@ where
 
 pub struct ReadToken<'a, S>(pub(crate) &'a mut Client<S>)
 where
-    S: AsyncBufRead + AsyncWrite + Unpin + Send;
+    S: AsyncWrite + Unpin + Send;
 
 impl<'a, S: AsyncBufRead + AsyncWrite + Unpin + Send> ReadToken<'a, S> {
     pub(crate) async fn read_ok(self) -> Result<(), Error> {

@@ -1,5 +1,5 @@
 use super::{Worker, STATUS_QUIET, STATUS_RUNNING, STATUS_TERMINATING};
-use crate::{proto::HeartbeatStatus, Error, Reconnect};
+use crate::{proto::HeartbeatStatus, Error};
 use std::{
     error::Error as StdError,
     sync::{atomic, Arc},
@@ -10,8 +10,8 @@ use tokio::time::sleep as tokio_sleep;
 
 impl<S, E> Worker<S, E>
 where
-    S: AsyncBufRead + AsyncWrite + Reconnect + Send + Unpin + 'static,
-    E: StdError + 'static + Send,
+    S: AsyncBufRead + AsyncWrite + Send + Unpin,
+    E: StdError,
 {
     /// Send beats to Fakotry and quiet/terminate workers if signalled so.
     ///

@@ -5,6 +5,7 @@ use fnv::FnvHashMap;
 use std::sync::{atomic, Arc};
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
 use tokio::io::{AsyncBufRead, AsyncWrite};
+use tokio::net::TcpStream;
 use tokio::task::{AbortHandle, JoinSet};
 
 mod builder;
@@ -102,7 +103,7 @@ type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// use faktory::{WorkerBuilder, Job};
+/// use faktory::{Worker, Job};
 /// use std::io;
 ///
 /// async fn process_job(job: Job) -> io::Result<()> {
@@ -110,7 +111,7 @@ type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
 ///     Ok(())
 /// }
 ///
-/// let mut w = WorkerBuilder::default()
+/// let mut w = Worker::builder()
 ///     .register_fn("foo", process_job)
 ///     .connect(None)
 ///     .await
@@ -126,9 +127,9 @@ type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// # use faktory::WorkerBuilder;
+/// # use faktory::Worker;
 /// # use std::io;
-/// let _w = WorkerBuilder::default()
+/// let _w = Worker::builder()
 ///     .register_fn("bar", |job| async move {
 ///         println!("{:?}", job);
 ///         Ok::<(), io::Error>(())
@@ -147,6 +148,15 @@ pub struct Worker<S: AsyncWrite + Send + Unpin, E> {
     worker_states: Arc<state::WorkerStatesRegistry>,
     callbacks: Arc<CallbacksRegistry<E>>,
     terminated: bool,
+}
+
+impl Worker<TcpStream, ()> {
+    /// Creates an ergonomic constructor for a new [`Worker`].
+    ///
+    /// Also equivalent to [`WorkerBuilder::default`].
+    pub fn builder<E>() -> WorkerBuilder<E> {
+        WorkerBuilder::default()
+    }
 }
 
 impl<S: AsyncBufRead + AsyncWrite + Send + Unpin + Reconnect, E> Worker<S, E> {

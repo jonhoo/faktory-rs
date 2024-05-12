@@ -7,7 +7,7 @@ FAKTORY_PORT_UI=7420
 .PHONY: check
 check:
 	cargo fmt --check
-	cargo clippy
+	cargo clippy --all-features
 	cargo d --no-deps --all-features
 
 .PHONY: doc

@@ -4,7 +4,6 @@ use crate::{Client, WorkerBuilder};
 use crate::error::{self, Error};
 use crate::proto::utils;
 use crate::Reconnect;
-use std::fmt::Debug;
 use std::io;
 use std::ops::{Deref, DerefMut};
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -55,7 +54,7 @@ impl TlsStream<TokioTcpStream> {
         TlsStream::with_connector(
             TlsConnector::builder()
                 .build()
-                .map_err(error::TlsStream::Native)?,
+                .map_err(error::Stream::NativeTls)?,
             url,
         )
         .await
@@ -77,7 +76,7 @@ impl TlsStream<TokioTcpStream> {
 
 impl<S> TlsStream<S>
 where
-    S: AsyncRead + AsyncWrite + Send + Unpin + Reconnect + Debug + 'static,
+    S: AsyncRead + AsyncWrite + Send + Unpin,
 {
     /// Create a new TLS connection on an existing stream.
     ///
@@ -87,7 +86,7 @@ where
     pub async fn default(stream: S, hostname: String) -> io::Result<Self> {
         let connector = TlsConnector::builder()
             .build()
-            .map_err(error::TlsStream::Native)
+            .map_err(error::Stream::NativeTls)
             .unwrap();
         Self::new(stream, connector, hostname).await
     }
@@ -114,7 +113,7 @@ where
 #[async_trait::async_trait]
 impl<S> Reconnect for TlsStream<S>
 where
-    S: AsyncRead + AsyncWrite + Send + Unpin + Reconnect + Debug + 'static + Sync,
+    S: AsyncRead + AsyncWrite + Send + Unpin + Reconnect,
 {
     async fn reconnect(&mut self) -> io::Result<Self> {
         let stream = self

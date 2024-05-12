@@ -1,11 +1,10 @@
+use crate::error::{self, Error};
+use chrono::{DateTime, Utc};
 use std::collections::HashMap;
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt};
 
 #[cfg(feature = "ent")]
 use crate::ent::BatchId;
-
-use crate::error::{self, Error};
-use chrono::{DateTime, Utc};
-use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt};
 
 pub fn bad(expected: &'static str, got: &RawResponse) -> error::Protocol {
     let stringy = match *got {

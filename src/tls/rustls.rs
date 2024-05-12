@@ -2,7 +2,6 @@
 use crate::{Client, WorkerBuilder};
 
 use crate::{proto::utils, Error, Reconnect};
-use std::fmt::Debug;
 use std::io;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
@@ -89,7 +88,7 @@ impl TlsStream<TokioTcpStream> {
 
 impl<S> TlsStream<S>
 where
-    S: AsyncRead + AsyncWrite + Send + Unpin + Reconnect + Debug + 'static,
+    S: AsyncRead + AsyncWrite + Send + Unpin,
 {
     /// Create a new TLS connection on an existing stream.
     ///
@@ -124,7 +123,7 @@ where
 #[async_trait::async_trait]
 impl<S> Reconnect for TlsStream<S>
 where
-    S: AsyncRead + AsyncWrite + Send + Unpin + Reconnect + Debug + 'static + Sync,
+    S: AsyncRead + AsyncWrite + Send + Unpin + Reconnect,
 {
     async fn reconnect(&mut self) -> io::Result<Self> {
         let stream = self.stream.get_mut().0.reconnect().await?;

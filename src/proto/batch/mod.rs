@@ -122,7 +122,7 @@ pub(crate) use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// # Ok::<(), Error>(())
 /// });
 /// ```
-#[derive(Builder, Debug, Serialize)]
+#[derive(Builder, Default, Debug, Serialize)]
 #[builder(
     custom_constructor,
     pattern = "owned",
@@ -155,6 +155,12 @@ pub struct Batch {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[builder(setter(skip))]
     pub(crate) complete: Option<Job>,
+}
+
+impl Default for BatchBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Batch {
@@ -206,10 +212,10 @@ impl BatchBuilder {
 impl Clone for BatchBuilder {
     fn clone(&self) -> Self {
         BatchBuilder {
-            parent_bid: self.parent_bid.clone(),
+            parent_bid: self.parent_bid,
             description: self.description.clone(),
-            success: self.success.clone(),
-            complete: self.complete.clone(),
+            success: self.success,
+            complete: self.complete,
         }
     }
 }
