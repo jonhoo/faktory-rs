@@ -61,15 +61,13 @@ impl<'a, S: AsyncBufRead + AsyncWrite + Unpin + Send> ReadToken<'a, S> {
     pub(crate) async fn maybe_bid(self) -> Result<Option<BatchId>, Error> {
         match single::read_bid(&mut self.0.stream).await {
             Ok(bid) => Ok(Some(bid)),
-            Err(err) => match err {
-                Error::Protocol(error::Protocol::Internal { msg }) => {
-                    if msg.starts_with("No such batch") {
-                        return Ok(None);
-                    }
-                    Err(error::Protocol::Internal { msg }.into())
+            Err(Error::Protocol(error::Protocol::Internal { msg })) => {
+                if msg.starts_with("No such batch") {
+                    return Ok(None);
                 }
-                another => Err(another),
-            },
+                Err(error::Protocol::Internal { msg }.into())
+            }
+            Err(another) => Err(another),
         }
     }
 }
