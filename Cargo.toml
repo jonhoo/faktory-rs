@@ -62,7 +62,6 @@ x509-parser = "0.15.1"
 
 # to make -Zminimal-versions work
 [target.'cfg(any())'.dependencies]
-chrono = "0.4.32"
 native-tls = { version = "0.2.4", optional = true }
 num-bigint = "0.4.2"
 oid-registry = "0.6.1"

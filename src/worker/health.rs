@@ -1,5 +1,5 @@
 use super::{Worker, STATUS_QUIET, STATUS_RUNNING, STATUS_TERMINATING};
-use crate::{proto::HeartbeatStatus, Error, Reconnect};
+use crate::{proto::HeartbeatStatus, Error};
 use std::{
     error::Error as StdError,
     sync::{atomic, Arc},
@@ -10,11 +10,10 @@ use tokio::time::sleep as tokio_sleep;
 
 const CHECK_STATE_INTERVAL_MILLIS: u64 = 100;
 const HEARTBEAT_INTERVAL_SECS: u64 = 5;
-
 impl<S, E> Worker<S, E>
 where
-    S: AsyncBufRead + AsyncWrite + Reconnect + Send + Unpin + 'static,
-    E: StdError + 'static + Send,
+    S: AsyncBufRead + AsyncWrite + Send + Unpin,
+    E: StdError,
 {
     /// Send beats to Fakotry and quiet/terminate workers if signalled so.
     ///
@@ -40,6 +39,7 @@ where
         loop {
             tokio_sleep(time::Duration::from_millis(CHECK_STATE_INTERVAL_MILLIS)).await;
 
+            // has a worker failed?
             let worker_failure = target == STATUS_RUNNING
                 && statuses
                     .iter()
@@ -54,6 +54,7 @@ where
             }
 
             if last.elapsed().as_secs() < HEARTBEAT_INTERVAL_SECS {
+                // don't sent a heartbeat yet
                 continue;
             }
 
