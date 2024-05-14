@@ -7,19 +7,17 @@ use std::sync::{atomic, Arc};
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
 use tokio::io::{AsyncBufRead, AsyncWrite};
 use tokio::net::TcpStream;
-use tokio::sync::oneshot::Receiver;
 use tokio::task::{AbortHandle, JoinSet};
 use tokio::time::sleep as tokio_sleep;
 use tokio::time::Duration as TokioDuration;
+use tokio_util::sync::CancellationToken;
 
 mod builder;
-mod channel;
 mod health;
 mod runner;
 mod state;
 
 pub use builder::WorkerBuilder;
-pub use channel::{channel, Message};
 pub use runner::JobRunner;
 
 pub(crate) const STATUS_RUNNING: usize = 0;
@@ -355,7 +353,8 @@ impl<
     }
 
     /// Run this worker on the given `queues` until an I/O error occurs (`Err` is returned), or
-    /// until the server tells the worker to disengage or [`Message::ReturnControl`] is sent (`Ok` is returned).
+    /// until the server tells the worker to disengage (`Ok` is returned), or a signal from the user-space
+    /// code has been received via a cancellation token (`Ok` is returned).
     ///
     /// The value in an `Ok` indicates the number of workers that may still be processing jobs, but `0` can also
     /// indicate the [graceful shutdown period](WorkerBuilder::graceful_shutdown_period) has been exceeded.
@@ -364,40 +363,49 @@ impl<
     /// without re-executing the job. If the worker was terminated (i.e., `run` returns  with an `Ok` response),
     /// the worker should **not** try to resume by calling `run` again. This will cause a panic.
     ///
-    /// In order to terminate the worker process for good (as opposed to returning control to your app), use [`Message::Exit`].
-    ///
     /// ```no_run
     /// # tokio_test::block_on(async {
-    /// use faktory::{Client, Job, Message, WorkerBuilder, channel};
+    /// use faktory::{Client, Job, Worker};
+    /// use tokio_util::sync::CancellationToken;
     ///
-    /// let mut cl = Client::connect(None).await.unwrap();
-    /// cl.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
+    /// Client::connect(None)
+    ///     .await
+    ///     .unwrap()
+    ///     .enqueue(Job::new("foobar", vec!["z"]))
+    ///     .await
+    ///     .unwrap();
     ///
-    /// let mut w = WorkerBuilder::default()
+    /// let mut w = Worker::builder()
     ///     .graceful_shutdown_period(5_000)
     ///     .register_fn("foobar", |_j| async { Ok::<(), std::io::Error>(()) })
     ///     .connect(None).await.unwrap();
     ///
-    /// let (tx, rx) = channel();
-    /// let _handle = tokio::spawn(async move { w.run(&["qname"], Some(rx)).await });
-    /// tx.send(Message::Exit(0)).expect("sent ok");
+    /// let token = CancellationToken::new();
+    /// let child_token = token.child_token();
+    ///
+    /// let _handle = tokio::spawn(async move { w.run(&["qname"], Some(child_token)).await });
+    ///
+    /// token.cancel();
     /// # });
     /// ```
     ///
-    /// In case you have no intention to send termination signals, the example from above
-    /// can be layed out as follows:
+    /// In case you have no intention to send termination signals, just pass `None` as the second
+    /// argument of [`Worker::run`]. The modified example from above will look like so:
     /// ```no_run
     /// # tokio_test::block_on(async {
-    /// use faktory::{Client, Job, WorkerBuilder};
+    /// use faktory::{Client, Job, Worker};
     ///
-    /// let mut cl = Client::connect(None).await.unwrap();
-    /// cl.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
-    ///
-    /// let mut w = WorkerBuilder::default()
-    ///     .register_fn("foobar", |_j| async { Ok::<(), std::io::Error>(()) })
-    ///     .connect(None)
+    /// Client::connect(None)
+    ///     .await
+    ///     .unwrap()
+    ///     .enqueue(Job::new("foobar", vec!["z"]))
     ///     .await
     ///     .unwrap();
+    ///
+    /// let mut w = Worker::builder()
+    ///     .graceful_shutdown_period(5_000)
+    ///     .register_fn("foobar", |_j| async { Ok::<(), std::io::Error>(()) })
+    ///     .connect(None).await.unwrap();
     ///
     /// let _handle = tokio::spawn(async move { w.run(&["qname"], None).await });
     /// # });
@@ -405,7 +413,7 @@ impl<
     pub async fn run<Q>(
         &mut self,
         queues: &[Q],
-        channel: Option<Receiver<Message>>,
+        token: Option<CancellationToken>,
     ) -> Result<usize, Error>
     where
         Q: AsRef<str>,
@@ -431,16 +439,16 @@ impl<
         }
 
         let report = tokio::select! {
-            // Signal SIGTERM received.
+            // A signal SIGTERM from the OS received.
             _ = tokio::signal::ctrl_c(), if self.forever => {
-                tracing::info!("SIGINT received, shutting down gracefully.");
+                tracing::info!("SIGINT received, shutting down gracefully...");
                 tokio::select! {
                     _ = tokio::signal::ctrl_c() => {
-                        tracing::info!("Another SIGINT received, exiting right now.");
+                        tracing::info!("Another SIGINT received, exiting...");
                         process::exit(0);
                     },
                     _ = tokio_sleep(TokioDuration::from_millis(self.shutdown_timeout)) => {
-                        tracing::warn!("Graceful shutdown period of {}ms exceeded, exiting right now.", self.shutdown_timeout);
+                        tracing::warn!("Graceful shutdown period of {}ms exceeded, exiting...", self.shutdown_timeout);
                         process::exit(0);
                     },
                     nrunning = self.force_fail_all_workers("SIGTERM received") => {
@@ -449,24 +457,9 @@ impl<
                     }
                 }
             },
-            // Message from user code received.
-            from_channel = async { let ch = channel.unwrap(); ch.await }, if channel.is_some() => {
-                if from_channel.is_err() {
-                    tracing::info!("The sender dropped");
-                    process::exit(0);
-                }
-                let msg = from_channel.unwrap();
-                if let Message::ExitNow(code) = msg {
-                    tracing::info!("Received signal to immediately exit with status {}.", code);
-                    process::exit(code);
-                }
-                if let Message::ReturnControlNow = msg {
-                    tracing::info!("Received signal to immediately return control. Returning without clean-up.");
-                    self.terminated = true;
-                    return Ok(0);
-                }
-
-                tracing::info!("Received termination signal: {:?}. Cleaning up...", msg);
+            // A signal from the user space received.
+            _ = async { let token = token.unwrap(); token.cancelled().await }, if token.is_some() => {
+                tracing::info!("Received termination signal via cancellation token. Cleaning up...");
 
                 let nrunning = tokio::select! {
                     _ = tokio_sleep(TokioDuration::from_millis(self.shutdown_timeout)) => {
@@ -478,16 +471,10 @@ impl<
                         nrunning
                     }
                 };
-                match msg {
-                    Message::Exit(code) => process::exit(code),
-                    Message::ReturnControl => {
-                        self.terminated = true;
-                        return Ok(nrunning);
-                    },
-                    _ => unreachable!("ExitNow and ReturnControlNow variants are already handled above.")
-                }
+                self.terminated = true;
+                Ok(nrunning)
             },
-           // Instruction from Faktory received or error occurred:
+           // A signal from the Faktory server received or an error occurred.
            exit = self.listen_for_heartbeats(&statuses) => {
                 // there are a couple of cases here:
                 //  - we got TERMINATE, so we should just return, even if a worker is still running

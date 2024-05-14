@@ -1,4 +1,4 @@
-use faktory::WorkerBuilder;
+use faktory::Worker;
 use std::io::Error as IOError;
 
 #[tokio::main]
@@ -11,7 +11,7 @@ async fn main() {
     // - signal from the Faktory server;
     // - ctrl+c signal;
     // - worker panic;
-    WorkerBuilder::default()
+    Worker::builder()
         .register_fn("job_type", |j| async move {
             println!("{:?}", j);
             Ok::<(), IOError>(())

@@ -2,6 +2,7 @@ use crate::skip_check;
 use faktory::{Client, Job, JobBuilder, JobId, Worker, WorkerBuilder, WorkerId};
 use serde_json::Value;
 use std::{io, sync};
+use tokio_util::sync::CancellationToken;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn hello_client() {
@@ -365,7 +366,6 @@ fn process_hard_task(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_shutdown_signals_handling() {
-    use faktory::{channel, Message};
     skip_check!();
 
     let qname = "test_shutdown_signals_handling";
@@ -392,38 +392,17 @@ async fn test_shutdown_signals_handling() {
         .unwrap();
 
     // start consuming
-    let (tx, rx) = channel();
-    let jh = tokio::spawn(async move { w.run(&[qname], Some(rx)).await });
+    let token = CancellationToken::new();
+    let child_token = token.child_token();
+    let jh = tokio::spawn(async move { w.run(&[qname], Some(child_token)).await });
 
     // enqueue the job and wait for a message from the handler and ...
     cl.enqueue(j).await.unwrap();
     rx_for_test_purposes.recv().await;
     // ... immediately signal to return control
-    tx.send(Message::ReturnControl).expect("sent ok");
+    token.cancel();
 
     // one worker was processing a task when we interrupted it
     let nrunning = jh.await.expect("joined ok").unwrap();
     assert_eq!(nrunning, 1);
-
-    // let's repeat the same actions with a little tweak:
-    // we will signal to return control right away.
-    let (tx, mut rx_for_test_purposes) = tokio::sync::mpsc::channel::<bool>(1);
-    let tx = sync::Arc::new(tx);
-    let mut w = WorkerBuilder::default()
-        .graceful_shutdown_period(shutdown_timeout)
-        .register_fn(jkind, process_hard_task(tx))
-        .connect(None)
-        .await
-        .unwrap();
-    let (tx, rx) = channel();
-    let jh = tokio::spawn(async move { w.run(&[qname], Some(rx)).await });
-    cl.enqueue(JobBuilder::new(jkind).queue(qname).args(vec![1000]).build())
-        .await
-        .unwrap();
-    rx_for_test_purposes.recv().await;
-    // signalling to yield immediately
-    tx.send(Message::ReturnControlNow).expect("sent ok");
-    let nrunning = jh.await.expect("joined ok").unwrap();
-    // we did not even have a change to examine the current workers state
-    assert_eq!(nrunning, 0);
 }

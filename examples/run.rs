@@ -1,5 +1,6 @@
-use faktory::{channel, Message, WorkerBuilder};
+use faktory::Worker;
 use std::io::Error as IOError;
+use tokio_util::sync::CancellationToken;
 
 #[tokio::main]
 async fn main() {
@@ -8,7 +9,7 @@ async fn main() {
         .init();
 
     // create a worker
-    let mut w = WorkerBuilder::default()
+    let mut w = Worker::builder()
         .graceful_shutdown_period(2_000)
         .register_fn("job_type", |j| async move {
             println!("{:?}", j);
@@ -18,12 +19,17 @@ async fn main() {
         .await
         .expect("Connected to server");
 
-    // create a channel to send a signal to the worker
-    let (tx, rx) = channel();
+    // create a cancellation token
+    let token = CancellationToken::new();
 
-    let handle = tokio::spawn(async move { w.run(&["default"], Some(rx)).await });
+    // create a child token and pass it to the spawned task (one could - alternatively - just
+    // clone the "parent" token)
+    let child_token = token.child_token();
 
-    tx.send(Message::Exit(100)).expect("sent ok");
+    let handle = tokio::spawn(async move { w.run(&["default"], Some(child_token)).await });
+
+    // cancel the task
+    token.cancel();
 
     let nrunning = handle.await.expect("joined ok").expect("no worker errors");
 
