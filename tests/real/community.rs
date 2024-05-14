@@ -1,7 +1,6 @@
 use crate::skip_check;
 use faktory::{Client, Job, JobBuilder, JobId, Worker, WorkerBuilder, WorkerId};
 use serde_json::Value;
-use std::future::Future;
 use std::{io, sync};
 
 #[tokio::test(flavor = "multi_thread")]
@@ -342,6 +341,7 @@ async fn test_jobs_created_with_builder() {
     assert!(had_job);
 }
 
+use std::future::Future;
 use std::pin::Pin;
 use tokio::sync::mpsc;
 fn process_hard_task(
