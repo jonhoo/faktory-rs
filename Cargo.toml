@@ -39,6 +39,7 @@ sha2 = "0.10.0"
 thiserror = "1.0.30"
 tokio = { version = "1.35.1", features = [
     "io-util",         # enables `AsyncWriteExt`, `AsyncReadExt`, and `AsyncBufReadExt` in `tokio::io` namespace
+    "macros",          # brings in `tokio::select!` we are utilizing in `Worker::run`
     "net",             # enables `tokio::net` namespace with `TcpStream` we are heavily relying upon
     "rt-multi-thread", # allows for `tokio::task::block_in_place()` in Client::drop
     "signal",          # allows us to listen for OS signal, e.g. "SIGTERM"
