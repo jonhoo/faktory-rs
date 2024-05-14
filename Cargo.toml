@@ -38,14 +38,11 @@ serde_json = "1.0"
 sha2 = "0.10.0"
 thiserror = "1.0.30"
 tokio = { version = "1.35.1", features = [
-    "io-util",
-    "macros",
-    "net",
-    "rt",
-    "time",
-    "signal",
-    "rt-multi-thread",
-    "time",
+    "io-util",         # enables `AsyncWriteExt`, `AsyncReadExt`, and `AsyncBufReadExt` in `tokio::io` namespace
+    "net",             # enables `tokio::net` namespace with `TcpStream` we are heavily relying upon
+    "rt-multi-thread", # allows for `tokio::task::block_in_place()` in Client::drop 
+    "signal",          # allows us to listen for OS signal, e.g. "SIGTERM"
+    "time",            # aenables `tokio::time` namespace holding the `sleep` utility and `Duraction` struct
 ] }
 tokio-native-tls = { version = "0.3.1", optional = true }
 tokio-rustls = { version = "0.25.0", optional = true }
