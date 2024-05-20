@@ -156,7 +156,7 @@ pub struct DataSnapshot {
 /// Faktory's server process stats.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ServerSnapshot {
-    /// Faktory's description (e.g. "Faktory").
+    /// Description of the server process (e.g. "Faktory").
     pub description: String,
 
     /// Faktory's version as semver (e.g. "1.8.0").
