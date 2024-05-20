@@ -71,6 +71,74 @@ async fn roundtrip() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn server_state() {
+    skip_check!();
+
+    let local = "server_state";
+
+    // prepare a worker
+    let mut w = WorkerBuilder::default()
+        .register_fn(local, move |_| async move { Ok::<(), io::Error>(()) })
+        .connect(None)
+        .await
+        .unwrap();
+
+    // prepare a producing client
+    let mut client = Client::connect(None).await.unwrap();
+
+    // examine server state before pushing anything
+    let server_state = client.current_info().await.unwrap();
+    assert!(server_state.data.queues.get(local).is_none());
+    // the following two assertions are not super-helpful but
+    // there is not much info we can make meaningful assetions on anyhow
+    // (like memusage, server description string, version, etc.)
+    assert!(server_state.server.connections >= 2); // at least two clients from the current test
+    assert!(server_state.server.uptime > 0); // if IPC is happenning, this should hold :)
+
+    // push 1 job
+    client
+        .enqueue(
+            JobBuilder::new(local)
+                .args(vec!["abc"])
+                .queue(local)
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    // we only pushed 1 job on this queue
+    let server_state = client.current_info().await.unwrap();
+    assert_eq!(*server_state.data.queues.get(local).unwrap(), 1);
+    assert!(server_state.data.total_enqueued >= 1); // at least 1 job from this test
+    assert!(server_state.data.total_queues >= 1); // at least 1 qeueu from this test
+                                                  // let's know consume that job ...
+    assert!(w.run_one(0, &[local]).await.unwrap());
+
+    // ... and verify the queue has got 0 pending jobs
+    //
+    // NB! If this is not passing locally, make sure to launch a fresh Faktory container,
+    // because if you have not pruned its volume the Faktory will still keep the queue name
+    // as registered.
+    // But generally, we are performing a clean-up by consuming the jobs from the local queue/
+    // and then deleting the queue programmatically, so there is normally no need to prune docker
+    // volumes to perform the next test run. Also note that on CI we are always starting a-fresh.
+    let server_state = client.current_info().await.unwrap();
+    assert_eq!(*server_state.data.queues.get(local).unwrap(), 0);
+    assert!(server_state.data.total_processed >= 1); // at least 1 job from this test
+
+    client.queue_remove(&[local]).await.unwrap();
+
+    assert!(client
+        .current_info()
+        .await
+        .unwrap()
+        .data
+        .queues
+        .get(local)
+        .is_none());
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn multi() {
     skip_check!();
     let local = "multi_async";
