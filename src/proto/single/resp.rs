@@ -1,8 +1,10 @@
+use crate::error::{self, Error};
+use chrono::{DateTime, Utc};
+use std::collections::HashMap;
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt};
+
 #[cfg(feature = "ent")]
 use crate::ent::BatchId;
-
-use crate::error::{self, Error};
-use tokio::io::AsyncBufRead;
 
 pub fn bad(expected: &'static str, got: &RawResponse) -> error::Protocol {
     let stringy = match *got {
@@ -119,6 +121,92 @@ pub async fn read_ok<R: AsyncBufRead + Unpin>(r: R) -> Result<(), Error> {
 }
 
 // ----------------------------------------------
+
+/// Faktory service stats.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[non_exhaustive]
+pub struct DataSnapshot {
+    /// Total number of job failures.
+    pub total_failures: u64,
+
+    /// Total number of processed jobs.
+    pub total_processed: u64,
+
+    /// Total number of enqueued jobs.
+    pub total_enqueued: u64,
+
+    /// Total number of queues.
+    pub total_queues: u64,
+
+    /// Queues stats.
+    ///
+    /// A mapping between a queue name and its size (number of jobs on the queue).
+    /// The keys of this map effectively make up a list of queues that are currently
+    /// registered in the Faktory service.
+    pub queues: HashMap<String, u64>,
+
+    /// ***Deprecated***. Faktory's task runner stats.
+    ///
+    /// Note that this is exposed as a "generic" `serde_json::Value` since this info
+    /// belongs to deep implementation details of the Faktory service.
+    #[deprecated]
+    pub tasks: serde_json::Value,
+}
+
+/// Faktory's server process stats.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ServerSnapshot {
+    /// Faktory's description (e.g. "Faktory").
+    pub description: String,
+
+    /// Faktory's version as semver (e.g. "1.8.0").
+    #[serde(rename = "faktory_version")]
+    pub version: String,
+
+    /// Faktory server process uptime in seconds.
+    pub uptime: u64,
+
+    /// Number of clients connected to the server.
+    pub connections: u64,
+
+    /// Number of executed commands.
+    pub command_count: u64,
+
+    /// Faktory server process memory usage.
+    pub used_memory_mb: u64,
+}
+
+/// Current server state.
+///
+/// Contains such details as how many queues there are on the server, statistics on the jobs,
+/// as well as some specific info on server process memory usage, uptime, etc.
+///
+/// Here is an example of the simplest way to fetch info on the server state.
+/// ```no_run
+/// # tokio_test::block_on(async {
+/// use faktory::Client;
+///
+/// let mut client = Client::connect(None).await.unwrap();
+/// let _server_state = client.current_info().await.unwrap();
+/// # });
+/// ```
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct FaktoryState {
+    /// Server time.
+    pub now: DateTime<Utc>,
+
+    /// Server time as a string formatted as "%H:%M:%S UTC" (e.g. "19:47:39 UTC").
+    pub server_utc_time: String,
+
+    /// Faktory service stats.
+    #[serde(rename = "faktory")]
+    pub data: DataSnapshot,
+
+    /// Faktory's server process stats.
+    pub server: ServerSnapshot,
+}
+
+// ----------------------------------------------
 //
 // below is the implementation of the Redis RESP protocol
 //
@@ -132,7 +220,6 @@ pub enum RawResponse {
     Null,
 }
 
-use tokio::io::{AsyncBufReadExt, AsyncReadExt};
 async fn read<R>(mut r: R) -> Result<RawResponse, Error>
 where
     R: AsyncBufRead + Unpin,
