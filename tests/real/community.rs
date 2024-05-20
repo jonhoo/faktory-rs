@@ -126,16 +126,16 @@ async fn server_state() {
     assert_eq!(*server_state.data.queues.get(local).unwrap(), 0);
     assert!(server_state.data.total_processed >= 1); // at least 1 job from this test
 
-    client.queue_remove(&[local]).await.unwrap();
-
-    assert!(client
-        .current_info()
-        .await
-        .unwrap()
-        .data
-        .queues
-        .get(local)
-        .is_none());
+    // Uncomment when `Client::queue_remove` is delivered:
+    // client.queue_remove(&[local]).await.unwrap();
+    // assert!(client
+    //    .current_info()
+    //    .await
+    //    .unwrap()
+    //    .data
+    //    .queues
+    //    .get(local)
+    //    .is_none());
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -42,12 +42,6 @@ jobs:
         run: cargo test --locked --all-features --all-targets
         env: # set this explicitly so integration tests will run
           FAKTORY_URL: tcp://127.0.0.1:7419
-      # commands executed during the following test affect all the queues on the Faktory server,
-      # so we perform this test in a dedicated - isolated - step, re-using the the Faktory container
-      - name: cargo test --locked (queue control actions)
-        run: cargo test --locked --all-features --all-targets queue_control_actions_wildcard -- --include-ignored
-        env: # set this explicitly so integration tests will run
-          FAKTORY_URL: tcp://127.0.0.1:7419
       # https://github.com/rust-lang/cargo/issues/6669
       - name: cargo test --doc
         run: cargo test --locked --all-features --doc

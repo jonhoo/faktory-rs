@@ -120,10 +120,10 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// use faktory::{Client, JobId, ent::ProgressUpdate};
+/// use faktory::{Client, JobId, ent::ProgressUpdateBuilder};
 /// let jid = JobId::new("W8qyVle9vXzUWQOf");
 /// let mut cl = Client::connect(None).await?;
-/// let progress = ProgressUpdate::builder(jid)
+/// let progress = ProgressUpdateBuilder::new(jid)
 ///     .desc("Almost done...".to_owned())
 ///     .percent(99)
 ///     .build();
@@ -312,20 +312,6 @@ where
             },
         }
     }
-
-    pub(crate) async fn perform_queue_action<Q>(
-        &mut self,
-        queues: &[Q],
-        action: QueueAction,
-    ) -> Result<(), Error>
-    where
-        Q: AsRef<str> + Sync,
-    {
-        self.issue(&QueueControl::new(action, queues))
-            .await?
-            .read_ok()
-            .await
-    }
 }
 
 impl<S> Client<S>
@@ -384,54 +370,25 @@ where
     }
 
     /// Pause the given queues.
-    ///
-    /// Passing a wildcard `&["*"]` as the value of the `queues` parameter
-    /// will pause all the queues. To be more explicit, you may want to call [`Client::queue_pause_all`]
-    /// shortcut method to pause all the queues.
     pub async fn queue_pause<Q>(&mut self, queues: &[Q]) -> Result<(), Error>
     where
         Q: AsRef<str> + Sync,
     {
-        self.perform_queue_action(queues, QueueAction::Pause).await
-    }
-
-    /// Pause all queues.
-    pub async fn queue_pause_all(&mut self) -> Result<(), Error> {
-        self.perform_queue_action(&["*"], QueueAction::Pause).await
+        self.issue(&QueueControl::new(QueueAction::Pause, queues))
+            .await?
+            .read_ok()
+            .await
     }
 
     /// Resume the given queues.
-    ///
-    /// Passing a wildcard `&["*"]` as the value of the `queues` parameter
-    /// will resume all the queues. To be more explicit, you may want to call [`Client::queue_resume_all`]
-    /// shortcut method to resume all the queues.
     pub async fn queue_resume<Q>(&mut self, queues: &[Q]) -> Result<(), Error>
     where
         Q: AsRef<str> + Sync,
     {
-        self.perform_queue_action(queues, QueueAction::Resume).await
-    }
-
-    /// Resume all queues.
-    pub async fn queue_resume_all(&mut self) -> Result<(), Error> {
-        self.perform_queue_action(&["*"], QueueAction::Resume).await
-    }
-
-    /// Remove the given queues.
-    ///
-    /// Beware, passing a wildcard `&["*"]` as the value of the `queues` parameter
-    /// will **remove** all the queues. To be more explicit, you may want to call [`Client::queue_remove_all`]
-    /// shortcut method to remove all the queues.
-    pub async fn queue_remove<Q>(&mut self, queues: &[Q]) -> Result<(), Error>
-    where
-        Q: AsRef<str> + Sync,
-    {
-        self.perform_queue_action(queues, QueueAction::Remove).await
-    }
-
-    /// Remove all queues.
-    pub async fn queue_remove_all(&mut self) -> Result<(), Error> {
-        self.perform_queue_action(&["*"], QueueAction::Remove).await
+        self.issue(&QueueControl::new(QueueAction::Resume, queues))
+            .await?
+            .read_ok()
+            .await
     }
 }
 
