@@ -92,7 +92,7 @@ async fn server_state() {
     // the following two assertions are not super-helpful but
     // there is not much info we can make meaningful assetions on anyhow
     // (like memusage, server description string, version, etc.)
-    assert!(server_state.server.connections >= 2); // at least two clients from the current test
+    assert!(server_state.server.connections >= 2, "{}", server_state.server.connections); // at least two clients from the current test
     assert!(server_state.server.uptime > 0); // if IPC is happenning, this should hold :)
 
     // push 1 job
