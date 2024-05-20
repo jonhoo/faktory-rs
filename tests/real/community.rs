@@ -251,7 +251,7 @@ async fn queue_control_actions() {
 
     // let's inspect the sever state again
     let server_state = client.info().await.unwrap();
-    let queues = &server_state.get("data").unwrap().get("queues").unwrap();
+    let queues = &server_state.get("faktory").unwrap().get("queues").unwrap();
     // our queue are not even mentioned in the server report:
     assert!(queues.get(local_1).is_none());
     assert!(queues.get(local_2).is_none());
