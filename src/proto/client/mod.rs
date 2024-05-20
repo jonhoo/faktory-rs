@@ -120,14 +120,14 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// use faktory::{Client, JobId, ent::ProgressUpdate};
+/// use faktory::{Client, JobId, ent::ProgressUpdateBuilder};
 /// let jid = JobId::new("W8qyVle9vXzUWQOf");
 /// let mut cl = Client::connect(None).await?;
-/// let progress = ProgressUpdate::builder(jid)
+/// let progress = ProgressUpdateBuilder::new(jid)
 ///     .desc("Almost done...".to_owned())
 ///     .percent(99)
 ///     .build();
-/// cl.set_progress(&progress).await?;
+/// cl.set_progress(progress).await?;
 /// # Ok::<(), faktory::Error>(())
 /// });
 ///````
