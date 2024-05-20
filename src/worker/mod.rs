@@ -441,33 +441,25 @@ impl<
         let report = tokio::select! {
             // A signal SIGTERM from the OS received.
             _ = tokio::signal::ctrl_c(), if self.forever => {
-                tracing::info!("SIGINT received, shutting down gracefully...");
                 tokio::select! {
                     _ = tokio::signal::ctrl_c() => {
-                        tracing::info!("Another SIGINT received, exiting...");
                         process::exit(0);
                     },
                     _ = tokio_sleep(TokioDuration::from_millis(self.shutdown_timeout)) => {
-                        tracing::warn!("Graceful shutdown period of {}ms exceeded, exiting...", self.shutdown_timeout);
                         process::exit(0);
                     },
-                    nrunning = self.force_fail_all_workers("SIGTERM received") => {
-                        tracing::info!("Number of workers that were still running: {}.", nrunning);
+                    _nrunning = self.force_fail_all_workers("SIGTERM received") => {
                         process::exit(0);
                     }
                 }
             },
             // A signal from the user space received.
             _ = async { let token = token.unwrap(); token.cancelled().await }, if token.is_some() => {
-                tracing::info!("Received termination signal via cancellation token. Cleaning up...");
-
                 let nrunning = tokio::select! {
                     _ = tokio_sleep(TokioDuration::from_millis(self.shutdown_timeout)) => {
-                        tracing::warn!("Graceful shutdown period of {}ms exceeded.", self.shutdown_timeout);
                         0
                     },
                     nrunning = self.force_fail_all_workers("termination signal received over channel") => {
-                        tracing::info!("Number of workers that were still running: {}.", nrunning);
                         nrunning
                     }
                 };
