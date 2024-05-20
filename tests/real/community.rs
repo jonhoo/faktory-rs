@@ -92,8 +92,15 @@ async fn server_state() {
     // the following two assertions are not super-helpful but
     // there is not much info we can make meaningful assetions on anyhow
     // (like memusage, server description string, version, etc.)
-    assert!(server_state.server.connections >= 2, "{}", server_state.server.connections); // at least two clients from the current test
+    assert!(
+        server_state.server.connections >= 2,
+        "{}",
+        server_state.server.connections
+    ); // at least two clients from the current test
     assert_ne!(server_state.server.uptime, 0); // if IPC is happenning, this should hold :)
+
+    let nenqueued = server_state.data.total_enqueued;
+    let nqueues = server_state.data.total_queues;
 
     // push 1 job
     client
@@ -109,9 +116,10 @@ async fn server_state() {
     // we only pushed 1 job on this queue
     let server_state = client.current_info().await.unwrap();
     assert_eq!(*server_state.data.queues.get(local).unwrap(), 1);
-    assert!(server_state.data.total_enqueued >= 1); // at least 1 job from this test
-    assert!(server_state.data.total_queues >= 1); // at least 1 qeueu from this test
-                                                  // let's know consume that job ...
+    assert!(server_state.data.total_enqueued >= nenqueued + 1); // at least +1 job from from last read
+    assert!(server_state.data.total_queues >= nqueues + 1); // at least +1 queue from last read
+
+    // let's know consume that job ...
     assert!(w.run_one(0, &[local]).await.unwrap());
 
     // ... and verify the queue has got 0 pending jobs
