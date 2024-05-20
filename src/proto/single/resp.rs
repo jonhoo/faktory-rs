@@ -153,7 +153,7 @@ pub struct DataSnapshot {
     pub tasks: serde_json::Value,
 }
 
-/// Faktory's server process stats.
+/// Faktory's server process information.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ServerSnapshot {
     /// Description of the server process (e.g. "Faktory").
