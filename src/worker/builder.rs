@@ -4,7 +4,6 @@ use crate::{
     Error, Job, JobRunner, WorkerId,
 };
 use std::future::Future;
-use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
@@ -121,30 +120,6 @@ impl<E: 'static> WorkerBuilder<E> {
         self.register(kind, Closure(handler))
     }
 
-    /// Register a _blocking_ (synchronous) handler function for the given job type (`kind`).
-    ///
-    /// This is an analogue of [`register_fn`](WorkerBuilder::register_fn) for compute heavy tasks.
-    /// Internally, `tokio`'s `spawn_blocking` is used when a job arrives whose type matches `kind`,
-    /// and so the `handler` is executed in a dedicated pool for blocking operations. See `Tokio`'s
-    /// [docs](https://docs.rs/tokio/latest/tokio/index.html#cpu-bound-tasks-and-blocking-code) for
-    /// how to set the upper limit on the number of threads in the mentioned pool and other details.
-    ///
-    /// Note that it is not recommended to mix blocking and non-blocking tasks and so if many of your
-    /// handlers are blocking, you will want to launch a dedicated worker process (at least a separate
-    /// Tokio Runtime) where only blocking handlers will be used.
-    ///
-    /// Also note that only one single handler per job kind is supported. Registering another handler
-    /// for the same job kind will silently override the handler registered previously.
-    pub fn register_blocking_fn<K, H>(mut self, kind: K, handler: H) -> Self
-    where
-        K: Into<String>,
-        H: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
-    {
-        self.callbacks
-            .insert(kind.into(), super::Callback::Sync(Arc::new(handler)));
-        self
-    }
-
     /// Register a handler for the given job type (`kind`).
     ///
     /// Whenever a job whose type matches `kind` is fetched from the Faktory, the given handler
@@ -157,8 +132,7 @@ impl<E: 'static> WorkerBuilder<E> {
         K: Into<String>,
         H: JobRunner<Error = E> + 'static,
     {
-        self.callbacks
-            .insert(kind.into(), super::Callback::Async(Box::new(runner)));
+        self.callbacks.insert(kind.into(), Box::new(runner));
         self
     }
 
