@@ -122,7 +122,7 @@ pub async fn read_ok<R: AsyncBufRead + Unpin>(r: R) -> Result<(), Error> {
 
 // ----------------------------------------------
 
-/// Faktory service stats.
+/// Faktory service information.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[non_exhaustive]
 pub struct DataSnapshot {
@@ -198,11 +198,11 @@ pub struct FaktoryState {
     /// Server time as a string formatted as "%H:%M:%S UTC" (e.g. "19:47:39 UTC").
     pub server_utc_time: String,
 
-    /// Faktory service stats.
+    /// Faktory service information.
     #[serde(rename = "faktory")]
     pub data: DataSnapshot,
 
-    /// Faktory's server process stats.
+    /// Faktory's server process information.
     pub server: ServerSnapshot,
 }
 
