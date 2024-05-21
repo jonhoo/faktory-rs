@@ -161,9 +161,9 @@ pub struct ServerSnapshot {
     /// Description of the server process (e.g. "Faktory").
     pub description: String,
 
-    /// Faktory's version as semver (e.g. "1.8.0").
+    /// Faktory's version as semver.
     #[serde(rename = "faktory_version")]
-    pub version: String,
+    pub version: semver::Version,
 
     /// Faktory server process uptime in seconds.
     pub uptime: u64,
