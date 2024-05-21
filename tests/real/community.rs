@@ -125,15 +125,17 @@ async fn server_state() {
     assert_gte!(
         server_state.data.total_enqueued,
         nenqueued + 1,
-        "{}",
-        server_state.data.total_enqueued
+        "`total_enqueued` equals {} which is not greater than or equal to {}",
+        server_state.data.total_enqueued,
+        nenqueued + 1
     );
     // `total_queues` should be at least +1 queue from last read
     assert_gte!(
         server_state.data.total_queues,
         nqueues + 1,
-        "{}",
-        server_state.data.total_queues
+        "`total_queues` equals {} which is not greater than or equal to {}",
+        server_state.data.total_queues,
+        nqueues + 1
     );
 
     // let's know consume that job ...
