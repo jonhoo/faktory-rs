@@ -149,7 +149,9 @@ pub struct DataSnapshot {
     ///
     /// Note that this is exposed as a "generic" `serde_json::Value` since this info
     /// belongs to deep implementation details of the Faktory service.
-    #[deprecated]
+    #[deprecated(
+        note = "marked as deprecated in the Faktory source code and is likely to be completely removed in the future, so please do not rely on this data"
+    )]
     pub tasks: serde_json::Value,
 }
 
