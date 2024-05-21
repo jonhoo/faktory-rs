@@ -57,7 +57,7 @@ w.register("foobar", |job| async move {
      Ok::<(), io::Error>(())
 });
 let mut w = w.connect(None).await.unwrap();
-if let Err(e) = w.run(&["default"], None).await {
+if let Err(e) = w.run(&["default"]).await {
     println!("worker failed: {}", e);
 }
 ```
