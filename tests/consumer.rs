@@ -245,7 +245,7 @@ async fn well_behaved() {
             }\r\n",
     );
 
-    let jh = spawn(async move { w.run(&["default"], None).await });
+    let jh = spawn(async move { w.run(&["default"]).await });
 
     // the running thread won't return for a while. the heartbeat thingy is going to eventually
     // send a heartbeat, and we want to respond to that with a "quiet" to make it not accept any
@@ -312,7 +312,7 @@ async fn no_first_job() {
             }\r\n",
     );
 
-    let jh = spawn(async move { w.run(&["default"], None).await });
+    let jh = spawn(async move { w.run(&["default"]).await });
 
     // the running thread won't return for a while. the heartbeat thingy is going to eventually
     // send a heartbeat, and we want to respond to that with a "quiet" to make it not accept any
@@ -388,7 +388,7 @@ async fn well_behaved_many() {
         );
     }
 
-    let jh = spawn(async move { w.run(&["default"], None).await });
+    let jh = spawn(async move { w.run(&["default"]).await });
 
     // the running thread won't return for a while. the heartbeat thingy is going to eventually
     // send a heartbeat, and we want to respond to that with a "quiet" to make it not accept any
@@ -478,7 +478,7 @@ async fn terminate() {
         // will be incremented from `1` to `2`. But, most importently, `mine` will now be pointing to the second
         // stream (stream with index 1) from this test, and the _actual_ worker (not the master worker (coordinator)) will
         // be talking via this stream.
-        w.run(&["default"], None).await
+        w.run(&["default"]).await
     });
 
     // the running thread won't ever return, because the job never exits. the heartbeat thingy is

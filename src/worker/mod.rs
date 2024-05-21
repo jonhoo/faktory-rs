@@ -2,6 +2,8 @@ use super::proto::{Client, Reconnect};
 use crate::error::Error;
 use crate::proto::{Ack, Fail, Job};
 use fnv::FnvHashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::process;
 use std::sync::{atomic, Arc};
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
@@ -10,7 +12,6 @@ use tokio::net::TcpStream;
 use tokio::task::{AbortHandle, JoinSet};
 use tokio::time::sleep as tokio_sleep;
 use tokio::time::Duration as TokioDuration;
-use tokio_util::sync::CancellationToken;
 
 mod builder;
 mod health;
@@ -25,6 +26,7 @@ pub(crate) const STATUS_QUIET: usize = 1;
 pub(crate) const STATUS_TERMINATING: usize = 2;
 
 type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
+type ShutdownSignal = Pin<Box<dyn Future<Output = ()> + 'static + Send>>;
 
 /// `Worker` is used to run a worker that processes jobs provided by Faktory.
 ///
@@ -121,7 +123,7 @@ type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
 ///     .await
 ///     .unwrap();
 ///
-/// if let Err(e) = w.run(&["default"], None).await {
+/// if let Err(e) = w.run(&["default"]).await {
 ///     println!("worker failed: {}", e);
 /// }
 /// # });
@@ -154,6 +156,7 @@ pub struct Worker<S: AsyncWrite + Send + Unpin, E> {
     terminated: bool,
     forever: bool,
     shutdown_timeout: u64,
+    shutdown_signal: Option<ShutdownSignal>,
 }
 
 impl Worker<TcpStream, ()> {
@@ -177,6 +180,7 @@ impl<S: AsyncWrite + Send + Unpin, E> Worker<S, E> {
         workers_count: usize,
         callbacks: CallbacksRegistry<E>,
         shutdown_timeout: u64,
+        shutdown_signal: Option<ShutdownSignal>,
     ) -> Self {
         Worker {
             c,
@@ -185,6 +189,7 @@ impl<S: AsyncWrite + Send + Unpin, E> Worker<S, E> {
             terminated: false,
             forever: false,
             shutdown_timeout,
+            shutdown_signal,
         }
     }
 }
@@ -325,6 +330,7 @@ impl<
             terminated: self.terminated,
             forever: self.forever,
             shutdown_timeout: self.shutdown_timeout,
+            shutdown_signal: None,
         })
     }
 
@@ -383,7 +389,7 @@ impl<
     /// let token = CancellationToken::new();
     /// let child_token = token.child_token();
     ///
-    /// let _handle = tokio::spawn(async move { w.run(&["qname"], Some(child_token)).await });
+    /// let _handle = tokio::spawn(async move { w.run(&["qname"]).await });
     ///
     /// token.cancel();
     /// # });
@@ -407,14 +413,10 @@ impl<
     ///     .register_fn("foobar", |_j| async { Ok::<(), std::io::Error>(()) })
     ///     .connect(None).await.unwrap();
     ///
-    /// let _handle = tokio::spawn(async move { w.run(&["qname"], None).await });
+    /// let _handle = tokio::spawn(async move { w.run(&["qname"]).await });
     /// # });
     /// ```
-    pub async fn run<Q>(
-        &mut self,
-        queues: &[Q],
-        token: Option<CancellationToken>,
-    ) -> Result<usize, Error>
+    pub async fn run<Q>(&mut self, queues: &[Q]) -> Result<usize, Error>
     where
         Q: AsRef<str>,
     {
@@ -438,6 +440,8 @@ impl<
                 .await?;
         }
 
+        let signal = self.shutdown_signal.take();
+
         let report = tokio::select! {
             // A signal SIGTERM from the OS received.
             _ = tokio::signal::ctrl_c(), if self.forever => {
@@ -454,7 +458,7 @@ impl<
                 }
             },
             // A signal from the user space received.
-            _ = async { let token = token.unwrap(); token.cancelled().await }, if token.is_some() => {
+            _ = async { let signal = signal.unwrap(); signal.await }, if signal.is_some() => {
                 let nrunning = tokio::select! {
                     _ = tokio_sleep(TokioDuration::from_millis(self.shutdown_timeout)) => {
                         0
@@ -506,7 +510,7 @@ impl<
         Q: AsRef<str>,
     {
         self.forever = true;
-        while self.run(queues, None).await.is_err() {
+        while self.run(queues).await.is_err() {
             if self.reconnect().await.is_err() {
                 break;
             }

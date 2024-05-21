@@ -1,4 +1,4 @@
-use super::{runner::Closure, CallbacksRegistry, Client, Worker};
+use super::{runner::Closure, CallbacksRegistry, Client, ShutdownSignal, Worker};
 use crate::{
     proto::{utils, ClientOptions},
     Error, Job, JobRunner, WorkerId,
@@ -17,6 +17,7 @@ pub struct WorkerBuilder<E> {
     workers_count: usize,
     callbacks: CallbacksRegistry<E>,
     shutdown_timeout: u64,
+    shutdown_signal: Option<ShutdownSignal>,
 }
 
 impl<E> Default for WorkerBuilder<E> {
@@ -36,6 +37,7 @@ impl<E> Default for WorkerBuilder<E> {
             workers_count: 1,
             callbacks: CallbacksRegistry::default(),
             shutdown_timeout: GRACEFUL_SHUTDOWN_PERIOD_MILLIS,
+            shutdown_signal: None,
         }
     }
 }
@@ -91,6 +93,19 @@ impl<E: 'static> WorkerBuilder<E> {
     /// Defaults to 1.
     pub fn workers(mut self, w: usize) -> Self {
         self.workers_count = w;
+        self
+    }
+
+    /// Set a graceful shutdown signal.
+    ///
+    /// As soon as the provided future resolves, the graceful shutdown will
+    /// step in making the [`Worker::run`] operation return control to the calling
+    /// code.
+    pub fn with_graceful_shutdown<F>(mut self, signal: F) -> Self
+    where
+        F: Future<Output = ()> + 'static + Send,
+    {
+        self.shutdown_signal = Some(Box::pin(signal));
         self
     }
 
@@ -151,6 +166,7 @@ impl<E: 'static> WorkerBuilder<E> {
             self.workers_count,
             self.callbacks,
             self.shutdown_timeout,
+            self.shutdown_signal,
         )
         .await)
     }

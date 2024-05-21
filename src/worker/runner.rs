@@ -42,7 +42,7 @@ use std::future::Future;
 ///     .await
 ///     .unwrap();
 ///
-/// if let Err(e) = w.run(&["default"], None).await {
+/// if let Err(e) = w.run(&["default"]).await {
 ///     println!("worker failed: {}", e);
 /// }
 /// });
