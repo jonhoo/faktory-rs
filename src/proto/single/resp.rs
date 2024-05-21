@@ -125,6 +125,10 @@ pub async fn read_ok<R: AsyncBufRead + Unpin>(r: R) -> Result<(), Error> {
 // ----------------------------------------------
 
 /// Faktory service information.
+///
+/// This holds information on the registered [queues](DataSnapshot::queues) as well as
+/// some aggregated data, e.g. total number of jobs [processed](DataSnapshot::total_processed),
+/// total number of jobs [enqueued](DataSnapshot::total_enqueued), etc.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[non_exhaustive]
 pub struct DataSnapshot {
