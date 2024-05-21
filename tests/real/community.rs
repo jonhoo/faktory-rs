@@ -383,13 +383,16 @@ async fn test_shutdown_signals_handling() {
     let (tx, mut rx_for_test_purposes) = tokio::sync::mpsc::channel::<bool>(1);
     let tx = sync::Arc::new(tx);
 
-    // create
+    // create a token
     let token = CancellationToken::new();
     let child_token = token.child_token();
 
+    // create a signalling future
+    let signal = async move { child_token.cancelled().await };
+
     // get a connected worker
     let mut w = WorkerBuilder::default()
-        .with_graceful_shutdown(async move { child_token.cancelled().await })
+        .with_graceful_shutdown(signal)
         .graceful_shutdown_period(shutdown_timeout)
         .register_fn(jkind, process_hard_task(tx))
         .connect(None)

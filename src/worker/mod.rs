@@ -358,9 +358,11 @@ impl<
         }))
     }
 
-    /// Run this worker on the given `queues` until an I/O error occurs (`Err` is returned), or
-    /// until the server tells the worker to disengage (`Ok` is returned), or a signal from the user-space
-    /// code has been received via a cancellation token (`Ok` is returned).
+    /// Run this worker on the given `queues`.
+    ///
+    /// Will run the worker until an I/O error occurs (`Err` is returned), or until the server tells the worker
+    /// to disengage (`Ok` is returned), or a signal from the user-space code has been received via a future
+    /// supplied to [`WorkerBuilder::with_graceful_shutdown`](`Ok` is returned).
     ///
     /// The value in an `Ok` indicates the number of workers that may still be processing jobs, but `0` can also
     /// indicate the [graceful shutdown period](WorkerBuilder::graceful_shutdown_period) has been exceeded.
@@ -368,54 +370,6 @@ impl<
     /// If an error occurred while reporting a job success or failure, the result will be re-reported to the server
     /// without re-executing the job. If the worker was terminated (i.e., `run` returns  with an `Ok` response),
     /// the worker should **not** try to resume by calling `run` again. This will cause a panic.
-    ///
-    /// ```no_run
-    /// # tokio_test::block_on(async {
-    /// use faktory::{Client, Job, Worker};
-    /// use tokio_util::sync::CancellationToken;
-    ///
-    /// Client::connect(None)
-    ///     .await
-    ///     .unwrap()
-    ///     .enqueue(Job::new("foobar", vec!["z"]))
-    ///     .await
-    ///     .unwrap();
-    ///
-    /// let mut w = Worker::builder()
-    ///     .graceful_shutdown_period(5_000)
-    ///     .register_fn("foobar", |_j| async { Ok::<(), std::io::Error>(()) })
-    ///     .connect(None).await.unwrap();
-    ///
-    /// let token = CancellationToken::new();
-    /// let child_token = token.child_token();
-    ///
-    /// let _handle = tokio::spawn(async move { w.run(&["qname"]).await });
-    ///
-    /// token.cancel();
-    /// # });
-    /// ```
-    ///
-    /// In case you have no intention to send termination signals, just pass `None` as the second
-    /// argument of [`Worker::run`]. The modified example from above will look like so:
-    /// ```no_run
-    /// # tokio_test::block_on(async {
-    /// use faktory::{Client, Job, Worker};
-    ///
-    /// Client::connect(None)
-    ///     .await
-    ///     .unwrap()
-    ///     .enqueue(Job::new("foobar", vec!["z"]))
-    ///     .await
-    ///     .unwrap();
-    ///
-    /// let mut w = Worker::builder()
-    ///     .graceful_shutdown_period(5_000)
-    ///     .register_fn("foobar", |_j| async { Ok::<(), std::io::Error>(()) })
-    ///     .connect(None).await.unwrap();
-    ///
-    /// let _handle = tokio::spawn(async move { w.run(&["qname"]).await });
-    /// # });
-    /// ```
     pub async fn run<Q>(&mut self, queues: &[Q]) -> Result<usize, Error>
     where
         Q: AsRef<str>,

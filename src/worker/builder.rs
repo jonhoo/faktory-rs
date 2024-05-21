@@ -98,9 +98,47 @@ impl<E: 'static> WorkerBuilder<E> {
 
     /// Set a graceful shutdown signal.
     ///
-    /// As soon as the provided future resolves, the graceful shutdown will
-    /// step in making the [`Worker::run`] operation return control to the calling
-    /// code.
+    /// As soon as the provided future resolves, the graceful shutdown will step in
+    /// making the [`Worker::run`] operation return control to the calling code.
+    /// In case of the  [`Worker::run_to_completion`] operation, the process will be exited
+    /// upon gracefull shutdown.
+    ///
+    /// The graceful shutdown itself is a race between the clean up needed to be performed
+    /// (e.g. report on the currently processed to the Faktory server) and a shutdown deadline.
+    /// The latter can be customized via [`WorkerBuilder::graceful_shutdown_period`].
+    ///
+    /// ```no_run
+    /// # tokio_test::block_on(async {
+    /// use faktory::{Client, Job, Worker};
+    /// use tokio_util::sync::CancellationToken;
+    ///
+    /// Client::connect(None)
+    ///     .await
+    ///     .unwrap()
+    ///     .enqueue(Job::new("foobar", vec!["z"]))
+    ///     .await
+    ///     .unwrap();
+    ///
+    /// // create a signalling future (we are using a utility from the `tokio_util` crate)
+    /// let token = CancellationToken::new();
+    /// let child_token = token.child_token();
+    /// let signal = async move { child_token.cancelled().await };
+    ///
+    /// // get a connected worker
+    /// let mut w = Worker::builder()
+    ///     .with_graceful_shutdown(signal)
+    ///     .register_fn("job_type", move |_| async { Ok::<(), std::io::Error>(()) })
+    ///     .connect(None)
+    ///     .await
+    ///     .unwrap();
+    ///
+    /// // start consuming
+    /// let jh = tokio::spawn(async move { w.run(&["default"]).await });
+    ///
+    /// // send a signal to eventually return control (upon graceful shutdown)
+    /// token.cancel();
+    /// # });
+    /// ```
     pub fn with_graceful_shutdown<F>(mut self, signal: F) -> Self
     where
         F: Future<Output = ()> + 'static + Send,
@@ -111,9 +149,9 @@ impl<E: 'static> WorkerBuilder<E> {
 
     /// Set the graceful shutdown period in milliseconds. Defaults to 5000.
     ///
-    /// This will be used once the worker is sent a termination signal whether
-    /// it is at the application (see [`Worker::run`](Worker::run)) or OS level
-    /// (via Ctrl-C signal, see docs for [`Worker::run_to_completion`](Worker::run_to_completion)).
+    /// This will be used once the worker is sent a termination signal whether it is at the application
+    /// (via a signalling future, see [`WorkerBuilder::with_graceful_shutdown`]) or OS level (via Ctrl-C signal,
+    /// see [`Worker::run_to_completion`]).
     pub fn graceful_shutdown_period(mut self, millis: u64) -> Self {
         self.shutdown_timeout = millis;
         self
