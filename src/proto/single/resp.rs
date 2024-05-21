@@ -201,8 +201,15 @@ pub struct FaktoryState {
     /// Server time.
     pub now: DateTime<Utc>,
 
-    /// Server time as a string formatted as "%H:%M:%S UTC" (e.g. "19:47:39 UTC").
-    pub server_utc_time: String,
+    /// Server time (naive representation).
+    ///
+    /// Faktory sends it as a string formatted as "%H:%M:%S UTC" (e.g. "19:47:39 UTC")
+    /// and it is being parsed as `NaiveTime`.
+    ///
+    /// Most of the time, though, you will want to use [`FaktoryState::now`] instead.
+    #[serde(deserialize_with = "utils::deser_server_time")]
+    #[serde(serialize_with = "utils::ser_server_time")]
+    pub server_utc_time: chrono::naive::NaiveTime,
 
     /// Faktory service information.
     #[serde(rename = "faktory")]

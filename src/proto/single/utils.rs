@@ -1,3 +1,4 @@
+use chrono::naive::NaiveTime;
 use rand::{thread_rng, Rng};
 use serde::{de::Deserializer, Deserialize, Serializer};
 use std::time::Duration;
@@ -35,6 +36,28 @@ where
 {
     let secs = u64::deserialize(value)?;
     Ok(Duration::from_secs(secs))
+}
+
+pub(crate) fn ser_server_time<S>(value: &NaiveTime, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(&format!("{} UTC", value))
+}
+
+pub(crate) fn deser_server_time<'de, D>(value: D) -> Result<NaiveTime, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let naive_time_str = String::deserialize(value)?;
+    let naive_time_str = naive_time_str
+        .strip_suffix(" UTC")
+        .ok_or(serde::de::Error::custom(
+            "Expected a naive time string that ends with ' UTC'",
+        ))?;
+    let naive_time =
+        NaiveTime::parse_from_str(naive_time_str, "%H:%M:%S").map_err(serde::de::Error::custom)?;
+    Ok(naive_time)
 }
 
 #[cfg(test)]
@@ -82,6 +105,27 @@ mod test {
         };
 
         let serialized = serde_json::to_string(&server).expect("serialized ok");
+        let deserialized = serde_json::from_str(&serialized).expect("deserialized ok");
+        assert_eq!(server, deserialized);
+    }
+
+    #[test]
+    fn test_ser_deser_server_time() {
+        #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+        struct FaktoryServer {
+            /// Server time as a string formatted as "%H:%M:%S UTC" (e.g. "19:47:39 UTC").
+            #[serde(deserialize_with = "deser_server_time")]
+            #[serde(serialize_with = "ser_server_time")]
+            pub server_utc_time: NaiveTime,
+        }
+
+        let server = FaktoryServer {
+            server_utc_time: NaiveTime::from_hms_opt(19, 47, 39).expect("valid"),
+        };
+
+        let serialized = serde_json::to_string(&server).expect("serialized ok");
+        assert_eq!(serialized, "{\"server_utc_time\":\"19:47:39 UTC\"}");
+
         let deserialized = serde_json::from_str(&serialized).expect("deserialized ok");
         assert_eq!(server, deserialized);
     }
