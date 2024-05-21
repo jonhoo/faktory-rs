@@ -102,7 +102,7 @@ async fn server_state() {
         "{}",
         server_state.server.connections
     ); // at least two clients from the current test
-    assert_ne!(server_state.server.uptime, 0); // if IPC is happenning, this should hold :)
+    assert_ne!(server_state.server.uptime.as_secs(), 0); // if IPC is happenning, this should hold :)
 
     let nenqueued = server_state.data.total_enqueued;
     let nqueues = server_state.data.total_queues;

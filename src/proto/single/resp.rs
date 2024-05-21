@@ -1,6 +1,8 @@
+use super::utils;
 use crate::error::{self, Error};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
+use std::time::Duration;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt};
 
 #[cfg(feature = "ent")]
@@ -166,7 +168,9 @@ pub struct ServerSnapshot {
     pub version: semver::Version,
 
     /// Faktory server process uptime in seconds.
-    pub uptime: u64,
+    #[serde(deserialize_with = "utils::deser_duration")]
+    #[serde(serialize_with = "utils::ser_duration")]
+    pub uptime: Duration,
 
     /// Number of clients connected to the server.
     pub connections: u64,
