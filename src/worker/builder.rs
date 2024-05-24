@@ -99,9 +99,7 @@ impl<E: 'static> WorkerBuilder<E> {
     /// Set a graceful shutdown signal.
     ///
     /// As soon as the provided future resolves, the graceful shutdown will step in
-    /// making the [`Worker::run`] operation return control to the calling code.
-    /// In case of the  [`Worker::run_to_completion`] operation, the process will be exited
-    /// upon gracefull shutdown.
+    /// making the long-running operation (see [`Worker::run`]) return control to the calling code.
     ///
     /// The graceful shutdown itself is a race between the clean up needed to be performed
     /// (e.g. report on the currently processed to the Faktory server) and a shutdown deadline.

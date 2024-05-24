@@ -394,7 +394,14 @@ impl<
                 .await?;
         }
 
-        let signal = self.shutdown_signal.take();
+        // for "forever" operations (currently only `Worker::run_to_completion`) we support SIGTERM handling,
+        // whereas for long-running operations (see `Worker::run`), we are polling the cancellation future which
+        // serves as a signal to start graceful shutdowna and return control to the calling site
+        let cancel_signal = if self.forever {
+            None
+        } else {
+            self.shutdown_signal.take()
+        };
 
         let report = tokio::select! {
             // A signal SIGTERM from the OS received.
@@ -412,7 +419,7 @@ impl<
                 }
             },
             // A signal from the user space received.
-            _ = async { let signal = signal.unwrap(); signal.await }, if signal.is_some() => {
+            _ = async { let signal = cancel_signal.unwrap(); signal.await }, if cancel_signal.is_some() => {
                 let nrunning = tokio::select! {
                     _ = tokio_sleep(TokioDuration::from_millis(self.shutdown_timeout)) => {
                         0
@@ -457,7 +464,7 @@ impl<
 
     /// Run this worker until the server tells us to exit or a connection cannot be re-established.
     ///
-    /// This function never returns. When the worker decides to exit or SIGTERM is received,
+    /// This function never returns. When the worker decides to exit or `SIGTERM` is received,
     /// the process is terminated within the [shutdown period](WorkerBuilder::graceful_shutdown_period).
     pub async fn run_to_completion<Q>(mut self, queues: &[Q]) -> !
     where
