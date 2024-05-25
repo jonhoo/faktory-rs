@@ -358,10 +358,10 @@ where
         Ok((jobs_count - errors.len(), Some(errors)))
     }
 
-    /// Retrieve information about the running server.
+    /// Retrieve [information](crate::ServerSnapshot) about the running server.
     ///
     /// The returned value is the result of running the `INFO` command on the server.
-    pub async fn info(&mut self) -> Result<serde_json::Value, Error> {
+    pub async fn current_info(&mut self) -> Result<single::FaktoryState, Error> {
         self.issue(&Info)
             .await?
             .read_json()
