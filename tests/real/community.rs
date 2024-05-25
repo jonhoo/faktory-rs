@@ -90,7 +90,7 @@ async fn server_state() {
     let server_state = client.current_info().await.unwrap();
     // the Faktory release we are writing bindings and testing
     // against is at least "1.8.0"
-    assert_gte!(server_state.server.version.major, 1);
+    assert_eq!(server_state.server.version.major, 1);
     assert_gte!(server_state.server.version.minor, 8);
     assert!(server_state.data.queues.get(local).is_none());
     // the following two assertions are not super-helpful but

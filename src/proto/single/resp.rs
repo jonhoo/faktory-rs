@@ -1,7 +1,7 @@
 use super::utils;
 use crate::error::{self, Error};
 use chrono::{DateTime, Utc};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::time::Duration;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt};
 
@@ -149,7 +149,7 @@ pub struct DataSnapshot {
     /// A mapping between a queue name and its size (number of jobs on the queue).
     /// The keys of this map effectively make up a list of queues that are currently
     /// registered in the Faktory service.
-    pub queues: HashMap<String, u64>,
+    pub queues: BTreeMap<String, u64>,
 
     /// ***Deprecated***. Faktory's task runner stats.
     ///
