@@ -4,7 +4,7 @@ FAKTORY_PORT=7419
 FAKTORY_PORT_SECURE=17419
 FAKTORY_PORT_UI=7420
 
-.PHONT: precommit
+.PHONY: precommit
 precommit: fmt check test/doc test/e2e test/e2e/tls
 
 .PHONY: fmt
