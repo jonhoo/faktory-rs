@@ -8,8 +8,8 @@ use std::{
 use tokio::io::{AsyncBufRead, AsyncWrite};
 use tokio::time::sleep as tokio_sleep;
 
-const CHECK_STATE_INTERVAL_MILLIS: u64 = 100;
-const HEARTBEAT_INTERVAL_SECS: u64 = 5;
+const CHECK_STATE_INTERVAL: Duration = Duration::from_millis(100);
+const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 impl<S, E> Worker<S, E>
 where
     S: AsyncBufRead + AsyncWrite + Send + Unpin,
