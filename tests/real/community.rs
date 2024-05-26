@@ -121,7 +121,7 @@ async fn server_state() {
 
     // let's give Faktory a second to get updated
     tokio_time::sleep(Duration::from_secs(1)).await;
-    
+
     // we only pushed 1 job on this queue
     let server_state = client.current_info().await.unwrap();
     assert_eq!(*server_state.data.queues.get(local).unwrap(), 1);
