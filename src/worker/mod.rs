@@ -6,7 +6,7 @@ use std::sync::{atomic, Arc};
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
 use tokio::io::{AsyncBufRead, AsyncWrite};
 use tokio::net::TcpStream;
-use tokio::task::{spawn_blocking, AbortHandle, JoinSet};
+use tokio::task::{spawn_blocking, AbortHandle, JoinError, JoinSet};
 
 mod builder;
 mod health;
@@ -181,13 +181,14 @@ impl<S: AsyncWrite + Send + Unpin, E> Worker<S, E> {
     }
 }
 
-enum Failed<E: StdError> {
+enum Failed<E: StdError, JE: StdError> {
     Application(E),
+    HandlerPanic(JE),
     BadJobType(String),
 }
 
 impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> Worker<S, E> {
-    async fn run_job(&mut self, job: Job) -> Result<(), Failed<E>> {
+    async fn run_job(&mut self, job: Job) -> Result<(), Failed<E, JoinError>> {
         let handler = self
             .callbacks
             .get(job.kind())
@@ -196,10 +197,10 @@ impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> 
             Callback::Async(cb) => cb.run(job).await.map_err(Failed::Application),
             Callback::Sync(cb) => {
                 let cb = Arc::clone(cb);
-                spawn_blocking(move || cb(job))
-                    .await
-                    .expect("joined ok")
-                    .map_err(Failed::Application)
+                match spawn_blocking(move || cb(job)).await {
+                    Err(join_error) => Err(Failed::HandlerPanic(join_error)),
+                    Ok(processing_result) => processing_result.map_err(Failed::Application),
+                }
             }
         }
     }
@@ -288,6 +289,7 @@ impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> 
                 let fail = match e {
                     Failed::BadJobType(jt) => Fail::generic(jid, format!("No handler for {}", jt)),
                     Failed::Application(e) => Fail::generic_with_backtrace(jid, e),
+                    Failed::HandlerPanic(e) => Fail::generic_with_backtrace(jid, e),
                 };
                 self.worker_states.register_failure(worker, fail.clone());
                 self.c.issue(&fail).await?.read_ok().await?;

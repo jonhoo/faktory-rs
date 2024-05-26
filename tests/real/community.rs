@@ -386,3 +386,30 @@ async fn test_jobs_with_blocking_handlers() {
         assert!(w.run_one(0, &[local]).await.unwrap());
     }
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_panic_in_handler() {
+    skip_check!();
+
+    let local = "test_panic_in_handler";
+
+    let mut w = Worker::builder::<io::Error>()
+        .register_blocking_fn("panic", |_j| {
+            panic!("Panic inside the handler...");
+        })
+        .connect(None)
+        .await
+        .unwrap();
+
+    Client::connect(None)
+        .await
+        .unwrap()
+        .enqueue(Job::builder("panic").queue(local).build())
+        .await
+        .unwrap();
+
+    // we _did_ consume and process the job, the processing result itself though
+    // was a failure; however, a panic in the handler was "intercepted" and communicated
+    // to the Faktory server via the FAIL command
+    assert!(w.run_one(0, &[local]).await.unwrap());
+}
