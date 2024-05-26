@@ -159,16 +159,15 @@ async fn server_state() {
         server_state.data.total_processed
     );
 
-    // Uncomment when `Client::queue_remove` is delivered:
-    // client.queue_remove(&[local]).await.unwrap();
-    // assert!(client
-    //    .current_info()
-    //    .await
-    //    .unwrap()
-    //    .data
-    //    .queues
-    //    .get(local)
-    //    .is_none());
+    client.queue_remove(&[local]).await.unwrap();
+    assert!(client
+        .current_info()
+        .await
+        .unwrap()
+        .data
+        .queues
+        .get(local)
+        .is_none());
 }
 
 #[tokio::test(flavor = "multi_thread")]
