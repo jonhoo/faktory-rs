@@ -18,17 +18,9 @@ impl<T> JobHandler<T> {
 impl JobHandler<u64> {
     async fn process_one(&self, job: Job) -> IOResult<()> {
         time::sleep(time::Duration::from_millis(100)).await;
-        let mut args = job.args().into_iter();
-        let x = args
-            .next()
-            .expect("'x' to be some")
-            .as_u64()
-            .expect("'x' to be an integer");
-        let y = args
-            .next()
-            .expect("'y' to be some")
-            .as_u64()
-            .expect("'y' to be an interger");
+        let args = job.args();
+        let x = args[0].as_u64().expect("'x' to be an integer");
+        let y = args[1].as_u64().expect("'y' to be an interger");
         self.chan.send(x + y).await.expect("no error");
         Ok(())
     }
@@ -79,7 +71,7 @@ async fn main() {
     let res = rx.recv().await.expect("some calculation result");
 
     tracing::info!(
-        "Send a job with args `vec![5, 8]`. Receiced result `{}`",
+        "Send a job with args `vec![5, 8]`. Received result `{}`",
         res
     );
 }
