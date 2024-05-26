@@ -360,6 +360,7 @@ async fn test_jobs_with_blocking_handlers() {
             // Imagine fetching data for this user from various origins,
             // updating an entry on them in the database, and then sending them
             // an email and pushing a follow-up task on the Faktory queue
+            tokio::time::sleep(Duration::from_millis(100)).await;
             Ok::<(), io::Error>(())
         })
         .register_fn(
