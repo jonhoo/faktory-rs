@@ -10,10 +10,8 @@ pub struct JobHandler<T> {
 }
 
 impl<T> JobHandler<T> {
-    pub fn new(chan: &Arc<mpsc::Sender<T>>) -> Self {
-        Self {
-            chan: Arc::clone(chan),
-        }
+    pub fn new(chan: Arc<mpsc::Sender<T>>) -> Self {
+        Self { chan }
     }
 }
 
