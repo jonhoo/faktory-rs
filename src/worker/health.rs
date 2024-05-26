@@ -3,13 +3,14 @@ use crate::{proto::HeartbeatStatus, Error};
 use std::{
     error::Error as StdError,
     sync::{atomic, Arc},
-    time,
+    time::{self, Duration},
 };
 use tokio::io::{AsyncBufRead, AsyncWrite};
 use tokio::time::sleep as tokio_sleep;
 
 const CHECK_STATE_INTERVAL: Duration = Duration::from_millis(100);
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
+
 impl<S, E> Worker<S, E>
 where
     S: AsyncBufRead + AsyncWrite + Send + Unpin,
@@ -37,7 +38,7 @@ where
         let mut last = time::Instant::now();
 
         loop {
-            tokio_sleep(time::Duration::from_millis(CHECK_STATE_INTERVAL_MILLIS)).await;
+            tokio_sleep(CHECK_STATE_INTERVAL).await;
 
             // has a worker failed?
             let worker_failure = target == STATUS_RUNNING
@@ -53,7 +54,7 @@ where
                 break Ok(false);
             }
 
-            if last.elapsed().as_secs() < HEARTBEAT_INTERVAL_SECS {
+            if last.elapsed() < HEARTBEAT_INTERVAL {
                 // don't sent a heartbeat yet
                 continue;
             }
