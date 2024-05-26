@@ -1,7 +1,8 @@
 use crate::{assert_gte, skip_check};
 use faktory::{Client, Job, JobBuilder, JobId, Worker, WorkerBuilder, WorkerId};
 use serde_json::Value;
-use std::{io, sync};
+use std::{io, sync, time::Duration};
+use tokio::time as tokio_time;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn hello_client() {
@@ -118,6 +119,9 @@ async fn server_state() {
         .await
         .unwrap();
 
+    // let's give Faktory a second to get updated
+    tokio_time::sleep(Duration::from_secs(1)).await;
+    
     // we only pushed 1 job on this queue
     let server_state = client.current_info().await.unwrap();
     assert_eq!(*server_state.data.queues.get(local).unwrap(), 1);
