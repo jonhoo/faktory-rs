@@ -68,7 +68,7 @@ async fn main() {
 
     // create a worker
     let mut w = Worker::builder()
-        .register("job_type", JobHandler::new(&tx))
+        .register("job_type", JobHandler::new(Arc::clone(&tx)))
         .connect(None)
         .await
         .expect("Connected to server");
