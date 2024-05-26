@@ -336,8 +336,8 @@ async fn queue_control_actions() {
     assert!(rx.try_recv().is_ok());
 
     // let's inspect the sever state
-    let server_state = client.info().await.unwrap();
-    let queues = &server_state.get("faktory").unwrap().get("queues").unwrap();
+    let server_state = client.current_info().await.unwrap();
+    let queues = &server_state.data.queues;
     assert_eq!(*queues.get(local_1).unwrap(), 1); // 1 job remaining
     assert_eq!(*queues.get(local_2).unwrap(), 1); // also 1 job remaining
 
@@ -351,8 +351,8 @@ async fn queue_control_actions() {
     assert!(!rx.try_recv().is_ok());
 
     // let's inspect the sever state again
-    let server_state = client.info().await.unwrap();
-    let queues = &server_state.get("faktory").unwrap().get("queues").unwrap();
+    let server_state = client.current_info().await.unwrap();
+    let queues = &server_state.data.queues;
     // our queue are not even mentioned in the server report:
     assert!(queues.get(local_1).is_none());
     assert!(queues.get(local_2).is_none());
@@ -418,8 +418,8 @@ async fn queue_control_actions_wildcard() {
     assert!(rx.try_recv().is_ok());
 
     // let's inspect the sever state
-    let server_state = client.info().await.unwrap();
-    let queues = &server_state.get("faktory").unwrap().get("queues").unwrap();
+    let server_state = client.current_info().await.unwrap();
+    let queues = &server_state.data.queues;
     assert_eq!(*queues.get(local_1).unwrap(), 1); // 1 job remaining
     assert_eq!(*queues.get(local_2).unwrap(), 1); // also 1 job remaining
 
@@ -433,9 +433,8 @@ async fn queue_control_actions_wildcard() {
     assert!(!rx.try_recv().is_ok());
 
     // let's inspect the sever state again
-    let server_state = client.info().await.unwrap();
-    let queues = &server_state.get("faktory").unwrap().get("queues").unwrap();
-
+    let server_state = client.current_info().await.unwrap();
+    let queues = &server_state.data.queues;
     // our queue are not even mentioned in the server report:
     assert!(queues.get(local_1).is_none());
     assert!(queues.get(local_2).is_none());
