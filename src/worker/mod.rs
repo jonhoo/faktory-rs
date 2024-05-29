@@ -155,7 +155,7 @@ pub struct Worker<S: AsyncWrite + Send + Unpin, E> {
     callbacks: Arc<CallbacksRegistry<E>>,
     terminated: bool,
     forever: bool,
-    shutdown_timeout: u64,
+    shutdown_timeout: Duration,
     shutdown_signal: Option<ShutdownSignal>,
 }
 
