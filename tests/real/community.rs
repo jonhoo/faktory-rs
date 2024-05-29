@@ -394,7 +394,7 @@ async fn test_shutdown_signals_handling() {
     // get a connected worker
     let mut w = WorkerBuilder::default()
         .with_graceful_shutdown(signal)
-        .graceful_shutdown_period(shutdown_timeout)
+        .shutdown_timeout(shutdown_timeout)
         .register_fn(jkind, process_hard_task(tx))
         .connect(None)
         .await

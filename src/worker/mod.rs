@@ -155,7 +155,7 @@ pub struct Worker<S: AsyncWrite + Send + Unpin, E> {
     callbacks: Arc<CallbacksRegistry<E>>,
     terminated: bool,
     forever: bool,
-    shutdown_timeout: Duration,
+    shutdown_timeout: Option<Duration>,
     shutdown_signal: Option<ShutdownSignal>,
 }
 
@@ -179,7 +179,7 @@ impl<S: AsyncWrite + Send + Unpin, E> Worker<S, E> {
         c: Client<S>,
         workers_count: usize,
         callbacks: CallbacksRegistry<E>,
-        shutdown_timeout: Duration,
+        shutdown_timeout: Option<Duration>,
         shutdown_signal: Option<ShutdownSignal>,
     ) -> Self {
         Worker {
@@ -365,7 +365,7 @@ impl<
     /// supplied to [`WorkerBuilder::with_graceful_shutdown`](`Ok` is returned).
     ///
     /// The value in an `Ok` indicates the number of workers that may still be processing jobs, but `0` can also
-    /// indicate the [graceful shutdown period](WorkerBuilder::graceful_shutdown_period) has been exceeded.
+    /// indicate the [graceful shutdown period](WorkerBuilder::shutdown_timeout) has been exceeded.
     ///
     /// If an error occurred while reporting a job success or failure, the result will be re-reported to the server
     /// without re-executing the job. If the worker was terminated (i.e., `run` returns  with an `Ok` response),
@@ -403,6 +403,10 @@ impl<
             self.shutdown_signal.take()
         };
 
+        // it is OK to `take` it here, since we are either making the process exit,
+        // or marking the main `worker` as `terminated` and so it cannot be re-used
+        let timeout = self.shutdown_timeout.take();
+
         let report = tokio::select! {
             // A signal SIGTERM from the OS received.
             _ = tokio::signal::ctrl_c(), if self.forever => {
@@ -410,7 +414,7 @@ impl<
                     _ = tokio::signal::ctrl_c() => {
                         process::exit(0);
                     },
-                    _ = tokio_sleep(self.shutdown_timeout) => {
+                    _ = tokio_sleep(timeout.unwrap()), if timeout.is_some() => {
                         process::exit(0);
                     },
                     _nrunning = self.force_fail_all_workers("SIGTERM received") => {
@@ -421,7 +425,7 @@ impl<
             // A signal from the user space received.
             _ = async { let signal = cancel_signal.unwrap(); signal.await }, if cancel_signal.is_some() => {
                 let nrunning = tokio::select! {
-                    _ = tokio_sleep(self.shutdown_timeout) => {
+                 _ = tokio_sleep(timeout.unwrap()), if timeout.is_some() => {
                         0
                     },
                     nrunning = self.force_fail_all_workers("termination signal received over channel") => {
@@ -465,7 +469,7 @@ impl<
     /// Run this worker until the server tells us to exit or a connection cannot be re-established.
     ///
     /// This function never returns. When the worker decides to exit or `SIGTERM` is received,
-    /// the process is terminated within the [shutdown period](WorkerBuilder::graceful_shutdown_period).
+    /// the process is terminated within the [shutdown period](WorkerBuilder::shutdown_timeout).
     pub async fn run_to_completion<Q>(mut self, queues: &[Q]) -> !
     where
         Q: AsRef<str>,

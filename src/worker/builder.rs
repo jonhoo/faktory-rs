@@ -8,8 +8,6 @@ use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
-pub(crate) const GRACEFUL_SHUTDOWN_PERIOD: Duration = Duration::from_secs(5);
-
 /// Convenience wrapper for building a Faktory worker.
 ///
 /// See the [`Worker`] documentation for details.
@@ -17,7 +15,7 @@ pub struct WorkerBuilder<E> {
     opts: ClientOptions,
     workers_count: usize,
     callbacks: CallbacksRegistry<E>,
-    shutdown_timeout: Duration,
+    shutdown_timeout: Option<Duration>,
     shutdown_signal: Option<ShutdownSignal>,
 }
 
@@ -37,7 +35,7 @@ impl<E> Default for WorkerBuilder<E> {
             opts: ClientOptions::default(),
             workers_count: 1,
             callbacks: CallbacksRegistry::default(),
-            shutdown_timeout: GRACEFUL_SHUTDOWN_PERIOD,
+            shutdown_timeout: None,
             shutdown_signal: None,
         }
     }
@@ -104,7 +102,7 @@ impl<E: 'static> WorkerBuilder<E> {
     ///
     /// The graceful shutdown itself is a race between the clean up needed to be performed
     /// (e.g. report on the currently processed to the Faktory server) and a shutdown deadline.
-    /// The latter can be customized via [`WorkerBuilder::graceful_shutdown_period`].
+    /// The latter can be customized via [`WorkerBuilder::shutdown_timeout`].
     ///
     /// ```no_run
     /// # tokio_test::block_on(async {
@@ -146,13 +144,15 @@ impl<E: 'static> WorkerBuilder<E> {
         self
     }
 
-    /// Set the graceful shutdown period in milliseconds. Defaults to 5000.
+    /// Set a shutdown timeout.
     ///
     /// This will be used once the worker is sent a termination signal whether it is at the application
     /// (via a signalling future, see [`WorkerBuilder::with_graceful_shutdown`]) or OS level (via Ctrl-C signal,
     /// see [`Worker::run_to_completion`]).
-    pub fn graceful_shutdown_period(mut self, dur: Duration) -> Self {
-        self.shutdown_timeout = dur;
+    ///
+    /// Defaults to `None`, i.e. no shoutdown abortion due to a timeout.
+    pub fn shutdown_timeout(mut self, dur: Duration) -> Self {
+        self.shutdown_timeout = Some(dur);
         self
     }
 
