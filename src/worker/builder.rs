@@ -7,7 +7,7 @@ use std::future::Future;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
-pub(crate) const GRACEFUL_SHUTDOWN_PERIOD_MILLIS: u64 = 5_000;
+pub(crate) const GRACEFUL_SHUTDOWN_PERIOD: Duration = Duration::from_secs(5);
 
 /// Convenience wrapper for building a Faktory worker.
 ///
