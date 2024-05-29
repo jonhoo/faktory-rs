@@ -6,12 +6,12 @@ use std::future::Future;
 use std::pin::Pin;
 use std::process;
 use std::sync::{atomic, Arc};
+use std::time::Duration;
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
 use tokio::io::{AsyncBufRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio::task::{AbortHandle, JoinSet};
 use tokio::time::sleep as tokio_sleep;
-use tokio::time::Duration as TokioDuration;
 
 mod builder;
 mod health;
@@ -179,7 +179,7 @@ impl<S: AsyncWrite + Send + Unpin, E> Worker<S, E> {
         c: Client<S>,
         workers_count: usize,
         callbacks: CallbacksRegistry<E>,
-        shutdown_timeout: u64,
+        shutdown_timeout: Duration,
         shutdown_signal: Option<ShutdownSignal>,
     ) -> Self {
         Worker {
@@ -410,7 +410,7 @@ impl<
                     _ = tokio::signal::ctrl_c() => {
                         process::exit(0);
                     },
-                    _ = tokio_sleep(TokioDuration::from_millis(self.shutdown_timeout)) => {
+                    _ = tokio_sleep(self.shutdown_timeout) => {
                         process::exit(0);
                     },
                     _nrunning = self.force_fail_all_workers("SIGTERM received") => {
@@ -421,7 +421,7 @@ impl<
             // A signal from the user space received.
             _ = async { let signal = cancel_signal.unwrap(); signal.await }, if cancel_signal.is_some() => {
                 let nrunning = tokio::select! {
-                    _ = tokio_sleep(TokioDuration::from_millis(self.shutdown_timeout)) => {
+                    _ = tokio_sleep(self.shutdown_timeout) => {
                         0
                     },
                     nrunning = self.force_fail_all_workers("termination signal received over channel") => {

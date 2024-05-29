@@ -4,6 +4,7 @@ use crate::{
     Error, Job, JobRunner, WorkerId,
 };
 use std::future::Future;
+use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
@@ -16,7 +17,7 @@ pub struct WorkerBuilder<E> {
     opts: ClientOptions,
     workers_count: usize,
     callbacks: CallbacksRegistry<E>,
-    shutdown_timeout: u64,
+    shutdown_timeout: Duration,
     shutdown_signal: Option<ShutdownSignal>,
 }
 
@@ -36,7 +37,7 @@ impl<E> Default for WorkerBuilder<E> {
             opts: ClientOptions::default(),
             workers_count: 1,
             callbacks: CallbacksRegistry::default(),
-            shutdown_timeout: GRACEFUL_SHUTDOWN_PERIOD_MILLIS,
+            shutdown_timeout: GRACEFUL_SHUTDOWN_PERIOD,
             shutdown_signal: None,
         }
     }
@@ -150,8 +151,8 @@ impl<E: 'static> WorkerBuilder<E> {
     /// This will be used once the worker is sent a termination signal whether it is at the application
     /// (via a signalling future, see [`WorkerBuilder::with_graceful_shutdown`]) or OS level (via Ctrl-C signal,
     /// see [`Worker::run_to_completion`]).
-    pub fn graceful_shutdown_period(mut self, millis: u64) -> Self {
-        self.shutdown_timeout = millis;
+    pub fn graceful_shutdown_period(mut self, dur: Duration) -> Self {
+        self.shutdown_timeout = dur;
         self
     }
 

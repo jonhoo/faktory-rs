@@ -1,6 +1,7 @@
 use crate::skip_check;
 use faktory::{Client, Job, JobBuilder, JobId, Worker, WorkerBuilder, WorkerId};
 use serde_json::Value;
+use std::time::Duration;
 use std::{io, sync};
 use tokio_util::sync::CancellationToken;
 
@@ -370,7 +371,7 @@ async fn test_shutdown_signals_handling() {
 
     let qname = "test_shutdown_signals_handling";
     let jkind = "heavy";
-    let shutdown_timeout = 500;
+    let shutdown_timeout = Duration::from_millis(500);
 
     // get a client and a job to enqueue
     let mut cl = Client::connect(None).await.unwrap();
