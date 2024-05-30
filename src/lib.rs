@@ -48,9 +48,9 @@
 //!
 //! ```no_run
 //! # tokio_test::block_on(async {
-//! use faktory::Worker;
+//! use faktory::WorkerBuilder;
 //! use std::io;
-//! let mut w = Worker::builder()
+//! let mut w = WorkerBuilder::default()
 //!     .register_fn("foobar", |job| async move {
 //!         println!("{:?}", job);
 //!         Ok::<(), io::Error>(())
