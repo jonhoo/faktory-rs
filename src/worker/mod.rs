@@ -431,6 +431,9 @@ impl<
                 Ok((RunCeaseReason::CancelSignal, nrunning))
             },
             // A signal from the Faktory server received or an error occurred.
+            // Even though `Worker::listen_for_hearbeats` is not cancellation safe, we are ok using it here,
+            // since we are not `select!`ing in a loop and we are eventually _either_ marking the worker as
+            // terminated, _or_ re-creating a connection, i.e. we never end up re-using the "broken" connection.
             exit = self.listen_for_heartbeats(&statuses) => {
                 // there are a couple of cases here:
                 //  - we got TERMINATE, so we should just return, even if a worker is still running
