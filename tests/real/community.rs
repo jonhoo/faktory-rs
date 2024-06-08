@@ -357,7 +357,7 @@ fn process_hard_task(
     return Box::new(move |j: Job| {
         let sender = sync::Arc::clone(&sender);
         Box::pin(async move {
-            let complexity = j.args().iter().next().unwrap().as_u64().unwrap();
+            let complexity = j.args()[0].as_u64().unwrap();
             sender.send(true).await.unwrap(); // inform that we are now starting to process the job
             tokio::time::sleep(tokio::time::Duration::from_millis(complexity)).await;
             Ok::<(), io::Error>(())

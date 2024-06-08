@@ -412,49 +412,26 @@ impl<
                 .await?;
         }
 
-        // for "forever" operations (currently only `Worker::run_to_completion`) we support SIGTERM handling,
-        // whereas for long-running operations (see `Worker::run`), we are polling the cancellation future which
-        // serves as a signal to start graceful shutdowna and return control to the calling site
-        let cancel_signal = if self.forever {
-            None
-        } else {
-            self.shutdown_signal.take()
-        };
-
-        // it is OK to `take` it here, since we are either making the process exit,
-        // or marking the main `worker` as `terminated` and so it cannot be re-used
-        let timeout = self.shutdown_timeout.take();
+        // Either we have already taken this future and are polling it elsewhere (see Worker::run_to_completion),
+        // or they've never provided it to us (reminder: they do so via WorkerBuilder::with_graceful_shutdown)
+        let cancel_signal = self.shutdown_signal.take();
 
         let report = tokio::select! {
-            // A signal SIGTERM from the OS received.
-            _ = tokio::signal::ctrl_c(), if self.forever => {
-                tokio::select! {
-                    _ = tokio::signal::ctrl_c() => {
-                        process::exit(0);
-                    },
-                    _ = tokio_sleep(timeout.unwrap()), if timeout.is_some() => {
-                        process::exit(0);
-                    },
-                    _nrunning = self.force_fail_all_workers("SIGTERM received") => {
-                        process::exit(0);
-                    }
-                }
-            },
             // A signal from the user space received.
             _ = async { let signal = cancel_signal.unwrap(); signal.await }, if cancel_signal.is_some() => {
                 let nrunning = tokio::select! {
-                 _ = tokio_sleep(timeout.unwrap()), if timeout.is_some() => {
+                     _ = tokio_sleep(self.shutdown_timeout.unwrap()), if self.shutdown_timeout.is_some() => {
                         0
                     },
-                    nrunning = self.force_fail_all_workers("termination signal received over channel") => {
+                    nrunning = self.force_fail_all_workers("termination signal received from user space") => {
                         nrunning
                     }
                 };
                 self.terminated = true;
                 Ok((RunCeaseReason::CancelSignal, nrunning))
             },
-           // A signal from the Faktory server received or an error occurred.
-           exit = self.listen_for_heartbeats(&statuses) => {
+            // A signal from the Faktory server received or an error occurred.
+            exit = self.listen_for_heartbeats(&statuses) => {
                 // there are a couple of cases here:
                 //  - we got TERMINATE, so we should just return, even if a worker is still running
                 //  - we got TERMINATE and all workers has exited
@@ -484,21 +461,34 @@ impl<
         report
     }
 
-    /// Run this worker until the server tells us to exit or a connection cannot be re-established.
+    /// Run this worker until the server tells us to exit or a connection cannot be re-established,
+    /// or a signal from the user-space code has been received via a future passed to [`WorkerBuilder::with_graceful_shutdown`]
     ///
-    /// This function never returns. When the worker decides to exit or `SIGTERM` is received,
-    /// the process is terminated within the [shutdown period](WorkerBuilder::shutdown_timeout).
+    /// This function never returns. When the worker decides to exit or a signal to shutdown gracefully
+    /// has been received, the process is terminated within the [shutdown period](WorkerBuilder::shutdown_timeout).
     pub async fn run_to_completion<Q>(mut self, queues: &[Q]) -> !
     where
         Q: AsRef<str>,
     {
-        self.forever = true;
-        while self.run(queues).await.is_err() {
-            if self.reconnect().await.is_err() {
-                break;
-            }
-        }
+        let sig = self.shutdown_signal.take();
+        tokio::select! {
+            // A signal from the user space received.
+            _ = async { let sig = sig.unwrap(); sig.await }, if sig.is_some() => {
+                tokio::select! {
+                    _ = tokio_sleep(self.shutdown_timeout.unwrap()), if self.shutdown_timeout.is_some() => {},
+                    _ = self.force_fail_all_workers("termination signal received from user space") => {}
+                };
+            },
+            // A signal from the server (TERMINATE) received.
+            _ = async {
+                    while self.run(queues).await.is_err() {
+                        if self.reconnect().await.is_err() {
+                            break;
+                    }
+                }
+            } => {},
 
+        }
         process::exit(0);
     }
 }
