@@ -127,7 +127,7 @@ impl<E: 'static> WorkerBuilder<E> {
         mut self,
         stream: S,
         pwd: Option<String>,
-    ) -> Result<Worker<BufStream<S>, E>, Error> {
+    ) -> Result<Worker<E>, Error> {
         self.opts.password = pwd;
         self.opts.is_worker = true;
         let buffered = BufStream::new(stream);
@@ -151,7 +151,7 @@ impl<E: 'static> WorkerBuilder<E> {
     pub async fn connect(
         self,
         url: Option<&str>,
-    ) -> Result<Worker<BufStream<TokioStream>, E>, Error> {
+    ) -> Result<Worker<E>, Error> {
         let url = utils::parse_provided_or_from_env(url)?;
         let stream = TokioStream::connect(utils::host_from_url(&url)).await?;
         self.connect_with(stream, None).await

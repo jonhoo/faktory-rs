@@ -4,9 +4,8 @@ use super::{Client, ReadToken};
 use crate::ent::{Batch, BatchHandle, BatchId};
 use crate::error::{self, Error};
 use crate::proto::FetchProgress;
-use tokio::io::{AsyncBufRead, AsyncWrite};
 
-impl<S: AsyncBufRead + AsyncWrite + Unpin + Send> Client<S> {
+impl Client {
     /// Send information on a job's execution progress to Faktory.
     pub async fn set_progress<P>(&mut self, upd: P) -> Result<(), Error>
     where
@@ -34,7 +33,7 @@ impl<S: AsyncBufRead + AsyncWrite + Unpin + Send> Client<S> {
     }
 
     /// Initiate a new batch of jobs.
-    pub async fn start_batch(&mut self, batch: Batch) -> Result<BatchHandle<'_, S>, Error> {
+    pub async fn start_batch(&mut self, batch: Batch) -> Result<BatchHandle<'_>, Error> {
         let bid = self.issue(&batch).await?.read_bid().await?;
         Ok(BatchHandle::new(bid, self))
     }
@@ -43,7 +42,7 @@ impl<S: AsyncBufRead + AsyncWrite + Unpin + Send> Client<S> {
     ///
     /// This will not error if a batch with the provided `bid` does not exist,
     /// rather `Ok(None)` will be returned.
-    pub async fn open_batch<B>(&mut self, bid: B) -> Result<Option<BatchHandle<'_, S>>, Error>
+    pub async fn open_batch<B>(&mut self, bid: B) -> Result<Option<BatchHandle<'_>>, Error>
     where
         B: AsRef<BatchId> + Sync,
     {
@@ -59,7 +58,7 @@ impl<S: AsyncBufRead + AsyncWrite + Unpin + Send> Client<S> {
     }
 }
 
-impl<'a, S: AsyncBufRead + AsyncWrite + Unpin + Send> ReadToken<'a, S> {
+impl ReadToken<'_> {
     pub(crate) async fn read_bid(self) -> Result<BatchId, Error> {
         single::read_bid(&mut self.0.stream).await
     }
