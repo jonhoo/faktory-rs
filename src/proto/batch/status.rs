@@ -79,14 +79,14 @@ pub struct BatchStatus {
     pub success_callback_state: CallbackState,
 }
 
-impl BatchStatus {
+impl<'a> BatchStatus {
     /// Open the batch for which this `BatchStatus` has been retrieved.
     ///
     /// See [`open_batch`](Client::open_batch).
     pub async fn open<S: AsyncBufRead + AsyncWrite + Unpin + Send>(
         &self,
-        prod: &'_ mut Client,
-    ) -> Result<Option<BatchHandle<'_>>, Error> {
+        prod: &'a mut Client,
+    ) -> Result<Option<BatchHandle<'a>>, Error> {
         prod.open_batch(&self.bid).await
     }
 }

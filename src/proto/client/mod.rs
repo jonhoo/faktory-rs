@@ -8,7 +8,7 @@ use crate::proto::{BatchStatus, Progress, ProgressUpdate};
 use super::{single, Info, Push, QueueAction, QueueControl};
 use super::{utils, PushBulk};
 use crate::error::{self, Error};
-use crate::{Job, WorkerId};
+use crate::{Job, Reconnect, WorkerId};
 use std::collections::HashMap;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
@@ -17,7 +17,8 @@ mod options;
 pub(crate) use options::ClientOptions;
 
 mod conn;
-pub(crate) use conn::Connection;
+pub(crate) use conn::BoxedConnection;
+pub use conn::Connection;
 
 pub(crate) const EXPECTED_PROTOCOL_VERSION: usize = 2;
 
@@ -149,7 +150,7 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// });
 /// ```
 pub struct Client {
-    stream: Connection,
+    stream: BoxedConnection,
     opts: ClientOptions,
 }
 impl Client {
@@ -186,7 +187,7 @@ impl Client {
     /// Create new [`Client`] and connect to a Faktory server with a non-standard stream.
     pub async fn connect_with<S>(stream: S, pwd: Option<String>) -> Result<Client, Error>
     where
-        S: AsyncRead + AsyncWrite,
+        S: AsyncRead + AsyncWrite + Reconnect + Send + Sync + Unpin + 'static,
     {
         let buffered = BufStream::new(stream);
         let opts = ClientOptions {
@@ -257,7 +258,7 @@ impl Client {
         Ok(())
     }
 
-    pub(crate) async fn new(stream: Connection, opts: ClientOptions) -> Result<Client, Error> {
+    pub(crate) async fn new(stream: BoxedConnection, opts: ClientOptions) -> Result<Client, Error> {
         let mut c = Client { stream, opts };
         c.init().await?;
         Ok(c)
@@ -266,7 +267,7 @@ impl Client {
     pub(crate) async fn issue<FC: single::FaktoryCommand>(
         &mut self,
         c: &FC,
-    ) -> Result<ReadToken<'_, S>, Error> {
+    ) -> Result<ReadToken<'_>, Error> {
         single::write_command(&mut self.stream, c).await?;
         Ok(ReadToken(self))
     }

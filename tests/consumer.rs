@@ -63,7 +63,7 @@ use tokio::{spawn, time::sleep};
 #[tokio::test(flavor = "multi_thread")]
 async fn hello() {
     let mut s = mock::Stream::default();
-    let w: Worker<_, io::Error> = WorkerBuilder::default()
+    let w: Worker<io::Error> = WorkerBuilder::default()
         .hostname("host".to_string())
         .wid(WorkerId::new("wid"))
         .labels([
@@ -100,7 +100,7 @@ async fn hello() {
 #[tokio::test(flavor = "multi_thread")]
 async fn hello_pwd() {
     let mut s = mock::Stream::with_salt(1545, "55104dc76695721d");
-    let w: Worker<_, io::Error> = WorkerBuilder::default()
+    let w: Worker<io::Error> = WorkerBuilder::default()
         .register_fn("never_called", |_j: Job| async move { unreachable!() })
         .connect_with(s.clone(), Some("foobar".to_string()))
         .await
@@ -435,7 +435,7 @@ async fn terminate() {
     let mut s = mock::Stream::new(2); // main plus worker
 
     // prepare a worker with only never (!) returning handler
-    let mut w: Worker<_, io::Error> = WorkerBuilder::default()
+    let mut w: Worker<io::Error> = WorkerBuilder::default()
         .hostname("machine".into())
         .wid(WorkerId::new("wid"))
         .register_fn("foobar", |_| async move {

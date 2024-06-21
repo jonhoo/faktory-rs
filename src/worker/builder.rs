@@ -1,7 +1,7 @@
 use super::{runner::Closure, CallbacksRegistry, Client, Worker};
 use crate::{
     proto::{utils, ClientOptions},
-    Error, Job, JobRunner, WorkerId,
+    Error, Job, JobRunner, Reconnect, WorkerId,
 };
 use std::future::Future;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream};
@@ -123,14 +123,17 @@ impl<E: 'static> WorkerBuilder<E> {
     }
 
     /// Connect to a Faktory server with a non-standard stream.
-    pub async fn connect_with<S: AsyncRead + AsyncWrite + Send + Unpin>(
+    pub async fn connect_with<S>(
         mut self,
         stream: S,
         pwd: Option<String>,
-    ) -> Result<Worker<E>, Error> {
+    ) -> Result<Worker<E>, Error>
+    where
+        S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static + Reconnect,
+    {
         self.opts.password = pwd;
         self.opts.is_worker = true;
-        let buffered = BufStream::new(stream);
+        let buffered = Box::new(BufStream::new(stream));
         let client = Client::new(buffered, self.opts).await?;
         Ok(Worker::new(client, self.workers_count, self.callbacks).await)
     }
@@ -148,10 +151,7 @@ impl<E: 'static> WorkerBuilder<E> {
     /// ```
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
-    pub async fn connect(
-        self,
-        url: Option<&str>,
-    ) -> Result<Worker<E>, Error> {
+    pub async fn connect(self, url: Option<&str>) -> Result<Worker<E>, Error> {
         let url = utils::parse_provided_or_from_env(url)?;
         let stream = TokioStream::connect(utils::host_from_url(&url)).await?;
         self.connect_with(stream, None).await

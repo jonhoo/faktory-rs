@@ -2,11 +2,11 @@
 use crate::{Client, WorkerBuilder};
 
 use crate::error::{self, Error};
-use crate::proto::utils;
+use crate::proto::{self, utils};
 use crate::Reconnect;
 use std::io;
 use std::ops::{Deref, DerefMut};
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioTcpStream;
 use tokio_native_tls::TlsStream as NativeTlsStream;
 use tokio_native_tls::{native_tls::TlsConnector, TlsConnector as AsyncTlsConnector};
@@ -115,7 +115,7 @@ impl<S> Reconnect for TlsStream<S>
 where
     S: AsyncRead + AsyncWrite + Send + Unpin + Reconnect,
 {
-    async fn reconnect(&mut self) -> io::Result<Self> {
+    async fn reconnect(&mut self) -> io::Result<proto::BoxedConnection> {
         let stream = self
             .stream
             .get_mut()
@@ -123,7 +123,9 @@ where
             .get_mut()
             .reconnect()
             .await?;
-        Self::new(stream, self.connector.clone(), self.hostname.clone()).await
+        let res = TlsStream::new(stream, self.connector.clone(), self.hostname.clone()).await?;
+        let buffered = BufStream::new(res);
+        Ok(Box::new(buffered))
     }
 }
 
