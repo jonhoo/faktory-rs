@@ -105,9 +105,6 @@ async fn server_state() {
     ); // at least two clients from the current test
     assert_ne!(server_state.server.uptime.as_secs(), 0); // if IPC is happenning, this should hold :)
 
-    let nenqueued = server_state.data.total_enqueued;
-    let nqueues = server_state.data.total_queues;
-
     // push 1 job
     client
         .enqueue(
@@ -125,21 +122,32 @@ async fn server_state() {
     // we only pushed 1 job on this queue
     let server_state = client.current_info().await.unwrap();
     assert_eq!(*server_state.data.queues.get(local).unwrap(), 1);
-    // `total_enqueued` should be at least +1 job from from last read
+
+    // It is tempting to make an assertion like `total enqueued this time >= total enqueued last time + 1`,
+    // but since we've got a server shared among numerous tests that are running in parallel, this
+    // assertion will not always work (though it will be true in the majority of test runs). Imagine
+    // a situation where between our last asking for server data state and now they have consumed all
+    // the pending jobs in _other_ queues. This is highly unlikely, but _is_ possible. So the only
+    // more or less guaranteed thing is that there is one pending job in our _local_ queue. It is "more or less"
+    // because another test _may_ still push onto and consume from this queue if we copypasta this test's
+    // contents and forget to update the local queue name, i.e. do not guarantee isolation at the queues level.
     assert_gte!(
         server_state.data.total_enqueued,
-        nenqueued + 1,
+        1,
         "`total_enqueued` equals {} which is not greater than or equal to {}",
         server_state.data.total_enqueued,
-        nenqueued + 1
+        1
     );
-    // `total_queues` should be at least +1 queue from last read
+    // Similar to the case above, we may want to assert `number of queues this time >= number of queues last time + 1`,
+    // but it may not always hold, due to the fact that there is a `remove_queue` operation and if they
+    // use it in other tests as a clean-up phase (just like we are doing at the end of this test),
+    // the `server_state.data.total_queues` may reach `1`, meaning only our local queue is left.
     assert_gte!(
         server_state.data.total_queues,
-        nqueues + 1,
+        1,
         "`total_queues` equals {} which is not greater than or equal to {}",
         server_state.data.total_queues,
-        nqueues + 1
+        1
     );
 
     // let's know consume that job ...
@@ -155,7 +163,7 @@ async fn server_state() {
     // volumes to perform the next test run. Also note that on CI we are always starting a-fresh.
     let server_state = client.current_info().await.unwrap();
     assert_eq!(*server_state.data.queues.get(local).unwrap(), 0);
-    // `total_processed` should be at least +1 queue from last read
+    // `total_processed` should be at least +1 job from last read
     assert_gte!(
         server_state.data.total_processed,
         1,
