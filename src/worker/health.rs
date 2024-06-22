@@ -22,6 +22,10 @@ where
     ///   but should _continue_ processing its current job (if any);
     ///
     /// See more details [here](https://github.com/contribsys/faktory/blob/b4a93227a3323ab4b1365b0c37c2fac4f9588cc8/server/workers.go#L13-L49).
+    ///
+    /// Note that this method is not cancellation safe. We are using an interval timer internally, that
+    /// would be reset should we call this method anew. Besides, the `Heartbeat` command is being issued
+    /// with the help of `AsyncWriteExt::write_all` which is not cancellation safe either.
     pub(crate) async fn listen_for_heartbeats(
         &mut self,
         statuses: &[Arc<atomic::AtomicUsize>],

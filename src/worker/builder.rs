@@ -1,9 +1,10 @@
-use super::{runner::Closure, CallbacksRegistry, Client, Worker};
+use super::{runner::Closure, CallbacksRegistry, Client, ShutdownSignal, Worker};
 use crate::{
     proto::{utils, ClientOptions},
     Error, Job, JobRunner, WorkerId,
 };
 use std::future::Future;
+use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
@@ -14,6 +15,8 @@ pub struct WorkerBuilder<E> {
     opts: ClientOptions,
     workers_count: usize,
     callbacks: CallbacksRegistry<E>,
+    shutdown_timeout: Option<Duration>,
+    shutdown_signal: Option<ShutdownSignal>,
 }
 
 impl<E> Default for WorkerBuilder<E> {
@@ -32,6 +35,8 @@ impl<E> Default for WorkerBuilder<E> {
             opts: ClientOptions::default(),
             workers_count: 1,
             callbacks: CallbacksRegistry::default(),
+            shutdown_timeout: None,
+            shutdown_signal: None,
         }
     }
 }
@@ -90,6 +95,67 @@ impl<E: 'static> WorkerBuilder<E> {
         self
     }
 
+    /// Set a graceful shutdown signal.
+    ///
+    /// As soon as the provided future resolves, the graceful shutdown will step in
+    /// making the long-running operation (see [`Worker::run`]) return control to the calling code.
+    ///
+    /// The graceful shutdown itself is a race between the clean up needed to be performed
+    /// (e.g. report on the currently processed to the Faktory server) and a shutdown deadline.
+    /// The latter can be customized via [`WorkerBuilder::shutdown_timeout`].
+    ///
+    /// ```no_run
+    /// # tokio_test::block_on(async {
+    /// use faktory::{Client, Job, Worker};
+    /// use tokio_util::sync::CancellationToken;
+    ///
+    /// Client::connect(None)
+    ///     .await
+    ///     .unwrap()
+    ///     .enqueue(Job::new("foobar", vec!["z"]))
+    ///     .await
+    ///     .unwrap();
+    ///
+    /// // create a signalling future (we are using a utility from the `tokio_util` crate)
+    /// let token = CancellationToken::new();
+    /// let child_token = token.child_token();
+    /// let signal = async move { child_token.cancelled().await };
+    ///
+    /// // get a connected worker
+    /// let mut w = Worker::builder()
+    ///     .with_graceful_shutdown(signal)
+    ///     .register_fn("job_type", move |_| async { Ok::<(), std::io::Error>(()) })
+    ///     .connect(None)
+    ///     .await
+    ///     .unwrap();
+    ///
+    /// // start consuming
+    /// let jh = tokio::spawn(async move { w.run(&["default"]).await });
+    ///
+    /// // send a signal to eventually return control (upon graceful shutdown)
+    /// token.cancel();
+    /// # });
+    /// ```
+    pub fn with_graceful_shutdown<F>(mut self, signal: F) -> Self
+    where
+        F: Future<Output = ()> + 'static + Send,
+    {
+        self.shutdown_signal = Some(Box::pin(signal));
+        self
+    }
+
+    /// Set a shutdown timeout.
+    ///
+    /// This will be used once the worker is sent a termination signal whether it is at the application
+    /// (via a signalling future, see [`WorkerBuilder::with_graceful_shutdown`]) or OS level (via Ctrl-C signal,
+    /// see [`Worker::run_to_completion`]).
+    ///
+    /// Defaults to `None`, i.e. no shoutdown abortion due to a timeout.
+    pub fn shutdown_timeout(mut self, dur: Duration) -> Self {
+        self.shutdown_timeout = Some(dur);
+        self
+    }
+
     /// Register a handler function for the given job type (`kind`).
     ///
     /// Whenever a job whose type matches `kind` is fetched from the Faktory, the given handler
@@ -132,7 +198,14 @@ impl<E: 'static> WorkerBuilder<E> {
         self.opts.is_worker = true;
         let buffered = BufStream::new(stream);
         let client = Client::new(buffered, self.opts).await?;
-        Ok(Worker::new(client, self.workers_count, self.callbacks).await)
+        Ok(Worker::new(
+            client,
+            self.workers_count,
+            self.callbacks,
+            self.shutdown_timeout,
+            self.shutdown_signal,
+        )
+        .await)
     }
 
     /// Connect to a Faktory server.

@@ -2,11 +2,16 @@ use super::proto::{Client, Reconnect};
 use crate::error::Error;
 use crate::proto::{Ack, Fail, Job};
 use fnv::FnvHashMap;
+use std::future::Future;
+use std::pin::Pin;
+use std::process;
 use std::sync::{atomic, Arc};
+use std::time::Duration;
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
 use tokio::io::{AsyncBufRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio::task::{AbortHandle, JoinSet};
+use tokio::time::sleep as tokio_sleep;
 
 mod builder;
 mod health;
@@ -21,6 +26,7 @@ pub(crate) const STATUS_QUIET: usize = 1;
 pub(crate) const STATUS_TERMINATING: usize = 2;
 
 type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
+type ShutdownSignal = Pin<Box<dyn Future<Output = ()> + 'static + Send>>;
 
 /// `Worker` is used to run a worker that processes jobs provided by Faktory.
 ///
@@ -148,6 +154,9 @@ pub struct Worker<S: AsyncWrite + Send + Unpin, E> {
     worker_states: Arc<state::WorkerStatesRegistry>,
     callbacks: Arc<CallbacksRegistry<E>>,
     terminated: bool,
+    forever: bool,
+    shutdown_timeout: Option<Duration>,
+    shutdown_signal: Option<ShutdownSignal>,
 }
 
 impl Worker<TcpStream, ()> {
@@ -166,12 +175,21 @@ impl<S: AsyncBufRead + AsyncWrite + Send + Unpin + Reconnect, E> Worker<S, E> {
 }
 
 impl<S: AsyncWrite + Send + Unpin, E> Worker<S, E> {
-    async fn new(c: Client<S>, workers_count: usize, callbacks: CallbacksRegistry<E>) -> Self {
+    async fn new(
+        c: Client<S>,
+        workers_count: usize,
+        callbacks: CallbacksRegistry<E>,
+        shutdown_timeout: Option<Duration>,
+        shutdown_signal: Option<ShutdownSignal>,
+    ) -> Self {
         Worker {
             c,
             callbacks: Arc::new(callbacks),
             worker_states: Arc::new(state::WorkerStatesRegistry::new(workers_count)),
             terminated: false,
+            forever: false,
+            shutdown_timeout,
+            shutdown_signal,
         }
     }
 }
@@ -232,13 +250,13 @@ impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> 
     ///
     /// This will FAIL _all_ the jobs even though they're still running.
     /// Returns the number of workers that may still be processing jobs.
-    async fn force_fail_all_workers(&mut self) -> usize {
+    async fn force_fail_all_workers(&mut self, reason: &str) -> usize {
         let mut running = 0;
         for wstate in &*self.worker_states {
             let may_be_jid = wstate.lock().unwrap().take_currently_running();
             if let Some(jid) = may_be_jid {
                 running += 1;
-                let f = Fail::generic(jid, "terminated");
+                let f = Fail::generic(jid, reason);
                 let _ = match self.c.issue(&f).await {
                     Ok(r) => r.read_ok().await,
                     // We are ignoring any FAIL command issue errors, since this is already
@@ -286,6 +304,23 @@ impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> 
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// A reason why [`Worker::run`] has discontinued.
+pub enum RunCeaseReason {
+    /// A signal from the user space received.
+    ///
+    /// A future provided via [`WorkerBuilder::with_graceful_shutdown`] has resolved
+    /// signalling the worker to stop.
+    CancelSignal,
+
+    /// A signal from the Faktory server received.
+    ///
+    /// Under the hood, the worker is being in constant communication with the Faktory server,
+    /// not only fetching jobs and reporting on processing results, but also listening for
+    /// the server's instructions, one of which can be to disengage.
+    FaktoryInstruction,
+}
+
 impl<
         S: AsyncBufRead + AsyncWrite + Reconnect + Send + Unpin + 'static,
         E: StdError + 'static + Send,
@@ -310,6 +345,9 @@ impl<
             callbacks: Arc::clone(&self.callbacks),
             worker_states: Arc::clone(&self.worker_states),
             terminated: self.terminated,
+            forever: self.forever,
+            shutdown_timeout: self.shutdown_timeout,
+            shutdown_signal: None,
         })
     }
 
@@ -337,15 +375,20 @@ impl<
         }))
     }
 
-    /// Run this worker on the given `queues` until an I/O error occurs (`Err` is returned), or
-    /// until the server tells the worker to disengage (`Ok` is returned).
+    /// Run this worker on the given `queues`.
     ///
-    /// The value in an `Ok` indicates the number of workers that may still be processing jobs.
+    /// Will run the worker until an I/O error occurs (`Err` is returned), or until the server tells the worker
+    /// to disengage (`Ok` is returned), or a signal from the user-space code has been received via a future
+    /// supplied to [`WorkerBuilder::with_graceful_shutdown`](`Ok` is returned).
+    ///
+    /// The value in an `Ok` holds a tuple with the reason why the run has discontinued (see [`RunCeaseReason`])
+    /// and the number of workers that may still be processing jobs. Note that `0` can also indicate that
+    /// the [graceful shutdown period](WorkerBuilder::shutdown_timeout) has been exceeded.
     ///
     /// If an error occurred while reporting a job success or failure, the result will be re-reported to the server
     /// without re-executing the job. If the worker was terminated (i.e., `run` returns  with an `Ok` response),
     /// the worker should **not** try to resume by calling `run` again. This will cause a panic.
-    pub async fn run<Q>(&mut self, queues: &[Q]) -> Result<usize, Error>
+    pub async fn run<Q>(&mut self, queues: &[Q]) -> Result<(RunCeaseReason, usize), Error>
     where
         Q: AsRef<str>,
     {
@@ -355,10 +398,10 @@ impl<
         );
         self.report_on_all_workers().await?;
 
-        let workers_count = self.worker_states.len();
+        let nworkers = self.worker_states.len();
 
         // keep track of the current status of each worker
-        let statuses: Vec<_> = (0..workers_count)
+        let statuses: Vec<_> = (0..nworkers)
             .map(|_| Arc::new(atomic::AtomicUsize::new(STATUS_RUNNING)))
             .collect();
 
@@ -369,51 +412,86 @@ impl<
                 .await?;
         }
 
-        let exit = self.listen_for_heartbeats(&statuses).await;
+        // Either we have already taken this future and are polling it elsewhere (see Worker::run_to_completion),
+        // or they've never provided it to us (reminder: they do so via WorkerBuilder::with_graceful_shutdown)
+        let cancel_signal = self.shutdown_signal.take();
 
-        // there are a couple of cases here:
-        //
-        //  - we got TERMINATE, so we should just return, even if a worker is still running
-        //  - we got TERMINATE and all workers have exited
-        //  - we got an error from heartbeat()
-        //
-        self.terminated = exit.is_ok();
+        let report = tokio::select! {
+            // A signal from the user space received.
+            _ = async { let signal = cancel_signal.unwrap(); signal.await }, if cancel_signal.is_some() => {
+                let nrunning = tokio::select! {
+                     _ = tokio_sleep(self.shutdown_timeout.unwrap()), if self.shutdown_timeout.is_some() => {
+                        0
+                    },
+                    nrunning = self.force_fail_all_workers("termination signal received from user space") => {
+                        nrunning
+                    }
+                };
+                self.terminated = true;
+                Ok((RunCeaseReason::CancelSignal, nrunning))
+            },
+            // A signal from the Faktory server received or an error occurred.
+            // Even though `Worker::listen_for_hearbeats` is not cancellation safe, we are ok using it here,
+            // since we are not `select!`ing in a loop and we are eventually _either_ marking the worker as
+            // terminated, _or_ re-creating a connection, i.e. we never end up re-using the "broken" connection.
+            exit = self.listen_for_heartbeats(&statuses) => {
+                // there are a couple of cases here:
+                //  - we got TERMINATE, so we should just return, even if a worker is still running
+                //  - we got TERMINATE and all workers has exited
+                //  - we got an error from heartbeat()
+                self.terminated = exit.is_ok();
 
-        if let Ok(true) = exit {
-            let running = self.force_fail_all_workers().await;
-            if running != 0 {
-                return Ok(running);
+                if let Ok(true) = exit {
+                    let running = self.force_fail_all_workers("terminated").await;
+                    if running != 0 {
+                        return Ok((RunCeaseReason::FaktoryInstruction, running));
+                    }
+                }
+
+                // we want to expose worker errors, or otherwise the heartbeat error
+                let mut results = Vec::with_capacity(nworkers);
+                while let Some(res) = join_set.join_next().await {
+                    results.push(res.expect("joined ok"));
+                }
+                let results = results.into_iter().collect::<Result<Vec<_>, _>>();
+
+                match exit {
+                    Ok(_) => results.map(|_| (RunCeaseReason::FaktoryInstruction, 0)),
+                    Err(e) => results.and(Err(e)),
+                }
             }
-        }
-
-        // we want to expose worker errors, or otherwise the heartbeat error
-        let mut results = Vec::with_capacity(workers_count);
-        while let Some(res) = join_set.join_next().await {
-            results.push(res.expect("joined ok"));
-        }
-
-        let result = results.into_iter().collect::<Result<Vec<_>, _>>();
-
-        match exit {
-            Ok(_) => result.map(|_| 0),
-            Err(e) => result.and(Err(e)),
-        }
+        };
+        report
     }
 
-    /// Run this worker until the server tells us to exit or a connection cannot be re-established.
+    /// Run this worker until the server tells us to exit or a connection cannot be re-established,
+    /// or a signal from the user-space code has been received via a future passed to [`WorkerBuilder::with_graceful_shutdown`]
     ///
-    /// This function never returns. When the worker decides to exit, the process is terminated.
+    /// This function never returns. When the worker decides to exit or a signal to shutdown gracefully
+    /// has been received, the process is terminated within the [shutdown period](WorkerBuilder::shutdown_timeout).
     pub async fn run_to_completion<Q>(mut self, queues: &[Q]) -> !
     where
         Q: AsRef<str>,
     {
-        use std::process;
-        while self.run(queues).await.is_err() {
-            if self.reconnect().await.is_err() {
-                break;
-            }
-        }
+        let sig = self.shutdown_signal.take();
+        tokio::select! {
+            // A signal from the user space received.
+            _ = async { let sig = sig.unwrap(); sig.await }, if sig.is_some() => {
+                tokio::select! {
+                    _ = tokio_sleep(self.shutdown_timeout.unwrap()), if self.shutdown_timeout.is_some() => {},
+                    _ = self.force_fail_all_workers("termination signal received from user space") => {}
+                };
+            },
+            // A signal from the server (TERMINATE) received.
+            _ = async {
+                    while self.run(queues).await.is_err() {
+                        if self.reconnect().await.is_err() {
+                            break;
+                    }
+                }
+            } => {},
 
+        }
         process::exit(0);
     }
 }
