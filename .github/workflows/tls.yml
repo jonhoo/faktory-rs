@@ -1,5 +1,9 @@
-# This workflow will make use of Faktory put behind NGINX to test 
-# the crate's tls feature (see docker dir in the project's root)
+# This workflow will make use of Faktory put behind NGINX to test the crate's `tls` feature
+# (see the `docker` directory in the project's root).
+#
+# We are also utilizing this dedicated workflow and Faktory deployment to test that password authentication works
+# as expected (see the password part in the `FAKTORY_URL_SECURE` connection string and the `FAKTORY_PASSWORD` environment
+# variable in the `faktory` service description in the compose file in the `docker` directory mentioned above.
 permissions:
   contents: read
 on:
@@ -28,5 +32,5 @@ jobs:
         run: cargo generate-lockfile
       - name: Run tests
         env:
-          FAKTORY_URL_SECURE: tcp://localhost:17419
+          FAKTORY_URL_SECURE: tcp://:uredinales@localhost:17419
         run: cargo test --locked --features native_tls,rustls --test tls

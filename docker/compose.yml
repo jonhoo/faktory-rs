@@ -7,6 +7,8 @@ services:
     build:
       context: .
       dockerfile: faktory.Dockerfile
+    environment:
+      FAKTORY_PASSWORD: uredinales
     command: "/faktory -b :7419 -w :7420"
   nginx:
     depends_on:
