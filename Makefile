@@ -4,6 +4,13 @@ FAKTORY_PORT=7419
 FAKTORY_PORT_SECURE=17419
 FAKTORY_PORT_UI=7420
 
+.PHONY: precommit
+precommit: fmt check test/doc test/e2e test/e2e/tls
+
+.PHONY: fmt
+fmt:
+	cargo fmt
+
 .PHONY: check
 check:
 	cargo fmt --check
@@ -34,7 +41,7 @@ faktory/tls:
 
 .PHONY: faktory/tls/kill
 faktory/tls/kill:
-	docker compose -f docker/compose.yml down
+	docker compose -f docker/compose.yml down -v
 
 .PHONY: test
 test:
