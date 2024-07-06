@@ -58,11 +58,12 @@ mod mock;
 
 use faktory::*;
 use std::{io, time::Duration};
-use tokio::{spawn, time::sleep};
+use tokio::{io::BufStream, spawn, time::sleep};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn hello() {
     let mut s = mock::Stream::default();
+    let buffered = BufStream::new(s.clone());
     let w: Worker<io::Error> = WorkerBuilder::default()
         .hostname("host".to_string())
         .wid(WorkerId::new("wid"))
@@ -75,7 +76,7 @@ async fn hello() {
         .add_to_labels(["will".to_string()])
         .add_to_labels(["be".to_string(), "added".to_string()])
         .register_fn("never_called", |_j: Job| async move { unreachable!() })
-        .connect_with(s.clone(), None)
+        .connect_with(buffered, None)
         .await
         .unwrap();
     let written = s.pop_bytes_written(0);
@@ -100,9 +101,10 @@ async fn hello() {
 #[tokio::test(flavor = "multi_thread")]
 async fn hello_pwd() {
     let mut s = mock::Stream::with_salt(1545, "55104dc76695721d");
+    let buffered = BufStream::new(s.clone());
     let w: Worker<io::Error> = WorkerBuilder::default()
         .register_fn("never_called", |_j: Job| async move { unreachable!() })
-        .connect_with(s.clone(), Some("foobar".to_string()))
+        .connect_with(buffered, Some("foobar".to_string()))
         .await
         .unwrap();
     let written = s.pop_bytes_written(0);
@@ -119,12 +121,13 @@ async fn hello_pwd() {
 #[tokio::test(flavor = "multi_thread")]
 async fn dequeue() {
     let mut s = mock::Stream::default();
+    let buffered = BufStream::new(s.clone());
     let mut w = WorkerBuilder::default()
         .register_fn("foobar", |job: Job| async move {
             assert_eq!(job.args(), &["z"]);
             Ok::<(), io::Error>(())
         })
-        .connect_with(s.clone(), None)
+        .connect_with(buffered, None)
         .await
         .unwrap();
     s.ignore(0);
@@ -160,12 +163,13 @@ async fn dequeue() {
 #[tokio::test(flavor = "multi_thread")]
 async fn dequeue_first_empty() {
     let mut s = mock::Stream::default();
+    let buffered = BufStream::new(s.clone());
     let mut w = WorkerBuilder::default()
         .register_fn("foobar", |job: Job| async move {
             assert_eq!(job.args(), &["z"]);
             Ok::<(), io::Error>(())
         })
-        .connect_with(s.clone(), None)
+        .connect_with(buffered, None)
         .await
         .unwrap();
     s.ignore(0);
@@ -217,6 +221,7 @@ async fn dequeue_first_empty() {
 #[tokio::test(flavor = "multi_thread")]
 async fn well_behaved() {
     let mut s = mock::Stream::new(2); // main plus worker
+    let buffered = BufStream::new(s.clone());
     let mut w = WorkerBuilder::default()
         .wid(WorkerId::new("wid"))
         .register_fn("foobar", |_| async move {
@@ -224,7 +229,7 @@ async fn well_behaved() {
             sleep(Duration::from_secs(7)).await;
             Ok::<(), io::Error>(())
         })
-        .connect_with(s.clone(), None)
+        .connect_with(buffered, None)
         .await
         .unwrap();
     s.ignore(0);
@@ -284,6 +289,7 @@ async fn well_behaved() {
 #[tokio::test(flavor = "multi_thread")]
 async fn no_first_job() {
     let mut s = mock::Stream::new(2); // main plus worker
+    let buffered = BufStream::new(s.clone());
     let mut w = WorkerBuilder::default()
         .wid(WorkerId::new("wid"))
         .register_fn("foobar", |_| async move {
@@ -291,7 +297,7 @@ async fn no_first_job() {
             sleep(Duration::from_secs(7)).await;
             Ok::<(), io::Error>(())
         })
-        .connect_with(s.clone(), None)
+        .connect_with(buffered, None)
         .await
         .unwrap();
     s.ignore(0);
@@ -352,6 +358,7 @@ async fn no_first_job() {
 #[tokio::test(flavor = "multi_thread")]
 async fn well_behaved_many() {
     let mut s = mock::Stream::new(3); // main plus 2 workers
+    let buffered = BufStream::new(s.clone());
     let mut w = WorkerBuilder::default()
         .workers(2)
         .wid(WorkerId::new("wid"))
@@ -360,7 +367,7 @@ async fn well_behaved_many() {
             sleep(Duration::from_secs(7)).await;
             Ok::<(), io::Error>(())
         })
-        .connect_with(s.clone(), None)
+        .connect_with(buffered, None)
         .await
         .unwrap();
     s.ignore(0);
@@ -433,6 +440,7 @@ async fn terminate() {
     // while the `Stream::mine` wil be pointing to stream with index 0. See how we are later on ignoring bytes
     // written to this stream by means of `s.ignore(0)`.
     let mut s = mock::Stream::new(2); // main plus worker
+    let buffered = BufStream::new(s.clone());
 
     // prepare a worker with only never (!) returning handler
     let mut w: Worker<io::Error> = WorkerBuilder::default()
@@ -443,7 +451,7 @@ async fn terminate() {
                 sleep(Duration::from_secs(5)).await;
             }
         })
-        .connect_with(s.clone(), None)
+        .connect_with(buffered, None)
         .await
         .unwrap();
 

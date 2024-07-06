@@ -4,7 +4,7 @@ use crate::{
     Error, Job, JobRunner, Reconnect, WorkerId,
 };
 use std::future::Future;
-use tokio::io::{AsyncRead, AsyncWrite, BufStream};
+use tokio::io::{AsyncBufRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
 /// Convenience wrapper for building a Faktory worker.
@@ -129,12 +129,11 @@ impl<E: 'static> WorkerBuilder<E> {
         pwd: Option<String>,
     ) -> Result<Worker<E>, Error>
     where
-        S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static + Reconnect,
+        S: AsyncBufRead + AsyncWrite + Send + Sync + Unpin + 'static + Reconnect,
     {
         self.opts.password = pwd;
         self.opts.is_worker = true;
-        let buffered = Box::new(BufStream::new(stream));
-        let client = Client::new(buffered, self.opts).await?;
+        let client = Client::new(Box::new(stream), self.opts).await?;
         Ok(Worker::new(client, self.workers_count, self.callbacks).await)
     }
 
@@ -154,6 +153,7 @@ impl<E: 'static> WorkerBuilder<E> {
     pub async fn connect(self, url: Option<&str>) -> Result<Worker<E>, Error> {
         let url = utils::parse_provided_or_from_env(url)?;
         let stream = TokioStream::connect(utils::host_from_url(&url)).await?;
-        self.connect_with(stream, None).await
+        let buffered = BufStream::new(stream);
+        self.connect_with(buffered, None).await
     }
 }

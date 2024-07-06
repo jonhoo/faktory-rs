@@ -2,6 +2,7 @@ use faktory::native_tls::TlsStream;
 use faktory::{Client, Job, WorkerBuilder, WorkerId};
 use serde_json::Value;
 use std::{env, sync};
+use tokio::io::BufStream;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn roundtrip_tls() {
@@ -26,9 +27,11 @@ async fn roundtrip_tls() {
             .danger_accept_invalid_certs(true)
             .build()
             .unwrap();
-        TlsStream::with_connector(connector, Some(&env::var("FAKTORY_URL_SECURE").unwrap()))
-            .await
-            .unwrap()
+        let stream =
+            TlsStream::with_connector(connector, Some(&env::var("FAKTORY_URL_SECURE").unwrap()))
+                .await
+                .unwrap();
+        BufStream::new(stream)
     };
 
     let mut worker = WorkerBuilder::default()

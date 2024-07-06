@@ -1,11 +1,12 @@
 #[cfg(doc)]
 use crate::{Client, WorkerBuilder};
 
-use crate::{proto::utils, Error, Reconnect};
+use crate::proto::{self, utils};
+use crate::{Error, Reconnect};
 use std::io;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioTcpStream;
 use tokio_rustls::client::TlsStream as RustlsStream;
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};
@@ -22,8 +23,11 @@ use tokio_rustls::TlsConnector;
 /// # tokio_test::block_on(async {
 /// use faktory::Client;
 /// use faktory::rustls::TlsStream;
+/// use tokio::io::BufStream;
+///
 /// let tls = TlsStream::connect(None).await.unwrap();
-/// let cl = Client::connect_with(tls, None).await.unwrap();
+/// let buffered = BufStream::new(tls);
+/// let cl = Client::connect_with(buffered, None).await.unwrap();
 /// # drop(cl);
 /// # });
 /// ```
@@ -121,13 +125,32 @@ where
 }
 
 #[async_trait::async_trait]
-impl<S> Reconnect for TlsStream<S>
-where
-    S: AsyncRead + AsyncWrite + Send + Unpin + Reconnect,
-{
-    async fn reconnect(&mut self) -> io::Result<Self> {
-        let stream = self.stream.get_mut().0.reconnect().await?;
-        TlsStream::new(stream, self.connector.clone(), self.hostname.clone()).await
+impl Reconnect for BufStream<TlsStream<tokio::net::TcpStream>> {
+    async fn reconnect(&mut self) -> io::Result<proto::BoxedConnection> {
+        let stream = self.get_mut().stream.get_mut().0.reconnect().await?;
+        let tls_stream = TlsStream::new(
+            stream,
+            self.get_ref().connector.clone(),
+            self.get_ref().hostname.clone(),
+        )
+        .await?;
+        let buffered = BufStream::new(tls_stream);
+        Ok(Box::new(buffered))
+    }
+}
+
+#[async_trait::async_trait]
+impl Reconnect for BufStream<TlsStream<proto::BoxedConnection>> {
+    async fn reconnect(&mut self) -> io::Result<proto::BoxedConnection> {
+        let stream = self.get_mut().stream.get_mut().0.reconnect().await?;
+        let tls_stream = TlsStream::new(
+            stream,
+            self.get_ref().connector.clone(),
+            self.get_ref().hostname.clone(),
+        )
+        .await?;
+        let buffered = BufStream::new(tls_stream);
+        Ok(Box::new(buffered))
     }
 }
 
