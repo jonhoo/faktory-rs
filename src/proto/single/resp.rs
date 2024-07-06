@@ -1,8 +1,12 @@
+use super::utils;
+use crate::error::{self, Error};
+use chrono::{DateTime, Utc};
+use std::collections::BTreeMap;
+use std::time::Duration;
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt};
+
 #[cfg(feature = "ent")]
 use crate::ent::BatchId;
-
-use crate::error::{self, Error};
-use tokio::io::AsyncBufRead;
 
 pub fn bad(expected: &'static str, got: &RawResponse) -> error::Protocol {
     let stringy = match *got {
@@ -119,6 +123,107 @@ pub async fn read_ok<R: AsyncBufRead + Unpin>(r: R) -> Result<(), Error> {
 }
 
 // ----------------------------------------------
+
+/// Faktory service information.
+///
+/// This holds information on the registered [queues](DataSnapshot::queues) as well as
+/// some aggregated data, e.g. total number of jobs [processed](DataSnapshot::total_processed),
+/// total number of jobs [enqueued](DataSnapshot::total_enqueued), etc.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[non_exhaustive]
+pub struct DataSnapshot {
+    /// Total number of job failures.
+    pub total_failures: u64,
+
+    /// Total number of processed jobs.
+    pub total_processed: u64,
+
+    /// Total number of enqueued jobs.
+    pub total_enqueued: u64,
+
+    /// Total number of queues.
+    pub total_queues: u64,
+
+    /// Queues stats.
+    ///
+    /// A mapping between a queue name and its size (number of jobs on the queue).
+    /// The keys of this map effectively make up a list of queues that are currently
+    /// registered in the Faktory service.
+    pub queues: BTreeMap<String, u64>,
+
+    /// ***Deprecated***. Faktory's task runner stats.
+    ///
+    /// Note that this is exposed as a "generic" `serde_json::Value` since this info
+    /// belongs to deep implementation details of the Faktory service.
+    #[deprecated(
+        note = "marked as deprecated in the Faktory source code and is likely to be completely removed in the future, so please do not rely on this data"
+    )]
+    pub tasks: serde_json::Value,
+}
+
+/// Faktory's server process information.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ServerSnapshot {
+    /// Description of the server process (e.g. "Faktory").
+    pub description: String,
+
+    /// Faktory's version as semver.
+    #[serde(rename = "faktory_version")]
+    pub version: semver::Version,
+
+    /// Faktory server process uptime in seconds.
+    #[serde(deserialize_with = "utils::deser_duration")]
+    #[serde(serialize_with = "utils::ser_duration")]
+    pub uptime: Duration,
+
+    /// Number of clients connected to the server.
+    pub connections: u64,
+
+    /// Number of executed commands.
+    pub command_count: u64,
+
+    /// Faktory server process memory usage.
+    pub used_memory_mb: u64,
+}
+
+/// Current server state.
+///
+/// Contains such details as how many queues there are on the server, statistics on the jobs,
+/// as well as some specific info on server process memory usage, uptime, etc.
+///
+/// Here is an example of the simplest way to fetch info on the server state.
+/// ```no_run
+/// # tokio_test::block_on(async {
+/// use faktory::Client;
+///
+/// let mut client = Client::connect(None).await.unwrap();
+/// let _server_state = client.current_info().await.unwrap();
+/// # });
+/// ```
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct FaktoryState {
+    /// Server time.
+    pub now: DateTime<Utc>,
+
+    /// Server time (naive representation).
+    ///
+    /// Faktory sends it as a string formatted as "%H:%M:%S UTC" (e.g. "19:47:39 UTC")
+    /// and it is being parsed as `NaiveTime`.
+    ///
+    /// Most of the time, though, you will want to use [`FaktoryState::now`] instead.
+    #[serde(deserialize_with = "utils::deser_server_time")]
+    #[serde(serialize_with = "utils::ser_server_time")]
+    pub server_utc_time: chrono::naive::NaiveTime,
+
+    /// Faktory service information.
+    #[serde(rename = "faktory")]
+    pub data: DataSnapshot,
+
+    /// Faktory's server process information.
+    pub server: ServerSnapshot,
+}
+
+// ----------------------------------------------
 //
 // below is the implementation of the Redis RESP protocol
 //
@@ -132,7 +237,6 @@ pub enum RawResponse {
     Null,
 }
 
-use tokio::io::{AsyncBufReadExt, AsyncReadExt};
 async fn read<R>(mut r: R) -> Result<RawResponse, Error>
 where
     R: AsyncBufRead + Unpin,

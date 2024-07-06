@@ -75,7 +75,10 @@ mod proto;
 mod worker;
 
 pub use crate::error::Error;
-pub use crate::proto::{Client, Connection, Job, JobBuilder, JobId, Reconnect, WorkerId};
+pub use crate::proto::{
+    Client, Connection, DataSnapshot, FaktoryState, Job, JobBuilder, JobId, Reconnect,
+    ServerSnapshot, WorkerId,
+};
 pub use crate::worker::{JobRunner, Worker, WorkerBuilder};
 
 #[cfg(feature = "ent")]

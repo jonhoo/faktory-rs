@@ -1,8 +1,8 @@
-use crate::proto::single::JobId;
-
 use super::utils;
+use crate::proto::single::JobId;
 use chrono::{DateTime, Utc};
 use derive_builder::Builder;
+
 /// Info on job execution progress (sent).
 ///
 /// In Enterprise Faktory, a client executing a job can report on the execution
