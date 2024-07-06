@@ -35,12 +35,12 @@ pub use batch::{Batch, BatchBuilder, BatchHandle, BatchStatus, CallbackState};
 #[async_trait::async_trait]
 pub trait Reconnect {
     /// Re-establish the stream.
-    async fn reconnect(&mut self) -> io::Result<client::BoxedConnection>;
+    async fn reconnect(&mut self) -> io::Result<BoxedConnection>;
 }
 
 #[async_trait::async_trait]
 impl Reconnect for TokioStream {
-    async fn reconnect(&mut self) -> io::Result<client::BoxedConnection> {
+    async fn reconnect(&mut self) -> io::Result<BoxedConnection> {
         let addr = &self.peer_addr().expect("socket address");
         let stream = TokioStream::connect(addr).await?;
         Ok(Box::new(BufStream::new(stream)))
@@ -52,7 +52,7 @@ impl<S> Reconnect for BufStream<S>
 where
     S: AsyncRead + AsyncWrite + Reconnect + Send + Sync,
 {
-    async fn reconnect(&mut self) -> io::Result<client::BoxedConnection> {
+    async fn reconnect(&mut self) -> io::Result<BoxedConnection> {
         self.get_mut().reconnect().await
     }
 }
