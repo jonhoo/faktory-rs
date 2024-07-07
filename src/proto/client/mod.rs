@@ -187,7 +187,8 @@ impl Client {
     /// Create new [`Client`] and connect to a Faktory server with a non-standard stream.
     pub async fn connect_with<S>(stream: S, pwd: Option<String>) -> Result<Client, Error>
     where
-        S: AsyncRead + AsyncWrite + Reconnect + Send + Sync + Unpin + 'static,
+        S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
+        BufStream<S>: Reconnect,
     {
         let buffered = BufStream::new(stream);
         let opts = ClientOptions {

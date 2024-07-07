@@ -26,8 +26,7 @@ use tokio_rustls::TlsConnector;
 /// use tokio::io::BufStream;
 ///
 /// let tls = TlsStream::connect(None).await.unwrap();
-/// let buffered = BufStream::new(tls);
-/// let cl = Client::connect_with(buffered, None).await.unwrap();
+/// let cl = Client::connect_with(tls, None).await.unwrap();
 /// # drop(cl);
 /// # });
 /// ```
