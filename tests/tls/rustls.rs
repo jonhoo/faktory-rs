@@ -5,7 +5,6 @@ use std::{
     env,
     sync::{self, Arc},
 };
-use tokio::io::BufStream;
 use tokio_rustls::rustls::{ClientConfig, SignatureScheme};
 
 #[tokio::test(flavor = "multi_thread")]
@@ -38,13 +37,12 @@ async fn roundtrip_tls() {
             .with_custom_certificate_verifier(Arc::new(verifier))
             .with_no_client_auth();
 
-        let stream = TlsStream::with_client_config(
+        TlsStream::with_client_config(
             client_config,
             Some(&env::var("FAKTORY_URL_SECURE").unwrap()),
         )
         .await
-        .unwrap();
-        BufStream::new(stream)
+        .unwrap()
     };
 
     let mut worker = WorkerBuilder::default()
