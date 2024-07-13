@@ -1,7 +1,7 @@
 use super::{runner::Closure, CallbacksRegistry, Client, Worker};
 use crate::{
     proto::{utils, ClientOptions},
-    Error, Job, JobRunner, Reconnect, WorkerId,
+    Error, Job, JobRunner, Reconnect, TlsKind, WorkerId,
 };
 use std::future::Future;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream};
@@ -14,6 +14,8 @@ pub struct WorkerBuilder<E> {
     opts: ClientOptions,
     workers_count: usize,
     callbacks: CallbacksRegistry<E>,
+    tls_kind: Option<TlsKind>,
+    skip_verify_server_certs: bool,
 }
 
 impl<E> Default for WorkerBuilder<E> {
@@ -32,6 +34,8 @@ impl<E> Default for WorkerBuilder<E> {
             opts: ClientOptions::default(),
             workers_count: 1,
             callbacks: CallbacksRegistry::default(),
+            tls_kind: None,
+            skip_verify_server_certs: true,
         }
     }
 }
@@ -122,6 +126,33 @@ impl<E: 'static> WorkerBuilder<E> {
         self
     }
 
+    /// Make the traffic between this worker and Faktory encrypted with native TLS.
+    ///
+    /// The underlying crate (`native-tls`) will use _SChannel_ on Windows,
+    /// _SecureTransport_ on OSX, and _OpenSSL_ on other platforms.
+    ///
+    /// Note that if you use this method on the builder, but eventually use [`WorkerBuilder::connect_with`]
+    /// (rather than [`WorkerBuilder::connect`]) to create an instance of [`Worker`], this worker
+    /// will be connected to the Faktory server with the stream you've provided to `connect_with`.
+    #[cfg(feature = "native_tls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "native_tls")))]
+    pub fn use_native_tls(mut self) -> Self {
+        self.tls_kind = Some(TlsKind::Native);
+        self
+    }
+
+    /// Make the traffic between this worker and Faktory encrypted with [`rustls`](https://github.com/rustls/rustls).
+    ///
+    /// Note that if you use this method on the builder, but eventually use [`WorkerBuilder::connect_with`]
+    /// (rather than [`WorkerBuilder::connect`]) to create an instance of [`Worker`], this worker
+    /// will be connected to the Faktory server with the stream you've provided to `connect_with`.
+    #[cfg(feature = "rustls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
+    pub fn use_rustls(mut self) -> Self {
+        self.tls_kind = Some(TlsKind::Rust);
+        self
+    }
+
     /// Connect to a Faktory server with a non-standard stream.
     pub async fn connect_with<S>(
         mut self,
@@ -154,7 +185,23 @@ impl<E: 'static> WorkerBuilder<E> {
     /// If `url` is given, but does not specify a port, it defaults to 7419.
     pub async fn connect(self, url: Option<&str>) -> Result<Worker<E>, Error> {
         let url = utils::parse_provided_or_from_env(url)?;
-        let stream = TokioStream::connect(utils::host_from_url(&url)).await?;
-        self.connect_with(stream, None).await
+        let addr = utils::host_from_url(&url);
+        let stream = TokioStream::connect(addr).await?;
+        match self.tls_kind {
+            None => self.connect_with(stream, None).await,
+
+            #[cfg(feature = "rustls")]
+            Some(TlsKind::Rust) => {
+                let hostname = url.host_str().unwrap().to_string();
+                let tls_tream = crate::rustls::TlsStream::with_native_certs(
+                    stream,
+                    hostname,
+                    self.skip_verify_server_certs,
+                )
+                .await?;
+                self.connect_with(tls_tream, None).await
+            }
+            _ => unimplemented!(),
+        }
     }
 }
