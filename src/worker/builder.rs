@@ -115,9 +115,12 @@ impl<E: 'static> WorkerBuilder<E> {
     /// [docs](https://docs.rs/tokio/latest/tokio/index.html#cpu-bound-tasks-and-blocking-code) for
     /// how to set the upper limit on the number of threads in the mentioned pool and other details.
     ///
-    /// Note that it is not recommended to mix blocking and non-blocking tasks and so if many of your
-    /// handlers are blocking, you will want to launch a dedicated worker process (at least a separate
-    /// Tokio Runtime) where only blocking handlers will be used.
+    /// You can mix and match async and blocking handlers in a single `Worker`. However, note that
+    /// there is no active management of the blocking tasks in `tokio`, and so if you end up with more
+    /// CPU-intensive blocking handlers executing at the same time than you have cores, the asynchronous
+    /// handler tasks (and indeed, all tasks) will suffer as a result. If you have a lot of blocking tasks,
+    /// consider using the standard async job handler (which you can register with [`WorkerBuilder::register`]
+    /// or [`WorkerBuilder::register_fn`]) and add explicit code to manage the blocking tasks appropriately.
     ///
     /// Also note that only one single handler per job kind is supported. Registering another handler
     /// for the same job kind will silently override the handler registered previously.
