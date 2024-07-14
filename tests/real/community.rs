@@ -602,3 +602,75 @@ async fn test_jobs_created_with_builder() {
         .unwrap();
     assert!(had_job);
 }
+
+// It is generally not ok to mix blocking and not blocking tasks,
+// we are doing so in this test simply to demonstrate it is _possible_.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_jobs_with_blocking_handlers() {
+    skip_check!();
+
+    let local = "test_jobs_with_blocking_handlers";
+
+    let mut w = Worker::builder()
+        .register_blocking_fn("cpu_intensive", |_j| {
+            // Imagine some compute heavy operations:serializing, sorting, matrix multiplication, etc.
+            std::thread::sleep(Duration::from_millis(1000));
+            Ok::<(), io::Error>(())
+        })
+        .register_fn("io_intensive", |_j| async move {
+            // Imagine fetching data for this user from various origins,
+            // updating an entry on them in the database, and then sending them
+            // an email and pushing a follow-up task on the Faktory queue
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            Ok::<(), io::Error>(())
+        })
+        .register_fn(
+            "general_workload",
+            |_j| async move { Ok::<(), io::Error>(()) },
+        )
+        .connect(None)
+        .await
+        .unwrap();
+
+    Client::connect(None)
+        .await
+        .unwrap()
+        .enqueue_many([
+            Job::builder("cpu_intensive").queue(local).build(),
+            Job::builder("io_intensive").queue(local).build(),
+            Job::builder("general_workload").queue(local).build(),
+        ])
+        .await
+        .unwrap();
+
+    for _ in 0..2 {
+        assert!(w.run_one(0, &[local]).await.unwrap());
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_panic_in_handler() {
+    skip_check!();
+
+    let local = "test_panic_in_handler";
+
+    let mut w = Worker::builder::<io::Error>()
+        .register_blocking_fn("panic", |_j| {
+            panic!("Panic inside the handler...");
+        })
+        .connect(None)
+        .await
+        .unwrap();
+
+    Client::connect(None)
+        .await
+        .unwrap()
+        .enqueue(Job::builder("panic").queue(local).build())
+        .await
+        .unwrap();
+
+    // we _did_ consume and process the job, the processing result itself though
+    // was a failure; however, a panic in the handler was "intercepted" and communicated
+    // to the Faktory server via the FAIL command
+    assert!(w.run_one(0, &[local]).await.unwrap());
+}
