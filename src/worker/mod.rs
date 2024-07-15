@@ -454,7 +454,7 @@ impl<
             exit = self.listen_for_heartbeats(&statuses) => {
                 // there are a couple of cases here:
                 //  - we got TERMINATE, so we should just return, even if a worker is still running
-                //  - we got TERMINATE and all workers has exited
+                //  - we got TERMINATE and all workers have exited
                 //  - we got an error from heartbeat()
                 self.terminated = exit.is_ok();
 
