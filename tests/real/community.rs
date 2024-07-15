@@ -1,8 +1,9 @@
-use crate::skip_check;
+use crate::{assert_gte, skip_check};
 use faktory::{Client, Job, JobBuilder, JobId, RunCeaseReason, Worker, WorkerBuilder, WorkerId};
 use serde_json::Value;
 use std::time::Duration;
-use std::{io, sync};
+use std::{io, sync, time::Duration};
+use tokio::time as tokio_time;
 use tokio_util::sync::CancellationToken;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -70,6 +71,117 @@ async fn roundtrip() {
 
     let drained = !worker.run_one(0, &[local]).await.unwrap();
     assert!(drained);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn server_state() {
+    skip_check!();
+
+    let local = "server_state";
+
+    // prepare a worker
+    let mut w = WorkerBuilder::default()
+        .register_fn(local, move |_| async move { Ok::<(), io::Error>(()) })
+        .connect(None)
+        .await
+        .unwrap();
+
+    // prepare a producing client
+    let mut client = Client::connect(None).await.unwrap();
+
+    // examine server state before pushing anything
+    let server_state = client.current_info().await.unwrap();
+    // the Faktory release we are writing bindings and testing
+    // against is at least "1.8.0"
+    assert_eq!(server_state.server.version.major, 1);
+    assert_gte!(server_state.server.version.minor, 8);
+    assert!(server_state.data.queues.get(local).is_none());
+    // the following two assertions are not super-helpful but
+    // there is not much info we can make meaningful assetions on anyhow
+    // (like memusage, server description string, version, etc.)
+    assert_gte!(
+        server_state.server.connections,
+        2,
+        "{}",
+        server_state.server.connections
+    ); // at least two clients from the current test
+    assert_ne!(server_state.server.uptime.as_secs(), 0); // if IPC is happenning, this should hold :)
+
+    // push 1 job
+    client
+        .enqueue(
+            JobBuilder::new(local)
+                .args(vec!["abc"])
+                .queue(local)
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    // let's give Faktory a second to get updated
+    tokio_time::sleep(Duration::from_secs(1)).await;
+
+    // we only pushed 1 job on this queue
+    let server_state = client.current_info().await.unwrap();
+    assert_eq!(*server_state.data.queues.get(local).unwrap(), 1);
+
+    // It is tempting to make an assertion like `total enqueued this time >= total enqueued last time + 1`,
+    // but since we've got a server shared among numerous tests that are running in parallel, this
+    // assertion will not always work (though it will be true in the majority of test runs). Imagine
+    // a situation where between our last asking for server data state and now they have consumed all
+    // the pending jobs in _other_ queues. This is highly unlikely, but _is_ possible. So the only
+    // more or less guaranteed thing is that there is one pending job in our _local_ queue. It is "more or less"
+    // because another test _may_ still push onto and consume from this queue if we copypasta this test's
+    // contents and forget to update the local queue name, i.e. do not guarantee isolation at the queues level.
+    assert_gte!(
+        server_state.data.total_enqueued,
+        1,
+        "`total_enqueued` equals {} which is not greater than or equal to {}",
+        server_state.data.total_enqueued,
+        1
+    );
+    // Similar to the case above, we may want to assert `number of queues this time >= number of queues last time + 1`,
+    // but it may not always hold, due to the fact that there is a `remove_queue` operation and if they
+    // use it in other tests as a clean-up phase (just like we are doing at the end of this test),
+    // the `server_state.data.total_queues` may reach `1`, meaning only our local queue is left.
+    assert_gte!(
+        server_state.data.total_queues,
+        1,
+        "`total_queues` equals {} which is not greater than or equal to {}",
+        server_state.data.total_queues,
+        1
+    );
+
+    // let's know consume that job ...
+    assert!(w.run_one(0, &[local]).await.unwrap());
+
+    // ... and verify the queue has got 0 pending jobs
+    //
+    // NB! If this is not passing locally, make sure to launch a fresh Faktory container,
+    // because if you have not pruned its volume the Faktory will still keep the queue name
+    // as registered.
+    // But generally, we are performing a clean-up by consuming the jobs from the local queue/
+    // and then deleting the queue programmatically, so there is normally no need to prune docker
+    // volumes to perform the next test run. Also note that on CI we are always starting a-fresh.
+    let server_state = client.current_info().await.unwrap();
+    assert_eq!(*server_state.data.queues.get(local).unwrap(), 0);
+    // `total_processed` should be at least +1 job from last read
+    assert_gte!(
+        server_state.data.total_processed,
+        1,
+        "{}",
+        server_state.data.total_processed
+    );
+
+    client.queue_remove(&[local]).await.unwrap();
+    assert!(client
+        .current_info()
+        .await
+        .unwrap()
+        .data
+        .queues
+        .get(local)
+        .is_none());
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -154,41 +266,191 @@ async fn fail() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn queue() {
+async fn queue_control_actions() {
     skip_check!();
-    let local = "pause";
+
+    let local_1 = "queue_control_pause_and_resume_1";
+    let local_2 = "queue_control_pause_and_resume_2";
 
     let (tx, rx) = sync::mpsc::channel();
-    let tx = sync::Arc::new(sync::Mutex::new(tx));
+    let tx_1 = sync::Arc::new(sync::Mutex::new(tx));
+    let tx_2 = sync::Arc::clone(&tx_1);
 
-    let mut w = WorkerBuilder::default()
+    let mut worker = WorkerBuilder::default()
         .hostname("tester".to_string())
-        .wid(WorkerId::new(local))
-        .register_fn(local, move |_job| {
-            let tx = sync::Arc::clone(&tx);
+        .wid(WorkerId::new(local_1))
+        .register_fn(local_1, move |_job| {
+            let tx = sync::Arc::clone(&tx_1);
+            Box::pin(async move { tx.lock().unwrap().send(true) })
+        })
+        .register_fn(local_2, move |_job| {
+            let tx = sync::Arc::clone(&tx_2);
             Box::pin(async move { tx.lock().unwrap().send(true) })
         })
         .connect(None)
         .await
         .unwrap();
 
-    let mut p = Client::connect(None).await.unwrap();
-    p.enqueue(Job::new(local, vec![Value::from(1)]).on_queue(local))
+    let mut client = Client::connect(None).await.unwrap();
+
+    // enqueue three jobs
+    client
+        .enqueue_many([
+            Job::new(local_1, vec![Value::from(1)]).on_queue(local_1),
+            Job::new(local_1, vec![Value::from(1)]).on_queue(local_1),
+            Job::new(local_1, vec![Value::from(1)]).on_queue(local_1),
+        ])
         .await
         .unwrap();
-    p.queue_pause(&[local]).await.unwrap();
 
-    let had_job = w.run_one(0, &[local]).await.unwrap();
+    // pause the queue
+    client.queue_pause(&[local_1]).await.unwrap();
+
+    // try to consume from that queue
+    let had_job = worker.run_one(0, &[local_1]).await.unwrap();
     assert!(!had_job);
     let worker_executed = rx.try_recv().is_ok();
     assert!(!worker_executed);
 
-    p.queue_resume(&[local]).await.unwrap();
+    // resume that queue and ...
+    client.queue_resume(&[local_1]).await.unwrap();
 
-    let had_job = w.run_one(0, &[local]).await.unwrap();
+    // ... be able to consume from it
+    let had_job = worker.run_one(0, &[local_1]).await.unwrap();
     assert!(had_job);
     let worker_executed = rx.try_recv().is_ok();
     assert!(worker_executed);
+
+    // push two jobs on the other queue (reminder: we got two jobs
+    // remaining on the first queue):
+    client
+        .enqueue_many([
+            Job::new(local_2, vec![Value::from(1)]).on_queue(local_2),
+            Job::new(local_2, vec![Value::from(1)]).on_queue(local_2),
+        ])
+        .await
+        .unwrap();
+
+    // pause both queues the queues
+    client.queue_pause(&[local_1, local_2]).await.unwrap();
+
+    // try to consume from them
+    assert!(!worker.run_one(0, &[local_1]).await.unwrap());
+    assert!(!worker.run_one(0, &[local_2]).await.unwrap());
+    assert!(!rx.try_recv().is_ok());
+
+    // now, resume the queues and ...
+    client.queue_resume(&[local_1, local_2]).await.unwrap();
+
+    // ... be able to consume from both of them
+    assert!(worker.run_one(0, &[local_1]).await.unwrap());
+    assert!(rx.try_recv().is_ok());
+    assert!(worker.run_one(0, &[local_2]).await.unwrap());
+    assert!(rx.try_recv().is_ok());
+
+    // let's inspect the sever state
+    let server_state = client.current_info().await.unwrap();
+    let queues = &server_state.data.queues;
+    assert_eq!(*queues.get(local_1).unwrap(), 1); // 1 job remaining
+    assert_eq!(*queues.get(local_2).unwrap(), 1); // also 1 job remaining
+
+    // let's now remove the queues
+    client.queue_remove(&[local_1, local_2]).await.unwrap();
+
+    // though there _was_ a job in each queue, consuming from
+    // the removed queues will not yield anything
+    assert!(!worker.run_one(0, &[local_1]).await.unwrap());
+    assert!(!worker.run_one(0, &[local_2]).await.unwrap());
+    assert!(!rx.try_recv().is_ok());
+
+    // let's inspect the sever state again
+    let server_state = client.current_info().await.unwrap();
+    let queues = &server_state.data.queues;
+    // our queue are not even mentioned in the server report:
+    assert!(queues.get(local_1).is_none());
+    assert!(queues.get(local_2).is_none());
+}
+
+// Run the following test with:
+// FAKTORY_URL=tcp://127.0.0.1:7419 cargo test --locked --all-features --all-targets queue_control_actions_wildcard -- --include-ignored
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "this test requires a dedicated test run since the commands being tested will affect all queues on the Faktory server"]
+async fn queue_control_actions_wildcard() {
+    skip_check!();
+
+    let local_1 = "queue_control_wildcard_1";
+    let local_2 = "queue_control_wildcard_2";
+
+    let (tx, rx) = sync::mpsc::channel();
+    let tx_1 = sync::Arc::new(sync::Mutex::new(tx));
+    let tx_2 = sync::Arc::clone(&tx_1);
+
+    let mut worker = WorkerBuilder::default()
+        .hostname("tester".to_string())
+        .wid(WorkerId::new(local_1))
+        .register_fn(local_1, move |_job| {
+            let tx = sync::Arc::clone(&tx_1);
+            Box::pin(async move { tx.lock().unwrap().send(true) })
+        })
+        .register_fn(local_2, move |_job| {
+            let tx = sync::Arc::clone(&tx_2);
+            Box::pin(async move { tx.lock().unwrap().send(true) })
+        })
+        .connect(None)
+        .await
+        .unwrap();
+
+    let mut client = Client::connect(None).await.unwrap();
+
+    // enqueue two jobs on each queue
+    client
+        .enqueue_many([
+            Job::new(local_1, vec![Value::from(1)]).on_queue(local_1),
+            Job::new(local_1, vec![Value::from(1)]).on_queue(local_1),
+            Job::new(local_2, vec![Value::from(1)]).on_queue(local_2),
+            Job::new(local_2, vec![Value::from(1)]).on_queue(local_2),
+        ])
+        .await
+        .unwrap();
+
+    // pause all queues the queues
+    client.queue_pause_all().await.unwrap();
+
+    // try to consume from queues
+    assert!(!worker.run_one(0, &[local_1]).await.unwrap());
+    assert!(!worker.run_one(0, &[local_2]).await.unwrap());
+    assert!(!rx.try_recv().is_ok());
+
+    // now, resume all the queues and ...
+    client.queue_resume_all().await.unwrap();
+
+    // ... be able to consume from both of them
+    assert!(worker.run_one(0, &[local_1]).await.unwrap());
+    assert!(rx.try_recv().is_ok());
+    assert!(worker.run_one(0, &[local_2]).await.unwrap());
+    assert!(rx.try_recv().is_ok());
+
+    // let's inspect the sever state
+    let server_state = client.current_info().await.unwrap();
+    let queues = &server_state.data.queues;
+    assert_eq!(*queues.get(local_1).unwrap(), 1); // 1 job remaining
+    assert_eq!(*queues.get(local_2).unwrap(), 1); // also 1 job remaining
+
+    // let's now remove all the queues
+    client.queue_remove_all().await.unwrap();
+
+    // though there _was_ a job in each queue, consuming from
+    // the removed queues will not yield anything
+    assert!(!worker.run_one(0, &[local_1]).await.unwrap());
+    assert!(!worker.run_one(0, &[local_2]).await.unwrap());
+    assert!(!rx.try_recv().is_ok());
+
+    // let's inspect the sever state again
+    let server_state = client.current_info().await.unwrap();
+    let queues = &server_state.data.queues;
+    // our queue are not even mentioned in the server report:
+    assert!(queues.get(local_1).is_none());
+    assert!(queues.get(local_2).is_none());
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -414,4 +676,74 @@ async fn test_shutdown_signals_handling() {
     let (cease_reason, nrunning) = jh.await.expect("joined ok").unwrap();
     assert_eq!(cease_reason, RunCeaseReason::CancelSignal);
     assert_eq!(nrunning, 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_jobs_with_blocking_handlers() {
+    skip_check!();
+
+    let local = "test_jobs_with_blocking_handlers";
+
+    let mut w = Worker::builder()
+        .register_blocking_fn("cpu_intensive", |_j| {
+            // Imagine some compute heavy operations:serializing, sorting, matrix multiplication, etc.
+            std::thread::sleep(Duration::from_millis(1000));
+            Ok::<(), io::Error>(())
+        })
+        .register_fn("io_intensive", |_j| async move {
+            // Imagine fetching data for this user from various origins,
+            // updating an entry on them in the database, and then sending them
+            // an email and pushing a follow-up task on the Faktory queue
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            Ok::<(), io::Error>(())
+        })
+        .register_fn(
+            "general_workload",
+            |_j| async move { Ok::<(), io::Error>(()) },
+        )
+        .connect(None)
+        .await
+        .unwrap();
+
+    Client::connect(None)
+        .await
+        .unwrap()
+        .enqueue_many([
+            Job::builder("cpu_intensive").queue(local).build(),
+            Job::builder("io_intensive").queue(local).build(),
+            Job::builder("general_workload").queue(local).build(),
+        ])
+        .await
+        .unwrap();
+
+    for _ in 0..2 {
+        assert!(w.run_one(0, &[local]).await.unwrap());
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_panic_in_handler() {
+    skip_check!();
+
+    let local = "test_panic_in_handler";
+
+    let mut w = Worker::builder::<io::Error>()
+        .register_blocking_fn("panic", |_j| {
+            panic!("Panic inside the handler...");
+        })
+        .connect(None)
+        .await
+        .unwrap();
+
+    Client::connect(None)
+        .await
+        .unwrap()
+        .enqueue(Job::builder("panic").queue(local).build())
+        .await
+        .unwrap();
+
+    // we _did_ consume and process the job, the processing result itself though
+    // was a failure; however, a panic in the handler was "intercepted" and communicated
+    // to the Faktory server via the FAIL command
+    assert!(w.run_one(0, &[local]).await.unwrap());
 }

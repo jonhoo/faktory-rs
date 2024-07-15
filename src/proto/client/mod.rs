@@ -312,6 +312,20 @@ where
             },
         }
     }
+
+    pub(crate) async fn perform_queue_action<Q>(
+        &mut self,
+        queues: &[Q],
+        action: QueueAction,
+    ) -> Result<(), Error>
+    where
+        Q: AsRef<str> + Sync,
+    {
+        self.issue(&QueueControl::new(action, queues))
+            .await?
+            .read_ok()
+            .await
+    }
 }
 
 impl<S> Client<S>
@@ -358,10 +372,10 @@ where
         Ok((jobs_count - errors.len(), Some(errors)))
     }
 
-    /// Retrieve information about the running server.
+    /// Retrieve [information](crate::ServerSnapshot) about the running server.
     ///
     /// The returned value is the result of running the `INFO` command on the server.
-    pub async fn info(&mut self) -> Result<serde_json::Value, Error> {
+    pub async fn current_info(&mut self) -> Result<single::FaktoryState, Error> {
         self.issue(&Info)
             .await?
             .read_json()
@@ -370,25 +384,54 @@ where
     }
 
     /// Pause the given queues.
+    ///
+    /// Passing a wildcard `&["*"]` as the value of the `queues` parameter
+    /// will pause all the queues. To be more explicit, you may want to call [`Client::queue_pause_all`]
+    /// shortcut method to pause all the queues.
     pub async fn queue_pause<Q>(&mut self, queues: &[Q]) -> Result<(), Error>
     where
         Q: AsRef<str> + Sync,
     {
-        self.issue(&QueueControl::new(QueueAction::Pause, queues))
-            .await?
-            .read_ok()
-            .await
+        self.perform_queue_action(queues, QueueAction::Pause).await
+    }
+
+    /// Pause all queues.
+    pub async fn queue_pause_all(&mut self) -> Result<(), Error> {
+        self.perform_queue_action(&["*"], QueueAction::Pause).await
     }
 
     /// Resume the given queues.
+    ///
+    /// Passing a wildcard `&["*"]` as the value of the `queues` parameter
+    /// will resume all the queues. To be more explicit, you may want to call [`Client::queue_resume_all`]
+    /// shortcut method to resume all the queues.
     pub async fn queue_resume<Q>(&mut self, queues: &[Q]) -> Result<(), Error>
     where
         Q: AsRef<str> + Sync,
     {
-        self.issue(&QueueControl::new(QueueAction::Resume, queues))
-            .await?
-            .read_ok()
-            .await
+        self.perform_queue_action(queues, QueueAction::Resume).await
+    }
+
+    /// Resume all queues.
+    pub async fn queue_resume_all(&mut self) -> Result<(), Error> {
+        self.perform_queue_action(&["*"], QueueAction::Resume).await
+    }
+
+    /// Remove the given queues.
+    ///
+    /// Beware, passing a wildcard `&["*"]` as the value of the `queues` parameter
+    /// will **remove** all the queues. To be more explicit, you may want to call [`Client::queue_remove_all`]
+    /// shortcut method to remove all the queues.
+    pub async fn queue_remove<Q>(&mut self, queues: &[Q]) -> Result<(), Error>
+    where
+        Q: AsRef<str> + Sync,
+    {
+        self.perform_queue_action(queues, QueueAction::Remove).await
+    }
+
+    /// Remove all queues.
+    pub async fn queue_remove_all(&mut self) -> Result<(), Error> {
+        self.perform_queue_action(&["*"], QueueAction::Remove).await
     }
 }
 
