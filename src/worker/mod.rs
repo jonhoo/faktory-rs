@@ -10,7 +10,7 @@ use std::time::Duration;
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
 use tokio::io::{AsyncBufRead, AsyncWrite};
 use tokio::net::TcpStream;
-use tokio::task::{AbortHandle, JoinSet};
+use tokio::task::{spawn_blocking, AbortHandle, JoinError, JoinSet};
 use tokio::time::sleep as tokio_sleep;
 
 mod builder;
@@ -25,8 +25,14 @@ pub(crate) const STATUS_RUNNING: usize = 0;
 pub(crate) const STATUS_QUIET: usize = 1;
 pub(crate) const STATUS_TERMINATING: usize = 2;
 
-type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
 type ShutdownSignal = Pin<Box<dyn Future<Output = ()> + 'static + Send>>;
+
+pub(crate) enum Callback<E> {
+    Async(runner::BoxedJobRunner<E>),
+    Sync(Arc<dyn Fn(Job) -> Result<(), E> + Sync + Send + 'static>),
+}
+
+type CallbacksRegistry<E> = FnvHashMap<String, Callback<E>>;
 
 /// `Worker` is used to run a worker that processes jobs provided by Faktory.
 ///
@@ -194,18 +200,28 @@ impl<S: AsyncWrite + Send + Unpin, E> Worker<S, E> {
     }
 }
 
-enum Failed<E: StdError> {
+enum Failed<E: StdError, JE: StdError> {
     Application(E),
+    HandlerPanic(JE),
     BadJobType(String),
 }
 
 impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> Worker<S, E> {
-    async fn run_job(&mut self, job: Job) -> Result<(), Failed<E>> {
+    async fn run_job(&mut self, job: Job) -> Result<(), Failed<E, JoinError>> {
         let handler = self
             .callbacks
             .get(job.kind())
             .ok_or(Failed::BadJobType(job.kind().to_string()))?;
-        handler.run(job).await.map_err(Failed::Application)
+        match handler {
+            Callback::Async(cb) => cb.run(job).await.map_err(Failed::Application),
+            Callback::Sync(cb) => {
+                let cb = Arc::clone(cb);
+                match spawn_blocking(move || cb(job)).await {
+                    Err(join_error) => Err(Failed::HandlerPanic(join_error)),
+                    Ok(processing_result) => processing_result.map_err(Failed::Application),
+                }
+            }
+        }
     }
 
     async fn report_on_all_workers(&mut self) -> Result<(), Error> {
@@ -292,6 +308,7 @@ impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> 
                 let fail = match e {
                     Failed::BadJobType(jt) => Fail::generic(jid, format!("No handler for {}", jt)),
                     Failed::Application(e) => Fail::generic_with_backtrace(jid, e),
+                    Failed::HandlerPanic(e) => Fail::generic_with_backtrace(jid, e),
                 };
                 self.worker_states.register_failure(worker, fail.clone());
                 self.c.issue(&fail).await?.read_ok().await?;
