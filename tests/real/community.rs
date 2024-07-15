@@ -1,7 +1,6 @@
 use crate::{assert_gte, skip_check};
 use faktory::{Client, Job, JobBuilder, JobId, RunCeaseReason, Worker, WorkerBuilder, WorkerId};
 use serde_json::Value;
-use std::time::Duration;
 use std::{io, sync, time::Duration};
 use tokio::time as tokio_time;
 use tokio_util::sync::CancellationToken;
