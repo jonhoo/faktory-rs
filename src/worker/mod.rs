@@ -323,7 +323,8 @@ impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> 
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 /// A reason why [`Worker::run`] has discontinued.
-pub enum RunCeaseReason {
+#[non_exhaustive]
+pub enum StopReason {
     /// A signal from the user space received.
     ///
     /// A future provided via [`WorkerBuilder::with_graceful_shutdown`] has resolved
