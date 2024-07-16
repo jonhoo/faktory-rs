@@ -668,6 +668,8 @@ async fn test_shutdown_signals_handling() {
     cl.enqueue(j).await.unwrap();
     rx_for_test_purposes.recv().await;
 
+    assert!(!jh.is_finished());
+
     // ... immediately signal to return control
     token.cancel();
 

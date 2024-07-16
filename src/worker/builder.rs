@@ -108,7 +108,9 @@ impl<E: 'static> WorkerBuilder<E> {
     /// ```no_run
     /// # tokio_test::block_on(async {
     /// use faktory::{Client, Job, Worker};
+    /// use std::time::Duration;
     /// use tokio_util::sync::CancellationToken;
+    /// use tokio::time::sleep;
     ///
     /// Client::connect(None)
     ///     .await
@@ -133,8 +135,15 @@ impl<E: 'static> WorkerBuilder<E> {
     /// // start consuming
     /// let jh = tokio::spawn(async move { w.run(&["default"]).await });
     ///
+    /// // verify the consumer thread has not finished
+    /// sleep(Duration::from_secs(2)).await;
+    /// assert!(!jh.is_finished());
+    ///  
     /// // send a signal to eventually return control (upon graceful shutdown)
     /// token.cancel();
+    ///
+    /// // learn the stop reason and the number of workers that were still running
+    /// let (_stop_reason, _nrunning) = jh.await.expect("joined ok").unwrap();
     /// # });
     /// ```
     pub fn with_graceful_shutdown<F>(mut self, signal: F) -> Self
