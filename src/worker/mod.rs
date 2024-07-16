@@ -325,11 +325,11 @@ impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> 
 /// A reason why [`Worker::run`] has discontinued.
 #[non_exhaustive]
 pub enum StopReason {
-    /// A signal from the user space received.
+    /// Graceful shutdown completed.
     ///
     /// A future provided via [`WorkerBuilder::with_graceful_shutdown`] has resolved
     /// signalling the worker to stop.
-    CancelSignal,
+    GracefulShutdown,
 
     /// A signal from the Faktory server received.
     ///
