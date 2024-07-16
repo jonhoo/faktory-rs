@@ -1,5 +1,5 @@
 use crate::{assert_gte, skip_check};
-use faktory::{Client, Job, JobBuilder, JobId, RunCeaseReason, Worker, WorkerBuilder, WorkerId};
+use faktory::{Client, Job, JobBuilder, JobId, StopReason, Worker, WorkerBuilder, WorkerId};
 use serde_json::Value;
 use std::{io, sync, time::Duration};
 use tokio::time as tokio_time;
@@ -675,7 +675,7 @@ async fn test_shutdown_signals_handling() {
 
     // one worker was processing a task when we interrupted it
     let (cease_reason, nrunning) = jh.await.expect("joined ok").unwrap();
-    assert_eq!(cease_reason, RunCeaseReason::CancelSignal);
+    assert_eq!(cease_reason, StopReason::GracefulShutdown);
     assert_eq!(nrunning, 1);
 }
 

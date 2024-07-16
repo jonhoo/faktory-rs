@@ -80,7 +80,7 @@ pub use crate::proto::{
     Client, DataSnapshot, FaktoryState, Job, JobBuilder, JobId, Reconnect, ServerSnapshot, WorkerId,
 };
 
-pub use crate::worker::{JobRunner, RunCeaseReason, Worker, WorkerBuilder};
+pub use crate::worker::{JobRunner, StopReason, Worker, WorkerBuilder};
 
 #[cfg(feature = "ent")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]

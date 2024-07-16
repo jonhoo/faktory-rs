@@ -400,14 +400,14 @@ impl<
     /// to disengage (`Ok` is returned), or a signal from the user-space code has been received via a future
     /// supplied to [`WorkerBuilder::with_graceful_shutdown`](`Ok` is returned).
     ///
-    /// The value in an `Ok` holds a tuple with the reason why the run has discontinued (see [`RunCeaseReason`])
+    /// The value in an `Ok` holds a tuple with the reason why the run has discontinued (see [`StopReason`])
     /// and the number of workers that may still be processing jobs. Note that `0` can also indicate that
     /// the [graceful shutdown period](WorkerBuilder::shutdown_timeout) has been exceeded.
     ///
     /// If an error occurred while reporting a job success or failure, the result will be re-reported to the server
     /// without re-executing the job. If the worker was terminated (i.e., `run` returns  with an `Ok` response),
     /// the worker should **not** try to resume by calling `run` again. This will cause a panic.
-    pub async fn run<Q>(&mut self, queues: &[Q]) -> Result<(RunCeaseReason, usize), Error>
+    pub async fn run<Q>(&mut self, queues: &[Q]) -> Result<(StopReason, usize), Error>
     where
         Q: AsRef<str>,
     {
@@ -447,7 +447,7 @@ impl<
                     }
                 };
                 self.terminated = true;
-                Ok((RunCeaseReason::CancelSignal, nrunning))
+                Ok((StopReason::GracefulShutdown, nrunning))
             },
             // A signal from the Faktory server received or an error occurred.
             // Even though `Worker::listen_for_hearbeats` is not cancellation safe, we are ok using it here,
@@ -463,7 +463,7 @@ impl<
                 if let Ok(true) = exit {
                     let running = self.force_fail_all_workers("terminated").await;
                     if running != 0 {
-                        return Ok((RunCeaseReason::FaktoryInstruction, running));
+                        return Ok((StopReason::ServerInstruction, running));
                     }
                 }
 
@@ -475,7 +475,7 @@ impl<
                 let results = results.into_iter().collect::<Result<Vec<_>, _>>();
 
                 match exit {
-                    Ok(_) => results.map(|_| (RunCeaseReason::FaktoryInstruction, 0)),
+                    Ok(_) => results.map(|_| (StopReason::ServerInstruction, 0)),
                     Err(e) => results.and(Err(e)),
                 }
             }
