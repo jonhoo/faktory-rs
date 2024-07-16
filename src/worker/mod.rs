@@ -331,12 +331,13 @@ pub enum StopReason {
     /// signalling the worker to stop.
     GracefulShutdown,
 
-    /// A signal from the Faktory server received.
+    /// The Faktory server asked us to shut down.
     ///
     /// Under the hood, the worker is being in constant communication with the Faktory server,
     /// not only fetching jobs and reporting on processing results, but also listening for
-    /// the server's instructions, one of which can be to disengage.
-    FaktoryInstruction,
+    /// the server's instructions, one of which can be to disengage (e.g., to indicate that the
+    /// server is shutting down.
+    ServerInstruction,
 }
 
 impl<
