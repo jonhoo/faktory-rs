@@ -674,9 +674,9 @@ async fn test_shutdown_signals_handling() {
     token.cancel();
 
     // one worker was processing a task when we interrupted it
-    let (cease_reason, nrunning) = jh.await.expect("joined ok").unwrap();
-    assert_eq!(cease_reason, StopReason::GracefulShutdown);
-    assert_eq!(nrunning, 1);
+    let stop_details = jh.await.expect("joined ok").unwrap();
+    assert_eq!(stop_details.stop_reason, StopReason::GracefulShutdown);
+    assert_eq!(stop_details.nrunning, 1);
 }
 
 #[tokio::test(flavor = "multi_thread")]

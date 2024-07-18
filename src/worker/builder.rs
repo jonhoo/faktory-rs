@@ -107,7 +107,7 @@ impl<E: 'static> WorkerBuilder<E> {
     ///
     /// ```no_run
     /// # tokio_test::block_on(async {
-    /// use faktory::{Client, Job, Worker};
+    /// use faktory::{Client, Job, StopReason, Worker};
     /// use std::time::Duration;
     /// use tokio_util::sync::CancellationToken;
     /// use tokio::time::sleep;
@@ -143,7 +143,9 @@ impl<E: 'static> WorkerBuilder<E> {
     /// token.cancel();
     ///
     /// // learn the stop reason and the number of workers that were still running
-    /// let (_stop_reason, _nrunning) = jh.await.expect("joined ok").unwrap();
+    /// let stop_details = jh.await.expect("joined ok").unwrap();
+    /// assert_eq!(stop_details.stop_reason, StopReason::GracefulShutdown);
+    /// let _nrunning = stop_details.nrunning;
     /// # });
     /// ```
     pub fn with_graceful_shutdown<F>(mut self, signal: F) -> Self

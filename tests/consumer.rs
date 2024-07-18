@@ -259,10 +259,9 @@ async fn well_behaved() {
     s.push_bytes_to_read(0, b"+{\"state\":\"terminate\"}\r\n");
 
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
-    assert_eq!(
-        jh.await.unwrap().unwrap(),
-        (StopReason::ServerInstruction, 0)
-    );
+    let details = jh.await.unwrap().unwrap();
+    assert_eq!(details.stop_reason, StopReason::ServerInstruction);
+    assert_eq!(details.nrunning, 0);
 
     // heartbeat should have seen two beats (quiet + terminate)
     let written = s.pop_bytes_written(0);
@@ -329,10 +328,9 @@ async fn no_first_job() {
     s.push_bytes_to_read(0, b"+{\"state\":\"terminate\"}\r\n");
 
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
-    assert_eq!(
-        jh.await.unwrap().unwrap(),
-        (StopReason::ServerInstruction, 0)
-    );
+    let details = jh.await.unwrap().unwrap();
+    assert_eq!(details.stop_reason, StopReason::ServerInstruction);
+    assert_eq!(details.nrunning, 0);
 
     // heartbeat should have seen two beats (quiet + terminate)
     let written = s.pop_bytes_written(0);
@@ -409,10 +407,9 @@ async fn well_behaved_many() {
     s.push_bytes_to_read(0, b"+{\"state\":\"terminate\"}\r\n");
 
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
-    assert_eq!(
-        jh.await.unwrap().unwrap(),
-        (StopReason::ServerInstruction, 0)
-    );
+    let details = jh.await.unwrap().unwrap();
+    assert_eq!(details.stop_reason, StopReason::ServerInstruction);
+    assert_eq!(details.nrunning, 0);
 
     // heartbeat should have seen two beats (quiet + terminate)
     let written = s.pop_bytes_written(0);
@@ -496,10 +493,9 @@ async fn terminate() {
 
     // at this point, c.run() should immediately return with Ok(1) indicating that one job is still
     // running.
-    assert_eq!(
-        jh.await.unwrap().unwrap(),
-        (StopReason::ServerInstruction, 1)
-    );
+    let details = jh.await.unwrap().unwrap();
+    assert_eq!(details.stop_reason, StopReason::ServerInstruction);
+    assert_eq!(details.nrunning, 1);
 
     // Heartbeat Thread (stream with index 0).
     //

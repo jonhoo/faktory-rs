@@ -17,9 +17,11 @@ mod builder;
 mod health;
 mod runner;
 mod state;
+mod stop;
 
 pub use builder::WorkerBuilder;
 pub use runner::JobRunner;
+pub use stop::{StopDetails, StopReason};
 
 pub(crate) const STATUS_RUNNING: usize = 0;
 pub(crate) const STATUS_QUIET: usize = 1;
@@ -321,25 +323,6 @@ impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> 
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-/// A reason why [`Worker::run`] has discontinued.
-#[non_exhaustive]
-pub enum StopReason {
-    /// Graceful shutdown completed.
-    ///
-    /// A future provided via [`WorkerBuilder::with_graceful_shutdown`] has resolved
-    /// signalling the worker to stop.
-    GracefulShutdown,
-
-    /// The Faktory server asked us to shut down.
-    ///
-    /// Under the hood, the worker is being in constant communication with the Faktory server,
-    /// not only fetching jobs and reporting on processing results, but also listening for
-    /// the server's instructions, one of which can be to disengage (e.g., to indicate that the
-    /// server is shutting down.
-    ServerInstruction,
-}
-
 impl<
         S: AsyncBufRead + AsyncWrite + Reconnect + Send + Unpin + 'static,
         E: StdError + 'static + Send,
@@ -400,14 +383,14 @@ impl<
     /// to disengage (`Ok` is returned), or a signal from the user-space code has been received via a future
     /// supplied to [`WorkerBuilder::with_graceful_shutdown`](`Ok` is returned).
     ///
-    /// The value in an `Ok` holds a tuple with the reason why the run has discontinued (see [`StopReason`])
-    /// and the number of workers that may still be processing jobs. Note that `0` can also indicate that
+    /// The value in an `Ok` holds [`details`](StopDetails) about the reason why the run has discontinued (see [`StopReason`])
+    /// and the number of workers that may still be processing jobs. Note that `0` in [`StopDetails::nrunning`] can also indicate that
     /// the [graceful shutdown period](WorkerBuilder::shutdown_timeout) has been exceeded.
     ///
     /// If an error occurred while reporting a job success or failure, the result will be re-reported to the server
     /// without re-executing the job. If the worker was terminated (i.e., `run` returns  with an `Ok` response),
     /// the worker should **not** try to resume by calling `run` again. This will cause a panic.
-    pub async fn run<Q>(&mut self, queues: &[Q]) -> Result<(StopReason, usize), Error>
+    pub async fn run<Q>(&mut self, queues: &[Q]) -> Result<StopDetails, Error>
     where
         Q: AsRef<str>,
     {
@@ -447,7 +430,7 @@ impl<
                     }
                 };
                 self.terminated = true;
-                Ok((StopReason::GracefulShutdown, nrunning))
+                Ok(stop::StopDetails::new(StopReason::GracefulShutdown, nrunning))
             },
             // A signal from the Faktory server received or an error occurred.
             // Even though `Worker::listen_for_hearbeats` is not cancellation safe, we are ok using it here,
@@ -461,9 +444,9 @@ impl<
                 self.terminated = exit.is_ok();
 
                 if let Ok(true) = exit {
-                    let running = self.force_fail_all_workers("terminated").await;
-                    if running != 0 {
-                        return Ok((StopReason::ServerInstruction, running));
+                    let nrunning = self.force_fail_all_workers("terminated").await;
+                    if nrunning != 0 {
+                        return Ok(stop::StopDetails::new(StopReason::ServerInstruction, nrunning));
                     }
                 }
 
@@ -475,7 +458,7 @@ impl<
                 let results = results.into_iter().collect::<Result<Vec<_>, _>>();
 
                 match exit {
-                    Ok(_) => results.map(|_| (StopReason::ServerInstruction, 0)),
+                    Ok(_) => results.map(|_| stop::StopDetails::new(StopReason::ServerInstruction, 0)),
                     Err(e) => results.and(Err(e)),
                 }
             }
