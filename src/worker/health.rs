@@ -55,7 +55,7 @@ where
             }
 
             if last.elapsed() < HEARTBEAT_INTERVAL {
-                // don't sent a heartbeat yet
+                // don't send a heartbeat yet
                 continue;
             }
 
