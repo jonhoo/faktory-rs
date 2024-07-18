@@ -461,11 +461,9 @@ impl<
 
                 // we want to expose worker errors, or otherwise the heartbeat error
                 let mut results = Vec::with_capacity(nworkers);
-
                 while let Some(res) = join_set.join_next().await {
                     results.push(res.expect("joined ok"));
                 }
-
                 let results = results.into_iter().collect::<Result<Vec<_>, _>>();
 
                 match exit {
