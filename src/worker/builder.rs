@@ -154,6 +154,7 @@ impl<E: 'static> WorkerBuilder<E> {
     ) -> Result<Worker<BufStream<TokioStream>, E>, Error> {
         let url = utils::parse_provided_or_from_env(url)?;
         let stream = TokioStream::connect(utils::host_from_url(&url)).await?;
-        self.connect_with(stream, url.password().map(|p| p.to_string())).await
+        self.connect_with(stream, url.password().map(|p| p.to_string()))
+            .await
     }
 }
