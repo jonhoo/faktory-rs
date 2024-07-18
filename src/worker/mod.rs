@@ -420,6 +420,7 @@ impl<
         }
 
         let maybe_shutdown_signal = self.shutdown_signal.clone();
+        let maybe_shutdown_timeout = self.shutdown_timeout;
 
         let report = tokio::select! {
             // A signal from the user space received.
@@ -428,7 +429,7 @@ impl<
                 signal.lock().await.as_mut().await;
             }, if maybe_shutdown_signal.is_some() => {
                 let nrunning = tokio::select! {
-                     _ = tokio_sleep(self.shutdown_timeout.unwrap()), if self.shutdown_timeout.is_some() => {
+                     _ = async { tokio_sleep(maybe_shutdown_timeout.unwrap()).await; }, if maybe_shutdown_timeout.is_some() => {
                         0
                     },
                     nrunning = self.force_fail_all_workers("termination signal received from user space") => {

@@ -12,6 +12,7 @@ mod inner;
 pub struct Stream {
     mine: inner::MockStream,
     all: Arc<Mutex<inner::Inner>>,
+    check_count: bool,
 }
 
 impl Default for Stream {
@@ -32,6 +33,7 @@ impl Reconnect for Stream {
         Ok(Stream {
             mine,
             all: Arc::clone(&self.all),
+            check_count: self.check_count,
         })
     }
 }
@@ -75,7 +77,7 @@ impl AsyncWrite for Stream {
 }
 
 impl Stream {
-    fn make(salt: Option<(usize, &str)>, streams: usize) -> Self {
+    fn make(salt: Option<(usize, &str)>, streams: usize, check_count: bool) -> Self {
         let streams = (0..streams)
             .map(|_| {
                 let mut s = inner::MockStream::default();
@@ -107,15 +109,32 @@ impl Stream {
         Stream {
             mine,
             all: Arc::new(Mutex::new(inner)),
+            check_count,
         }
     }
 
     pub fn new(streams: usize) -> Self {
-        Self::make(None, streams)
+        Self::make(None, streams, true)
+    }
+
+    /// Use this method if you want to opt out of comparing the number of used streams with the number of
+    /// initially allocated streams when `Stream` is being dropped (see [`Stream::drop`]).
+    ///
+    /// We are normally doing this sanity check just to make sure the test went as we expected,
+    /// like the number of spawned workers was correct (since each worker will get a dedicated strem).
+    ///
+    /// There is at least one scenario though where you will want to avoid this check. Imagine, the "coordinating"
+    /// worker is still there but a "processing" worker has been dropped, due to some protocol error. They can still
+    /// try and `Worker::run` the coordinator again and - since it has not been previously marked as terminated - the
+    /// coordinator will spawn another worker, and this can in theory repeat however many times as long as we have
+    /// allocated enough streams in [`Stream::all`]. So, in this scenario, we do not want to run our usual check whenever
+    /// a processing worker is being dropped.
+    pub fn new_unchecked(stream: usize) -> Self {
+        Self::make(None, stream, false)
     }
 
     pub fn with_salt(iters: usize, salt: &str) -> Self {
-        Self::make(Some((iters, salt)), 1)
+        Self::make(Some((iters, salt)), 1, true)
     }
 
     pub fn ok(&mut self, stream: usize) {
@@ -138,6 +157,8 @@ impl Stream {
 impl Drop for Stream {
     fn drop(&mut self) {
         let x = self.all.lock().unwrap();
-        assert_eq!(x.take_next, x.streams.len());
+        if self.check_count {
+            assert_eq!(x.take_next, x.streams.len());
+        }
     }
 }

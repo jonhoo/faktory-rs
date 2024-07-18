@@ -57,8 +57,9 @@
 mod mock;
 
 use faktory::*;
-use std::{io, time::Duration};
-use tokio::{spawn, time::sleep};
+use std::{io, sync::Arc, time::Duration};
+use tokio::{spawn, sync::Mutex, time::sleep};
+use tokio_util::sync::CancellationToken;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn hello() {
@@ -544,16 +545,26 @@ async fn terminate() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn heart_broken() {
-    // prepare streams for main and worker, though we do not
-    // care about the latter in this test
-    let mut s = mock::Stream::new(2);
+    // prepare streams for a coordinator, a worker, and potentially another yet
+    // another worker
+    let mut s = mock::Stream::new_unchecked(3);
+
+    // create a token
+    let token = CancellationToken::new();
+    let child_token = token.child_token();
+
+    // create a signalling future
+    let signal = async move { child_token.cancelled().await };
 
     // prepare a worker without any handlers
-    let mut w: Worker<_, io::Error> = Worker::builder()
-        .register_fn("foobar", |_| async move {
+    let w: Worker<_, io::Error> = Worker::builder()
+        .with_graceful_shutdown(signal)
+        .shutdown_timeout(Duration::from_millis(500))
+        .register_fn("foobar", |_j| async move {
             // this magic 7 means: give the coordinating worker (and namely its heartbeat task)
             // just enough time to send a heartbeat message to the server and get disappointed
             // with the server response
+            println!("{:?}", _j);
             sleep(Duration::from_secs(7)).await;
             Ok(())
         })
@@ -581,9 +592,11 @@ async fn heart_broken() {
     s.ignore(0);
 
     // start consuming
-    let jh = spawn(async move { w.run(&["default"]).await });
+    let w = Arc::new(Mutex::new(w));
+    let w_clone = w.clone();
+    let jh = spawn(async move { w_clone.lock().await.run(&["default"]).await });
 
-    // ack that the worker has received a job
+    // ack that the worker has processed the job
     s.ok(1);
 
     // as if the Fatory sent non-sense in reply to the HEARTBEAT message,
@@ -594,7 +607,7 @@ async fn heart_broken() {
     // at this point the `Worker::run` should have return control
     // with an error rather that `StopDetails`, because the run was discontinued
     // due to protocol error rather than a signal from the user code or the Faktory server
-    let error = jh.await.unwrap().unwrap_err();
+    let error = jh.await.expect("joined ok").unwrap_err();
 
     match error {
         Error::Protocol(error::Protocol::BadType { expected, received }) => {
@@ -604,7 +617,39 @@ async fn heart_broken() {
         e => unreachable!("{:?}", e),
     }
 
-    // we can run the same worker again and this will not cause a panic
+    s.pop_bytes_written(0); // HEARTBEAT 1
 
-    // TODO!
+    // again, as if some producing client has enqueued a job
+    s.push_bytes_to_read(
+        2,
+        b"$186\r\n\
+            {\
+            \"jid\":\"ornever\",\
+            \"queue\":\"default\",\
+            \"jobtype\":\"foobar\",\
+            \"args\":[],\
+            \"created_at\":\"2024-07-18T17:41:36.772981326Z\",\
+            \"enqueued_at\":\"2024-07-18T17:41:36.773318394Z\",\
+            \"reserve_for\":600,\
+            \"retry\":25\
+            }\r\n",
+    );
+
+    // we can re-run the worker and this will not cause a panic since this worker
+    // was not marked as terminated, so let's start consuming (reminder: we got one vacant stream)
+    let jh = spawn(async move { w.lock().await.run(&["default"]).await });
+
+    // give the newly spawned "processing" worker some time to consume the job and ...
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    // ... send a signal to return control
+    token.cancel();
+
+    let stop_details = jh
+        .await
+        .expect("joined ok")
+        .expect("stop details rather than error");
+    assert_eq!(stop_details.stop_reason, StopReason::GracefulShutdown);
+    // the worker was still processing the job
+    assert_eq!(stop_details.nrunning, 1);
 }
