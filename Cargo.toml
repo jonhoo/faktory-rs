@@ -38,6 +38,7 @@ serde_json = "1.0"
 sha2 = "0.10.0"
 thiserror = "1.0.30"
 tokio = { version = "1.35.1", features = [
+    "sync",            # gives us an asynchronous `Mutex`
     "io-util",         # enables `AsyncWriteExt`, `AsyncReadExt`, and `AsyncBufReadExt` in `tokio::io` namespace
     "macros",          # brings in `tokio::select!` we are utilizing in `Worker::run`
     "net",             # enables `tokio::net` namespace with `TcpStream` we are heavily relying upon

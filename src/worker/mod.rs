@@ -10,6 +10,7 @@ use std::time::Duration;
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
 use tokio::io::{AsyncBufRead, AsyncWrite};
 use tokio::net::TcpStream;
+use tokio::sync::Mutex;
 use tokio::task::{spawn_blocking, AbortHandle, JoinError, JoinSet};
 use tokio::time::sleep as tokio_sleep;
 
@@ -164,7 +165,7 @@ pub struct Worker<S: AsyncWrite + Send + Unpin, E> {
     terminated: bool,
     forever: bool,
     shutdown_timeout: Option<Duration>,
-    shutdown_signal: Option<ShutdownSignal>,
+    shutdown_signal: Option<Arc<Mutex<ShutdownSignal>>>,
 }
 
 impl Worker<TcpStream, ()> {
@@ -197,7 +198,7 @@ impl<S: AsyncWrite + Send + Unpin, E> Worker<S, E> {
             terminated: false,
             forever: false,
             shutdown_timeout,
-            shutdown_signal,
+            shutdown_signal: shutdown_signal.map(|signal| Arc::new(Mutex::new(signal))),
         }
     }
 }
@@ -390,6 +391,10 @@ impl<
     /// If an error occurred while reporting a job success or failure, the result will be re-reported to the server
     /// without re-executing the job. If the worker was terminated (i.e., `run` returns  with an `Ok` response),
     /// the worker should **not** try to resume by calling `run` again. This will cause a panic.
+    ///
+    /// Note that if you provided a shutdown signal when building this worker (see [`WorkerBuilder::with_graceful_shutdown`]),
+    /// and this signal resolved, the worker will be marked as terminated and calling this method will cause a panic.
+    /// You will need to build and run a new worker instead.
     pub async fn run<Q>(&mut self, queues: &[Q]) -> Result<StopDetails, Error>
     where
         Q: AsRef<str>,
@@ -414,13 +419,14 @@ impl<
                 .await?;
         }
 
-        // Either we have already taken this future and are polling it elsewhere (see Worker::run_to_completion),
-        // or they've never provided it to us (reminder: they do so via WorkerBuilder::with_graceful_shutdown)
-        let cancel_signal = self.shutdown_signal.take();
+        let maybe_shutdown_signal = self.shutdown_signal.clone();
 
         let report = tokio::select! {
             // A signal from the user space received.
-            _ = async { let signal = cancel_signal.unwrap(); signal.await }, if cancel_signal.is_some() => {
+            _ = async {
+                let signal = maybe_shutdown_signal.unwrap();
+                signal.lock().await.as_mut().await;
+            }, if maybe_shutdown_signal.is_some() => {
                 let nrunning = tokio::select! {
                      _ = tokio_sleep(self.shutdown_timeout.unwrap()), if self.shutdown_timeout.is_some() => {
                         0
@@ -466,6 +472,7 @@ impl<
                 }
             }
         };
+
         report
     }
 
@@ -478,25 +485,12 @@ impl<
     where
         Q: AsRef<str>,
     {
-        let sig = self.shutdown_signal.take();
-        tokio::select! {
-            // A signal from the user space received.
-            _ = async { let sig = sig.unwrap(); sig.await }, if sig.is_some() => {
-                tokio::select! {
-                    _ = tokio_sleep(self.shutdown_timeout.unwrap()), if self.shutdown_timeout.is_some() => {},
-                    _ = self.force_fail_all_workers("termination signal received from user space") => {}
-                };
-            },
-            // A signal from the server (TERMINATE) received.
-            _ = async {
-                    while self.run(queues).await.is_err() {
-                        if self.reconnect().await.is_err() {
-                            break;
-                    }
-                }
-            } => {},
-
+        while self.run(queues).await.is_err() {
+            if self.reconnect().await.is_err() {
+                break;
+            }
         }
+
         process::exit(0);
     }
 }

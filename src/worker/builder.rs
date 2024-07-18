@@ -105,6 +105,9 @@ impl<E: 'static> WorkerBuilder<E> {
     /// (e.g. report on the currently processed to the Faktory server) and a shutdown deadline.
     /// The latter can be customized via [`WorkerBuilder::shutdown_timeout`].
     ///
+    /// Note that once the `signal` resolves, the [`Worker`] will be marked as terminated and calling
+    /// [`Worker::run`] will cause a panic. You will need to build and run a new worker instead.
+    ///
     /// ```no_run
     /// # tokio_test::block_on(async {
     /// use faktory::{Client, Job, StopReason, Worker};
