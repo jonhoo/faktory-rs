@@ -477,7 +477,7 @@ async fn terminate() {
     );
 
     let jh = spawn(async move {
-        // Note how running a coordinating leads to mock::Stream::reconnect:
+        // Note how running a coordinating worker leads to mock::Stream::reconnect:
         // `Worker::run` -> `Worker::spawn_worker_into` -> `Worker::for_worker` -> `Client::connect_again` -> `Stream::reconnect`
         //
         // So when the `w.run` is triggered, `Stream::reconnect` will fire and the `take_next` member on the `mock::Inner` struct
@@ -540,4 +540,71 @@ async fn terminate() {
     //
     // But generally speaking, the graceful situation is when the number of `HI`s and the number of `END`s are
     // equal. Why did they decide for `END` instead of `BYE` in Faktory ? :smile:
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn heart_broken() {
+    // prepare streams for main and worker, though we do not
+    // care about the latter in this test
+    let mut s = mock::Stream::new(2);
+
+    // prepare a worker without any handlers
+    let mut w: Worker<_, io::Error> = Worker::builder()
+        .register_fn("foobar", |_| async move {
+            // this magic 7 means: give the coordinating worker (and namely its heartbeat task)
+            // just enough time to send a heartbeat message to the server and get disappointed
+            // with the server response
+            sleep(Duration::from_secs(7)).await;
+            Ok(())
+        })
+        .connect_with(s.clone(), None)
+        .await
+        .unwrap();
+
+    // as if some producing client has enqueued a job
+    s.push_bytes_to_read(
+        1,
+        b"$186\r\n\
+            {\
+            \"jid\":\"forever\",\
+            \"queue\":\"default\",\
+            \"jobtype\":\"foobar\",\
+            \"args\":[],\
+            \"created_at\":\"2024-07-18T17:41:35.772981326Z\",\
+            \"enqueued_at\":\"2024-07-18T17:41:35.773318394Z\",\
+            \"reserve_for\":600,\
+            \"retry\":25\
+            }\r\n",
+    );
+
+    // ignore the HELLO from the coordinatior
+    s.ignore(0);
+
+    // start consuming
+    let jh = spawn(async move { w.run(&["default"]).await });
+
+    // ack that the worker has received a job
+    s.ok(1);
+
+    // as if the Fatory sent non-sense in reply to the HEARTBEAT message,
+    // making this way the `Worker::run` stop, but without marking this worker
+    // as terminated
+    s.push_bytes_to_read(0, b"+{\"state\":\"heartbroken response\"}\r\n");
+
+    // at this point the `Worker::run` should have return control
+    // with an error rather that `StopDetails`, because the run was discontinued
+    // due to protocol error rather than a signal from the user code or the Faktory server
+    let error = jh.await.unwrap().unwrap_err();
+
+    match error {
+        Error::Protocol(error::Protocol::BadType { expected, received }) => {
+            assert_eq!(expected, "heartbeat response");
+            assert_eq!(received, "{\"state\":\"heartbroken response\"}")
+        }
+        e => unreachable!("{:?}", e),
+    }
+
+    // we can run the same worker again and this will not cause a panic
+
+    // TODO!
 }
