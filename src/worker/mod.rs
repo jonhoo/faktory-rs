@@ -441,6 +441,9 @@ impl<
                 //  - we got TERMINATE, so we should just return, even if a worker is still running
                 //  - we got TERMINATE and all workers have exited
                 //  - we got an error from heartbeat()
+                //
+                // note that if it is an error from heartbeat(), the worker will _not_ be marked as
+                // terminated and _can_ be restarted
                 self.terminated = exit.is_ok();
 
                 if let Ok(true) = exit {
