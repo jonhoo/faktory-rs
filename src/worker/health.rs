@@ -3,9 +3,12 @@ use crate::{proto::HeartbeatStatus, Error};
 use std::{
     error::Error as StdError,
     sync::{atomic, Arc},
-    time,
+    time::{self, Duration},
 };
 use tokio::time::sleep as tokio_sleep;
+
+const CHECK_STATE_INTERVAL: Duration = Duration::from_millis(100);
+const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 
 impl<E> Worker<E>
 where
@@ -29,14 +32,14 @@ where
         let mut last = time::Instant::now();
 
         loop {
-            tokio_sleep(time::Duration::from_millis(100)).await;
+            tokio_sleep(CHECK_STATE_INTERVAL).await;
 
             // has a worker failed?
-            if target == STATUS_RUNNING
+            let worker_failure = target == STATUS_RUNNING
                 && statuses
                     .iter()
-                    .any(|s| s.load(atomic::Ordering::SeqCst) == STATUS_TERMINATING)
-            {
+                    .any(|s| s.load(atomic::Ordering::SeqCst) == STATUS_TERMINATING);
+            if worker_failure {
                 // tell all workers to exit
                 // (though chances are they've all failed already)
                 for s in statuses {
@@ -45,7 +48,7 @@ where
                 break Ok(false);
             }
 
-            if last.elapsed().as_secs() < 5 {
+            if last.elapsed() < HEARTBEAT_INTERVAL {
                 // don't sent a heartbeat yet
                 continue;
             }
@@ -53,8 +56,11 @@ where
             match self.c.heartbeat().await {
                 Ok(hb) => {
                     match hb {
-                        HeartbeatStatus::Ok => {}
+                        HeartbeatStatus::Ok => {
+                            tracing::trace!("Faktory server HEARTBEAT status is OK.");
+                        }
                         HeartbeatStatus::Quiet => {
+                            tracing::trace!("Faktory server HEARTBEAT status is QUIET.");
                             // tell the workers to eventually terminate
                             for s in statuses {
                                 s.store(STATUS_QUIET, atomic::Ordering::SeqCst);
@@ -62,6 +68,7 @@ where
                             target = STATUS_QUIET;
                         }
                         HeartbeatStatus::Terminate => {
+                            tracing::trace!("Faktory server HEARTBEAT status is TERMINATE.");
                             // tell the workers to terminate
                             // *and* fail the current job and immediately return
                             for s in statuses {

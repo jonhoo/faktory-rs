@@ -4,7 +4,7 @@ use crate::proto::{Ack, Fail, Job};
 use fnv::FnvHashMap;
 use std::sync::{atomic, Arc};
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
-use tokio::task::{AbortHandle, JoinSet};
+use tokio::task::{spawn_blocking, AbortHandle, JoinError, JoinSet};
 
 mod builder;
 mod health;
@@ -18,7 +18,12 @@ pub(crate) const STATUS_RUNNING: usize = 0;
 pub(crate) const STATUS_QUIET: usize = 1;
 pub(crate) const STATUS_TERMINATING: usize = 2;
 
-type CallbacksRegistry<E> = FnvHashMap<String, runner::BoxedJobRunner<E>>;
+pub(crate) enum Callback<E> {
+    Async(runner::BoxedJobRunner<E>),
+    Sync(Arc<dyn Fn(Job) -> Result<(), E> + Sync + Send + 'static>),
+}
+
+type CallbacksRegistry<E> = FnvHashMap<String, Callback<E>>;
 
 /// `Worker` is used to run a worker that processes jobs provided by Faktory.
 ///
@@ -174,18 +179,28 @@ impl<E> Worker<E> {
     }
 }
 
-enum Failed<E: StdError> {
+enum Failed<E: StdError, JE: StdError> {
     Application(E),
+    HandlerPanic(JE),
     BadJobType(String),
 }
 
 impl<E: StdError + 'static + Send> Worker<E> {
-    async fn run_job(&mut self, job: Job) -> Result<(), Failed<E>> {
+    async fn run_job(&mut self, job: Job) -> Result<(), Failed<E, JoinError>> {
         let handler = self
             .callbacks
             .get(job.kind())
             .ok_or(Failed::BadJobType(job.kind().to_string()))?;
-        handler.run(job).await.map_err(Failed::Application)
+        match handler {
+            Callback::Async(cb) => cb.run(job).await.map_err(Failed::Application),
+            Callback::Sync(cb) => {
+                let cb = Arc::clone(cb);
+                match spawn_blocking(move || cb(job)).await {
+                    Err(join_error) => Err(Failed::HandlerPanic(join_error)),
+                    Ok(processing_result) => processing_result.map_err(Failed::Application),
+                }
+            }
+        }
     }
 
     async fn report_on_all_workers(&mut self) -> Result<(), Error> {
@@ -272,6 +287,7 @@ impl<E: StdError + 'static + Send> Worker<E> {
                 let fail = match e {
                     Failed::BadJobType(jt) => Fail::generic(jid, format!("No handler for {}", jt)),
                     Failed::Application(e) => Fail::generic_with_backtrace(jid, e),
+                    Failed::HandlerPanic(e) => Fail::generic_with_backtrace(jid, e),
                 };
                 self.worker_states.register_failure(worker, fail.clone());
                 self.c.issue(&fail).await?.read_ok().await?;
