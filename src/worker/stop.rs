@@ -24,18 +24,15 @@ pub enum StopReason {
 /// Holds some details aroung a worker's run stoppage, such as the reason why this worker discontinued
 /// and the number of workers that might still be processing jobs at that instant.
 pub struct StopDetails {
-    /// A [`reason`](StopReason) why the worker's runu has discontinued.
-    pub stop_reason: StopReason,
+    /// A [`reason`](StopReason) why the worker's run has discontinued.
+    pub reason: StopReason,
 
     /// The number of workers that might still be processing jobs.
     pub nrunning: usize,
 }
 
 impl StopDetails {
-    pub(crate) fn new(stop_reason: StopReason, nrunning: usize) -> Self {
-        StopDetails {
-            stop_reason,
-            nrunning,
-        }
+    pub(crate) fn new(reason: StopReason, nrunning: usize) -> Self {
+        StopDetails { reason, nrunning }
     }
 }

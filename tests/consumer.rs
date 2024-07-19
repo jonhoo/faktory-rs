@@ -261,7 +261,7 @@ async fn well_behaved() {
 
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
     let details = jh.await.unwrap().unwrap();
-    assert_eq!(details.stop_reason, StopReason::ServerInstruction);
+    assert_eq!(details.reason, StopReason::ServerInstruction);
     assert_eq!(details.nrunning, 0);
 
     // heartbeat should have seen two beats (quiet + terminate)
@@ -330,7 +330,7 @@ async fn no_first_job() {
 
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
     let details = jh.await.unwrap().unwrap();
-    assert_eq!(details.stop_reason, StopReason::ServerInstruction);
+    assert_eq!(details.reason, StopReason::ServerInstruction);
     assert_eq!(details.nrunning, 0);
 
     // heartbeat should have seen two beats (quiet + terminate)
@@ -409,7 +409,7 @@ async fn well_behaved_many() {
 
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
     let details = jh.await.unwrap().unwrap();
-    assert_eq!(details.stop_reason, StopReason::ServerInstruction);
+    assert_eq!(details.reason, StopReason::ServerInstruction);
     assert_eq!(details.nrunning, 0);
 
     // heartbeat should have seen two beats (quiet + terminate)
@@ -495,7 +495,7 @@ async fn terminate() {
     // at this point, c.run() should immediately return with Ok(1) indicating that one job is still
     // running.
     let details = jh.await.unwrap().unwrap();
-    assert_eq!(details.stop_reason, StopReason::ServerInstruction);
+    assert_eq!(details.reason, StopReason::ServerInstruction);
     assert_eq!(details.nrunning, 1);
 
     // Heartbeat Thread (stream with index 0).
@@ -649,7 +649,7 @@ async fn heart_broken() {
         .await
         .expect("joined ok")
         .expect("stop details rather than error");
-    assert_eq!(stop_details.stop_reason, StopReason::GracefulShutdown);
+    assert_eq!(stop_details.reason, StopReason::GracefulShutdown);
     // the worker was still processing the job
     assert_eq!(stop_details.nrunning, 1);
 }
