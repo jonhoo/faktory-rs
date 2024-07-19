@@ -147,7 +147,7 @@ impl<E: 'static> WorkerBuilder<E> {
     ///
     /// // learn the stop reason and the number of workers that were still running
     /// let stop_details = jh.await.expect("joined ok").unwrap();
-    /// assert_eq!(stop_details.stop_reason, StopReason::GracefulShutdown);
+    /// assert_eq!(stop_details.reason, StopReason::GracefulShutdown);
     /// let _nrunning = stop_details.nrunning;
     /// # });
     /// ```
