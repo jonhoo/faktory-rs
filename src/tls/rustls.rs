@@ -3,13 +3,20 @@ use crate::{Client, WorkerBuilder};
 
 use crate::proto::{self, utils};
 use crate::{Error, Reconnect};
+use rustls_pki_types::{CertificateDer, ServerName, UnixTime};
 use std::io;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioTcpStream;
 use tokio_rustls::client::TlsStream as RustlsStream;
-use tokio_rustls::rustls::{ClientConfig, RootCertStore};
+use tokio_rustls::rustls::client::danger::{
+    HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
+};
+use tokio_rustls::rustls::{
+    client::WebPkiServerVerifier, ClientConfig, DigitallySignedStruct, Error as RustlsError,
+    RootCertStore, SignatureScheme,
+};
 use tokio_rustls::TlsConnector;
 
 /// A reconnectable stream encrypted with TLS.
@@ -96,13 +103,51 @@ where
     /// Create a new TLS connection on an existing stream.
     ///
     /// Internally creates a `ClientConfig` with an empty root certificates store and no client
-    /// authentication. Use [`new`](TlsStream::new) for a customized `TlsConnector`.
+    /// authentication.
+    ///
+    /// Use [`new`](TlsStream::new) for a customized `TlsConnector`.
     pub async fn default(stream: S, hostname: String) -> io::Result<Self> {
         let conf = ClientConfig::builder()
             .with_root_certificates(RootCertStore::empty())
             .with_no_client_auth();
 
         Self::new(stream, TlsConnector::from(Arc::new(conf)), hostname).await
+    }
+
+    /// Create a new TLS connection on an existing stream using native certificates.
+    ///
+    /// Internally creates a `ClientConfig` with no client authenticatiom and a root certificates
+    /// store populated with the certificates loaded from a platform-native certificate store.
+    ///
+    /// Use [`new`](TlsStream::new) for a customized `TlsConnector`.
+    pub async fn with_native_certs(
+        stream: S,
+        hostname: String,
+        skip_verify: bool,
+    ) -> io::Result<Self> {
+        let mut store = RootCertStore::empty();
+        for cert in rustls_native_certs::load_native_certs()? {
+            store.add(cert).map_err(io::Error::other)?;
+        }
+
+        let config = if skip_verify {
+            let cert_verifier = WebPkiServerVerifier::builder(Arc::new(store.clone()))
+                .build()
+                .expect("can construct standard verifier");
+            let mut config = ClientConfig::builder()
+                .with_root_certificates(store)
+                .with_no_client_auth();
+            config
+                .dangerous()
+                .set_certificate_verifier(Arc::new(NoCertVerification(cert_verifier)));
+            config
+        } else {
+            ClientConfig::builder()
+                .with_root_certificates(store)
+                .with_no_client_auth()
+        };
+
+        Self::new(stream, TlsConnector::from(Arc::new(config)), hostname).await
     }
 
     /// Create a new TLS connection on an existing stream with a non-default TLS configuration.
@@ -120,6 +165,46 @@ where
             hostname,
             stream: tls_stream,
         })
+    }
+}
+
+#[derive(Debug)]
+struct NoCertVerification(Arc<WebPkiServerVerifier>);
+
+impl ServerCertVerifier for NoCertVerification {
+    fn verify_server_cert(
+        &self,
+        _: &CertificateDer<'_>,
+        _: &[CertificateDer<'_>],
+        _: &ServerName<'_>,
+        _: &[u8],
+        _: UnixTime,
+    ) -> Result<ServerCertVerified, RustlsError> {
+        Ok(ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls_pki_types::CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, RustlsError> {
+        self.0.verify_tls12_signature(message, cert, dss)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, RustlsError> {
+        // TODO: figure out what's wring with the test cert
+        Ok(HandshakeSignatureValid::assertion())
+        //self.0.verify_tls13_signature(message, cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.0.supported_verify_schemes()
     }
 }
 

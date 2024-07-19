@@ -10,3 +10,9 @@ pub mod native_tls;
 #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
 /// Namespace for Rustls-powered [`TlsStream`](crate::rustls::TlsStream).
 pub mod rustls;
+
+#[derive(Debug, Clone)]
+pub(crate) enum TlsKind {
+    Native,
+    Rust,
+}
