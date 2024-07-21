@@ -442,6 +442,9 @@ impl<
             .shutdown_signal
             .take()
             .expect("see shutdown_signal comment");
+        // we set terminated = true proactively to maintain the invariant with shutdown_signal even
+        // in the case of a panic. it gets set to false in the heartbeat error case.
+        self.terminated = true;
         let maybe_shutdown_timeout = self.shutdown_timeout;
 
         let report = tokio::select! {
@@ -455,7 +458,6 @@ impl<
                         nrunning
                     }
                 };
-                self.terminated = true;
                 Ok(stop::StopDetails::new(StopReason::GracefulShutdown, nrunning))
             },
             // A signal from the Faktory server received or an error occurred.
@@ -470,7 +472,9 @@ impl<
                 //
                 // note that if it is an error from heartbeat(), the worker will _not_ be marked as
                 // terminated and _can_ be restarted
-                self.terminated = exit.is_ok();
+                if exit.is_err() {
+                    self.terminated = false;
+                }
                 // restore shutdown signal since it has not resolved
                 self.shutdown_signal = Some(shutdown_signal);
 
