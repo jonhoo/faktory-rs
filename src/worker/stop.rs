@@ -1,7 +1,7 @@
 #[cfg(doc)]
 use super::{Worker, WorkerBuilder};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 /// A reason why [`Worker::run`] has discontinued.
 #[non_exhaustive]
 pub enum StopReason {
@@ -9,6 +9,7 @@ pub enum StopReason {
     ///
     /// A future provided via [`WorkerBuilder::with_graceful_shutdown`] has resolved
     /// signalling the worker to stop.
+    #[default]
     GracefulShutdown,
 
     /// The Faktory server asked us to shut down.
@@ -20,9 +21,10 @@ pub enum StopReason {
     ServerInstruction,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 /// Holds some details aroung a worker's run stoppage, such as the reason why this worker discontinued
 /// and the number of workers that might still be processing jobs at that instant.
+#[non_exhaustive]
 pub struct StopDetails {
     /// The [reason](StopReason) why the worker's run has discontinued.
     pub reason: StopReason,
