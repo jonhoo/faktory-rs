@@ -28,7 +28,7 @@ pub struct StopDetails {
     pub reason: StopReason,
 
     /// The number of workers that might still be processing jobs.
-    pub nrunning: usize,
+    pub workers_still_running: usize,
 }
 
 impl StopDetails {
