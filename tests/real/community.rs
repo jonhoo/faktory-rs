@@ -1,8 +1,9 @@
 use crate::{assert_gte, skip_check};
-use faktory::{Client, Job, JobBuilder, JobId, Worker, WorkerBuilder, WorkerId};
+use faktory::{Client, Job, JobBuilder, JobId, StopReason, Worker, WorkerBuilder, WorkerId};
 use serde_json::Value;
 use std::{io, sync, time::Duration};
 use tokio::time as tokio_time;
+use tokio_util::sync::CancellationToken;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn hello_client() {
@@ -603,8 +604,81 @@ async fn test_jobs_created_with_builder() {
     assert!(had_job);
 }
 
-// It is generally not ok to mix blocking and not blocking tasks,
-// we are doing so in this test simply to demonstrate it is _possible_.
+use std::future::Future;
+use std::pin::Pin;
+use tokio::sync::mpsc;
+fn process_hard_task(
+    sender: sync::Arc<mpsc::Sender<bool>>,
+) -> Box<
+    dyn Fn(Job) -> Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send>>
+        + Send
+        + Sync
+        + 'static,
+> {
+    return Box::new(move |j: Job| {
+        let sender = sync::Arc::clone(&sender);
+        Box::pin(async move {
+            let complexity = j.args()[0].as_u64().unwrap();
+            sender.send(true).await.unwrap(); // inform that we are now starting to process the job
+            tokio::time::sleep(tokio::time::Duration::from_millis(complexity)).await;
+            Ok::<(), io::Error>(())
+        })
+    });
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_shutdown_signals_handling() {
+    skip_check!();
+
+    let qname = "test_shutdown_signals_handling";
+    let jkind = "heavy";
+    let shutdown_timeout = Duration::from_millis(500);
+
+    // get a client and a job to enqueue
+    let mut cl = Client::connect(None).await.unwrap();
+    let j = JobBuilder::new(jkind)
+        .queue(qname)
+        // task will be being processed for at least 1 second
+        .args(vec![1000])
+        .build();
+
+    let (tx, mut rx_for_test_purposes) = tokio::sync::mpsc::channel::<bool>(1);
+    let tx = sync::Arc::new(tx);
+
+    // create a token
+    let token = CancellationToken::new();
+    let child_token = token.child_token();
+
+    // create a signalling future
+    let signal = async move { child_token.cancelled().await };
+
+    // get a connected worker
+    let mut w = WorkerBuilder::default()
+        .with_graceful_shutdown(signal)
+        .shutdown_timeout(shutdown_timeout)
+        .register_fn(jkind, process_hard_task(tx))
+        .connect(None)
+        .await
+        .unwrap();
+
+    // start consuming
+    let jh = tokio::spawn(async move { w.run(&[qname]).await });
+
+    // enqueue the job and wait for a message from the handler and ...
+    cl.enqueue(j).await.unwrap();
+    rx_for_test_purposes.recv().await;
+
+    assert!(!jh.is_finished());
+
+    // ... immediately signal to return control
+    token.cancel();
+
+    // one worker was processing a task when we interrupted it
+    let stop_details = jh.await.expect("joined ok").unwrap();
+    assert_eq!(stop_details.reason, StopReason::GracefulShutdown);
+    assert_eq!(stop_details.workers_still_running, 1);
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn test_jobs_with_blocking_handlers() {
     skip_check!();

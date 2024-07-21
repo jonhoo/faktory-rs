@@ -1,10 +1,11 @@
-use super::{runner::Closure, CallbacksRegistry, Client, Worker};
+use super::{runner::Closure, CallbacksRegistry, Client, ShutdownSignal, Worker};
 use crate::{
     proto::{utils, ClientOptions},
     Error, Job, JobRunner, WorkerId,
 };
 use std::future::Future;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
@@ -15,6 +16,8 @@ pub struct WorkerBuilder<E> {
     opts: ClientOptions,
     workers_count: usize,
     callbacks: CallbacksRegistry<E>,
+    shutdown_timeout: Option<Duration>,
+    shutdown_signal: Option<ShutdownSignal>,
 }
 
 impl<E> Default for WorkerBuilder<E> {
@@ -33,6 +36,8 @@ impl<E> Default for WorkerBuilder<E> {
             opts: ClientOptions::default(),
             workers_count: 1,
             callbacks: CallbacksRegistry::default(),
+            shutdown_timeout: None,
+            shutdown_signal: None,
         }
     }
 }
@@ -88,6 +93,81 @@ impl<E: 'static> WorkerBuilder<E> {
     /// Defaults to 1.
     pub fn workers(mut self, w: usize) -> Self {
         self.workers_count = w;
+        self
+    }
+
+    /// Set a graceful shutdown signal.
+    ///
+    /// As soon as the provided future resolves, the graceful shutdown will step in
+    /// making the long-running operation (see [`Worker::run`]) return control to the calling code.
+    ///
+    /// The graceful shutdown itself is a race between the clean up needed to be performed
+    /// (e.g. report on the currently processed to the Faktory server) and a shutdown deadline.
+    /// The latter can be customized via [`WorkerBuilder::shutdown_timeout`].
+    ///
+    /// Note that once the `signal` resolves, the [`Worker`] will be marked as terminated and calling
+    /// [`Worker::run`] will cause a panic. You will need to build and run a new worker instead.
+    ///
+    /// ```no_run
+    /// # tokio_test::block_on(async {
+    /// use faktory::{Client, Job, StopReason, Worker};
+    /// use std::time::Duration;
+    /// use tokio_util::sync::CancellationToken;
+    /// use tokio::time::sleep;
+    ///
+    /// Client::connect(None)
+    ///     .await
+    ///     .unwrap()
+    ///     .enqueue(Job::new("foobar", vec!["z"]))
+    ///     .await
+    ///     .unwrap();
+    ///
+    /// // create a signalling future (we are using a utility from the `tokio_util` crate)
+    /// let token = CancellationToken::new();
+    /// let child_token = token.child_token();
+    /// let signal = async move { child_token.cancelled().await };
+    ///
+    /// // get a connected worker
+    /// let mut w = Worker::builder()
+    ///     .with_graceful_shutdown(signal)
+    ///     .register_fn("job_type", move |_| async { Ok::<(), std::io::Error>(()) })
+    ///     .connect(None)
+    ///     .await
+    ///     .unwrap();
+    ///
+    /// // start consuming
+    /// let jh = tokio::spawn(async move { w.run(&["default"]).await });
+    ///
+    /// // verify the consumer thread has not finished
+    /// sleep(Duration::from_secs(2)).await;
+    /// assert!(!jh.is_finished());
+    ///  
+    /// // send a signal to eventually return control (upon graceful shutdown)
+    /// token.cancel();
+    ///
+    /// // learn the stop reason and the number of workers that were still running
+    /// let stop_details = jh.await.expect("joined ok").unwrap();
+    /// assert_eq!(stop_details.reason, StopReason::GracefulShutdown);
+    /// let _nrunning = stop_details.workers_still_running;
+    /// # });
+    /// ```
+    pub fn with_graceful_shutdown<F>(mut self, signal: F) -> Self
+    where
+        F: Future<Output = ()> + 'static + Send,
+    {
+        self.shutdown_signal = Some(Box::pin(signal));
+        self
+    }
+
+    /// Set a shutdown timeout.
+    ///
+    /// This will be used once the worker is sent a termination signal whether it is at the application
+    /// (via a signalling future, see [`WorkerBuilder::with_graceful_shutdown`]) or OS level (via Ctrl-C signal,
+    /// see [`Worker::run_to_completion`]).
+    ///
+    /// Defaults to `None`, i.e. no shoutdown abortion due to a timeout.
+    pub fn shutdown_timeout(mut self, dur: Duration) -> Self {
+        self.shutdown_timeout = Some(dur);
         self
     }
 
@@ -161,7 +241,14 @@ impl<E: 'static> WorkerBuilder<E> {
         self.opts.is_worker = true;
         let buffered = BufStream::new(stream);
         let client = Client::new(buffered, self.opts).await?;
-        Ok(Worker::new(client, self.workers_count, self.callbacks).await)
+        Ok(Worker::new(
+            client,
+            self.workers_count,
+            self.callbacks,
+            self.shutdown_timeout,
+            self.shutdown_signal,
+        )
+        .await)
     }
 
     /// Connect to a Faktory server.
