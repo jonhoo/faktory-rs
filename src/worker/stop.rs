@@ -13,9 +13,9 @@ pub enum StopReason {
 
     /// The Faktory server asked us to shut down.
     ///
-    /// Under the hood, the worker is being in constant communication with the Faktory server,
-    /// not only fetching jobs and reporting on processing results, but also listening for
-    /// the server's instructions, one of which can be to disengage (e.g., to indicate that the
+    /// Under the hood, the worker is in constant communication with the Faktory server.
+    /// It fetches jobs and reports on processing results, but also listens for the server's
+    /// instructions. One of those instructions can be to disengage (e.g., to indicate that the
     /// server is shutting down.
     ServerInstruction,
 }
