@@ -289,10 +289,20 @@ impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> 
     }
 
     /// Fetch and run a single job, and then return.
+    ///
+    /// Note that if you called [`Worker::run`] on this worker previously and the run
+    /// discontinued due to a signal from the Faktory server or a graceful shutdown signal,
+    /// calling this method will mean you are trying to run a _terminated_ worker which will
+    /// cause a panic. You will need to build and run a new worker instead.
     pub async fn run_one<Q>(&mut self, worker: usize, queues: &[Q]) -> Result<bool, Error>
     where
         Q: AsRef<str> + Sync,
     {
+        assert!(
+            !self.terminated,
+            "do not re-run a terminated worker (coordinator)"
+        );
+
         let job = match self.c.fetch(queues).await? {
             None => return Ok(false),
             Some(j) => j,
