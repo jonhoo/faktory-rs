@@ -24,7 +24,7 @@ pub enum StopReason {
 /// Holds some details aroung a worker's run stoppage, such as the reason why this worker discontinued
 /// and the number of workers that might still be processing jobs at that instant.
 pub struct StopDetails {
-    /// A [`reason`](StopReason) why the worker's run has discontinued.
+    /// The [reason](StopReason) why the worker's run has discontinued.
     pub reason: StopReason,
 
     /// The number of workers that might still be processing jobs.
