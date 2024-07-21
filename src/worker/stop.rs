@@ -33,6 +33,9 @@ pub struct StopDetails {
 
 impl StopDetails {
     pub(crate) fn new(reason: StopReason, nrunning: usize) -> Self {
-        StopDetails { reason, nrunning }
+        StopDetails {
+            reason,
+            workers_still_running: nrunning,
+        }
     }
 }

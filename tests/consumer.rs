@@ -262,7 +262,7 @@ async fn well_behaved() {
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
     let details = jh.await.unwrap().unwrap();
     assert_eq!(details.reason, StopReason::ServerInstruction);
-    assert_eq!(details.nrunning, 0);
+    assert_eq!(details.workers_still_running, 0);
 
     // heartbeat should have seen two beats (quiet + terminate)
     let written = s.pop_bytes_written(0);
@@ -331,7 +331,7 @@ async fn no_first_job() {
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
     let details = jh.await.unwrap().unwrap();
     assert_eq!(details.reason, StopReason::ServerInstruction);
-    assert_eq!(details.nrunning, 0);
+    assert_eq!(details.workers_still_running, 0);
 
     // heartbeat should have seen two beats (quiet + terminate)
     let written = s.pop_bytes_written(0);
@@ -410,7 +410,7 @@ async fn well_behaved_many() {
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
     let details = jh.await.unwrap().unwrap();
     assert_eq!(details.reason, StopReason::ServerInstruction);
-    assert_eq!(details.nrunning, 0);
+    assert_eq!(details.workers_still_running, 0);
 
     // heartbeat should have seen two beats (quiet + terminate)
     let written = s.pop_bytes_written(0);
@@ -496,7 +496,7 @@ async fn terminate() {
     // running.
     let details = jh.await.unwrap().unwrap();
     assert_eq!(details.reason, StopReason::ServerInstruction);
-    assert_eq!(details.nrunning, 1);
+    assert_eq!(details.workers_still_running, 1);
 
     // Heartbeat Thread (stream with index 0).
     //
@@ -651,5 +651,5 @@ async fn heart_broken() {
         .expect("stop details rather than error");
     assert_eq!(stop_details.reason, StopReason::GracefulShutdown);
     // the worker was still processing the job
-    assert_eq!(stop_details.nrunning, 1);
+    assert_eq!(stop_details.workers_still_running, 1);
 }

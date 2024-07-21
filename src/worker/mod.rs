@@ -385,8 +385,8 @@ impl<
     /// supplied to [`WorkerBuilder::with_graceful_shutdown`](`Ok` is returned).
     ///
     /// The value in an `Ok` holds [`details`](StopDetails) about the reason why the run has discontinued (see [`StopReason`])
-    /// and the number of workers that may still be processing jobs. Note that `0` in [`StopDetails::nrunning`] can also indicate that
-    /// the [graceful shutdown period](WorkerBuilder::shutdown_timeout) has been exceeded.
+    /// and the number of workers that may still be processing jobs. Note that `0` in [`StopDetails::workers_still_running`]
+    /// can also indicate that the [graceful shutdown period](WorkerBuilder::shutdown_timeout) has been exceeded.
     ///
     /// If an error occurred while reporting a job success or failure, the result will be re-reported to the server
     /// without re-executing the job. If the worker was terminated (i.e., `run` returns  with an `Ok` response),
