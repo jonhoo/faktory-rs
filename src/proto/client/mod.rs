@@ -185,7 +185,7 @@ pub(crate) enum HeartbeatStatus {
 
 impl Client {
     /// Create new [`Client`] and connect to a Faktory server with a non-standard stream.
-    /// 
+    ///
     /// Iternally, the `stream` will be buffered. In case you've got a `stream` that is _already_
     /// buffered (and so it is `AsyncBufRead`), you will want to use [`Client::connect_with_buffered`]
     /// in order to avoid buffering the stream twice.
@@ -199,7 +199,7 @@ impl Client {
     }
 
     /// Create new [`Client`] and connect to a Faktory server with a non-standard buffered stream.
-    /// 
+    ///
     /// In case you've got a `stream` that is _not_ buffered just yet, you may want to use [`Client::connect_with`]
     /// that will do this buffering for you.
     pub async fn connect_with_buffered<S>(stream: S, pwd: Option<String>) -> Result<Client, Error>
