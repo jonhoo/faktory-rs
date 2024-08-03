@@ -11,7 +11,7 @@ impl Client {
     where
         P: AsRef<ProgressUpdate> + Sync,
     {
-        self.issue(&upd).await?.read_ok().await
+        self.issue(upd.as_ref()).await?.read_ok().await
     }
 
     /// Fetch information on a job's execution progress from Faktory.

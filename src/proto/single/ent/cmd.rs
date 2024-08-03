@@ -4,13 +4,10 @@ use crate::proto::{single::FaktoryCommand, JobId};
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 #[async_trait::async_trait]
-impl<P> FaktoryCommand for P
-where
-    P: AsRef<ProgressUpdate> + Sync,
-{
+impl FaktoryCommand for ProgressUpdate {
     async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
         w.write_all(b"TRACK SET ").await?;
-        let r = serde_json::to_vec(self.as_ref()).map_err(Error::Serialization)?;
+        let r = serde_json::to_vec(self).map_err(Error::Serialization)?;
         w.write_all(&r).await?;
         Ok(w.write_all(b"\r\n").await?)
     }
