@@ -58,6 +58,7 @@ mod mock;
 
 use faktory::*;
 use std::{io, sync::Arc, time::Duration};
+use tokio::io::BufStream;
 use tokio::{spawn, sync::Mutex, time::sleep};
 use tokio_util::sync::CancellationToken;
 
@@ -103,7 +104,7 @@ async fn hello_pwd() {
     let mut s = mock::Stream::with_salt(1545, "55104dc76695721d");
     let w: Worker<io::Error> = WorkerBuilder::default()
         .register_fn("never_called", |_j: Job| async move { unreachable!() })
-        .connect_with(s.clone(), Some("foobar".to_string()))
+        .connect_with_buffered(BufStream::new(s.clone()), Some("foobar".to_string()))
         .await
         .unwrap();
     let written = s.pop_bytes_written(0);

@@ -10,7 +10,7 @@ use super::{utils, PushBulk};
 use crate::error::{self, Error};
 use crate::{Job, Reconnect, WorkerId};
 use std::collections::HashMap;
-use tokio::io::{AsyncRead, AsyncWrite, BufStream};
+use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
 mod options;
@@ -185,17 +185,32 @@ pub(crate) enum HeartbeatStatus {
 
 impl Client {
     /// Create new [`Client`] and connect to a Faktory server with a non-standard stream.
+    /// 
+    /// Iternally, the `stream` will be buffered. In case you've got a `stream` that is _already_
+    /// buffered (and so it is `AsyncBufRead`), you will want to use [`Client::connect_with_buffered`]
+    /// in order to avoid buffering the stream twice.
     pub async fn connect_with<S>(stream: S, pwd: Option<String>) -> Result<Client, Error>
     where
         S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
         BufStream<S>: Reconnect,
     {
-        let buffered = BufStream::new(stream);
+        let stream = BufStream::new(stream);
+        Client::connect_with_buffered(stream, pwd).await
+    }
+
+    /// Create new [`Client`] and connect to a Faktory server with a non-standard buffered stream.
+    /// 
+    /// In case you've got a `stream` that is _not_ buffered just yet, you may want to use [`Client::connect_with`]
+    /// that will do this buffering for you.
+    pub async fn connect_with_buffered<S>(stream: S, pwd: Option<String>) -> Result<Client, Error>
+    where
+        S: AsyncBufRead + AsyncWrite + Reconnect + Send + Sync + Unpin + 'static,
+    {
         let opts = ClientOptions {
             password: pwd,
             ..Default::default()
         };
-        Client::new(Box::new(buffered), opts).await
+        Client::new(Box::new(stream), opts).await
     }
 }
 

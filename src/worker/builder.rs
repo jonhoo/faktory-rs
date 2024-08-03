@@ -6,7 +6,7 @@ use crate::{
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::io::{AsyncRead, AsyncWrite, BufStream};
+use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
 /// Convenience wrapper for building a Faktory worker.
@@ -232,19 +232,34 @@ impl<E: 'static> WorkerBuilder<E> {
     }
 
     /// Connect to a Faktory server with a non-standard stream.
-    pub async fn connect_with<S>(
+    ///
+    /// Iternally, the `stream` will be buffered. In case you've got a `stream` that is _already_
+    /// buffered (and so it is `AsyncBufRead`), you will want to use [`WorkerBuilder::connect_with_buffered`]
+    /// in order to avoid buffering the stream twice.
+    pub async fn connect_with<S>(self, stream: S, pwd: Option<String>) -> Result<Worker<E>, Error>
+    where
+        S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
+        BufStream<S>: Reconnect,
+    {
+        let stream = BufStream::new(stream);
+        WorkerBuilder::connect_with_buffered(self, stream, pwd).await
+    }
+
+    /// Connect to a Faktory server with a non-standard buffered stream.
+    ///
+    /// In case you've got a `stream` that is _not_ buffered just yet, you may want to use
+    /// [`WorkerBuilder::connect_with`] that will do this buffering for you.
+    pub async fn connect_with_buffered<S>(
         mut self,
         stream: S,
         pwd: Option<String>,
     ) -> Result<Worker<E>, Error>
     where
-        S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
-        BufStream<S>: Reconnect,
+        S: AsyncBufRead + AsyncWrite + Reconnect + Send + Sync + Unpin + 'static,
     {
         self.opts.password = pwd;
         self.opts.is_worker = true;
-        let buffered = BufStream::new(stream);
-        let client = Client::new(Box::new(buffered), self.opts).await?;
+        let client = Client::new(Box::new(stream), self.opts).await?;
         let worker = Worker::new(
             client,
             self.workers_count,
