@@ -2,6 +2,7 @@ use faktory::native_tls::TlsStream;
 use faktory::{Client, Job, WorkerBuilder, WorkerId};
 use serde_json::Value;
 use std::{env, sync};
+use url::Url;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn roundtrip_tls() {
@@ -31,16 +32,21 @@ async fn roundtrip_tls() {
             .unwrap()
     };
 
+    let password = Url::parse(&env::var("FAKTORY_URL_SECURE").expect("faktory url to be set..."))
+        .expect("...and be valid")
+        .password()
+        .map(|p| p.to_string());
+
     let mut worker = WorkerBuilder::default()
         .hostname("tester".to_string())
         .wid(WorkerId::new(local))
         .register(local, fixtures::JobHandler::new(tx))
-        .connect_with(tls().await, None)
+        .connect_with(tls().await, password.clone())
         .await
         .unwrap();
 
     // "one-shot" client
-    Client::connect_with(tls().await, None)
+    Client::connect_with(tls().await, password)
         .await
         .unwrap()
         .enqueue(Job::new(local, vec!["z"]).on_queue(local))

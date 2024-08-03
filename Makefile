@@ -3,6 +3,7 @@ FAKTORY_HOST=localhost
 FAKTORY_PORT=7419
 FAKTORY_PORT_SECURE=17419
 FAKTORY_PORT_UI=7420
+FAKTORY_PASSWORD=uredinales
 
 .PHONY: precommit
 precommit: fmt check test/doc test/e2e test/e2e/tls
@@ -57,7 +58,7 @@ test/e2e:
 
 .PHONY: test/e2e/tls
 test/e2e/tls:
-	FAKTORY_URL_SECURE=tcp://${FAKTORY_HOST}:${FAKTORY_PORT_SECURE} \
+	FAKTORY_URL_SECURE=tcp://:${FAKTORY_PASSWORD}@${FAKTORY_HOST}:${FAKTORY_PORT_SECURE} \
 	cargo test --locked --features native_tls,rustls --test tls -- --nocapture
 
 .PHONY: test/load
