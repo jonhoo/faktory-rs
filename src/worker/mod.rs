@@ -129,8 +129,15 @@ type CallbacksRegistry<E> = FnvHashMap<String, Callback<E>>;
 ///     .await
 ///     .unwrap();
 ///
-/// if let Err(e) = w.run(&["default"]).await {
-///     println!("worker failed: {}", e);
+/// match w.run(&["default"]).await {
+///     Err(e) => println!("worker failed: {}", e),
+///     Ok(stop_details) => {
+///         println!(
+///            "Stop reason: {}, number of workers that were running: {}",
+///             stop_details.reason,
+///             stop_details.workers_still_running
+///         );
+///     }
 /// }
 /// # });
 /// ```

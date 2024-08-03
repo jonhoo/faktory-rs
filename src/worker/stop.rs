@@ -1,3 +1,5 @@
+use std::fmt::{Debug, Display};
+
 #[cfg(doc)]
 use super::{Worker, WorkerBuilder};
 
@@ -19,6 +21,12 @@ pub enum StopReason {
     /// instructions. One of those instructions can be to disengage (e.g., to indicate that the
     /// server is shutting down.
     ServerInstruction,
+}
+
+impl Display for StopReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self, f)
+    }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]

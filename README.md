@@ -49,17 +49,53 @@ c.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
 If you want to **accept** jobs from Faktory, use `Worker`.
 
 ```rust
-use faktory::WorkerBuilder;
+use async_trait::async_trait;
+use faktory::{JobRunner, Worker};
 use std::io;
-let mut w = WorkerBuilder::default();
-w.register("foobar", |job| async move {
-     println!("{:?}", job);
-     Ok::<(), io::Error>(())
-});
-let mut w = w.connect(None).await.unwrap();
-if let Err(e) = w.run(&["default"]).await {
-    println!("worker failed: {}", e);
+
+struct DomainEntity(i32);
+
+impl DomainEntity {
+    fn new(buzz: i32) -> Self {
+        DomainEntity(buzz)
+    }
 }
+
+#[async_trait]
+impl JobRunner for DomainEntity {
+    type Error = io::Error;
+
+    async fn run(&self, job: Job) -> Result<(), Self::Error> {
+        println!("{:?}, buzz={}", job, self.0);
+        Ok(())
+    }
+}
+
+let mut w = Worker::builder()
+    .register("fizz", DomainEntity::new(1))
+    .register("jobtype", DomainEntity::new(100))
+    .register_fn("foobar", |job| async move {
+        println!("{:?}", job);
+        Ok::<(), io::Error>(())
+    })
+    .register_blocking_fn("fibo", |job|
+        std::thread::sleep(Duration::from_millis(1000));
+        println!("{:?}", job);
+        Ok::<(), io::Error>(())
+    })
+    .connect(None)
+    .await
+    .unwrap();
+
+match w.run(&["default"]).await {
+    Err(e) => println!("worker failed: {}", e),
+    Ok(stop_details) => {
+        println!(
+            "Stop reason: {}, number of workers that were running: {}",
+            stop_details.reason,
+            stop_details.workers_still_running
+        );
+    }
 ```
 
 Also see some usage examples in `examples` directory in the project's root. You can run an example with:
