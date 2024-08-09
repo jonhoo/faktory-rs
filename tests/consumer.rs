@@ -58,13 +58,14 @@ mod mock;
 
 use faktory::*;
 use std::{io, sync::Arc, time::Duration};
+use tokio::io::BufStream;
 use tokio::{spawn, sync::Mutex, time::sleep};
 use tokio_util::sync::CancellationToken;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn hello() {
     let mut s = mock::Stream::default();
-    let w: Worker<_, io::Error> = WorkerBuilder::default()
+    let w: Worker<io::Error> = WorkerBuilder::default()
         .hostname("host".to_string())
         .wid(WorkerId::new("wid"))
         .labels([
@@ -101,9 +102,9 @@ async fn hello() {
 #[tokio::test(flavor = "multi_thread")]
 async fn hello_pwd() {
     let mut s = mock::Stream::with_salt(1545, "55104dc76695721d");
-    let w: Worker<_, io::Error> = WorkerBuilder::default()
+    let w: Worker<io::Error> = WorkerBuilder::default()
         .register_fn("never_called", |_j: Job| async move { unreachable!() })
-        .connect_with(s.clone(), Some("foobar".to_string()))
+        .connect_with_buffered(BufStream::new(s.clone()), Some("foobar".to_string()))
         .await
         .unwrap();
     let written = s.pop_bytes_written(0);
@@ -442,7 +443,7 @@ async fn terminate() {
     let mut s = mock::Stream::new(2); // main plus worker
 
     // prepare a worker with only never (!) returning handler
-    let mut w: Worker<_, io::Error> = WorkerBuilder::default()
+    let mut w: Worker<io::Error> = WorkerBuilder::default()
         .hostname("machine".into())
         .wid(WorkerId::new("wid"))
         .register_fn("foobar", |_| async move {
@@ -557,7 +558,7 @@ async fn heart_broken() {
     let signal = async move { child_token.cancelled().await };
 
     // prepare a worker without any handlers
-    let w: Worker<_, io::Error> = Worker::builder()
+    let w: Worker<io::Error> = Worker::builder()
         .with_graceful_shutdown(signal)
         .shutdown_timeout(Duration::from_millis(500))
         .register_fn("foobar", |_j| async move {

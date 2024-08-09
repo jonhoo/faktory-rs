@@ -1,12 +1,12 @@
 use super::{runner::Closure, CallbacksRegistry, Client, ShutdownSignal, Worker};
 use crate::{
     proto::{utils, ClientOptions},
-    Error, Job, JobRunner, WorkerId,
+    Error, Job, JobRunner, Reconnect, WorkerId,
 };
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::io::{AsyncRead, AsyncWrite, BufStream};
+use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
 /// Convenience wrapper for building a Faktory worker.
@@ -232,23 +232,42 @@ impl<E: 'static> WorkerBuilder<E> {
     }
 
     /// Connect to a Faktory server with a non-standard stream.
-    pub async fn connect_with<S: AsyncRead + AsyncWrite + Send + Unpin>(
+    ///
+    /// Iternally, the `stream` will be buffered. In case you've got a `stream` that is _already_
+    /// buffered (and so it is `AsyncBufRead`), you will want to use [`WorkerBuilder::connect_with_buffered`]
+    /// in order to avoid buffering the stream twice.
+    pub async fn connect_with<S>(self, stream: S, pwd: Option<String>) -> Result<Worker<E>, Error>
+    where
+        S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
+        BufStream<S>: Reconnect,
+    {
+        let stream = BufStream::new(stream);
+        WorkerBuilder::connect_with_buffered(self, stream, pwd).await
+    }
+
+    /// Connect to a Faktory server with a non-standard buffered stream.
+    ///
+    /// In case you've got a `stream` that is _not_ buffered just yet, you may want to use
+    /// [`WorkerBuilder::connect_with`] that will do this buffering for you.
+    pub async fn connect_with_buffered<S>(
         mut self,
         stream: S,
         pwd: Option<String>,
-    ) -> Result<Worker<BufStream<S>, E>, Error> {
+    ) -> Result<Worker<E>, Error>
+    where
+        S: AsyncBufRead + AsyncWrite + Reconnect + Send + Sync + Unpin + 'static,
+    {
         self.opts.password = pwd;
         self.opts.is_worker = true;
-        let buffered = BufStream::new(stream);
-        let client = Client::new(buffered, self.opts).await?;
-        Ok(Worker::new(
+        let client = Client::new(Box::new(stream), self.opts).await?;
+        let worker = Worker::new(
             client,
             self.workers_count,
             self.callbacks,
             self.shutdown_timeout,
             self.shutdown_signal,
-        )
-        .await)
+        );
+        Ok(worker)
     }
 
     /// Connect to a Faktory server.
@@ -264,10 +283,7 @@ impl<E: 'static> WorkerBuilder<E> {
     /// ```
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
-    pub async fn connect(
-        self,
-        url: Option<&str>,
-    ) -> Result<Worker<BufStream<TokioStream>, E>, Error> {
+    pub async fn connect(self, url: Option<&str>) -> Result<Worker<E>, Error> {
         let url = utils::parse_provided_or_from_env(url)?;
         let stream = TokioStream::connect(utils::host_from_url(&url)).await?;
         self.connect_with(stream, url.password().map(|p| p.to_string()))

@@ -5,7 +5,6 @@ use super::BatchHandle;
 use crate::error::Error;
 use crate::proto::{BatchId, Client};
 use chrono::{DateTime, Utc};
-use tokio::io::{AsyncBufRead, AsyncWrite};
 
 // Not documented, but existing de fakto and also mentioned in the official client
 // https://github.com/contribsys/faktory/blob/main/client/batch.go#L17-L19
@@ -83,10 +82,7 @@ impl<'a> BatchStatus {
     /// Open the batch for which this `BatchStatus` has been retrieved.
     ///
     /// See [`open_batch`](Client::open_batch).
-    pub async fn open<S: AsyncBufRead + AsyncWrite + Unpin + Send>(
-        &self,
-        prod: &'a mut Client<S>,
-    ) -> Result<Option<BatchHandle<'a, S>>, Error> {
+    pub async fn open(&self, prod: &'a mut Client) -> Result<Option<BatchHandle<'a>>, Error> {
         prod.open_batch(&self.bid).await
     }
 }

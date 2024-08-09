@@ -729,22 +729,38 @@ async fn test_panic_in_handler() {
     let local = "test_panic_in_handler";
 
     let mut w = Worker::builder::<io::Error>()
-        .register_blocking_fn("panic", |_j| {
+        .register_blocking_fn("panic_SYNC_handler", |_j| {
             panic!("Panic inside the handler...");
+        })
+        .register_fn("panic_ASYNC_handler", |j| async move {
+            // potentially going out of bounds
+            let arg1 = &j.args()[0];
+            let arg2 = &j.args()[1];
+            let _ = arg1.as_i64().unwrap() + arg2.as_i64().unwrap();
+            Ok::<(), io::Error>(())
         })
         .connect(None)
         .await
         .unwrap();
 
-    Client::connect(None)
-        .await
-        .unwrap()
-        .enqueue(Job::builder("panic").queue(local).build())
+    let mut c = Client::connect(None).await.unwrap();
+
+    // note how we are not specifying any args for this job,
+    // so indexing into `job.args()` will panic
+    c.enqueue(Job::builder("panic_SYNC_handler").queue(local).build())
         .await
         .unwrap();
 
     // we _did_ consume and process the job, the processing result itself though
     // was a failure; however, a panic in the handler was "intercepted" and communicated
-    // to the Faktory server via the FAIL command
+    // to the Faktory server via the FAIL command;
+    // note how the test run is not interrupted with a panic
+    assert!(w.run_one(0, &[local]).await.unwrap());
+
+    c.enqueue(Job::builder("panic_ASYNC_handler").queue(local).build())
+        .await
+        .unwrap();
+
+    // same for async handler, note how the test run is not interrupted with a panic
     assert!(w.run_one(0, &[local]).await.unwrap());
 }

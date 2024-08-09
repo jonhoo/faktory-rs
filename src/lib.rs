@@ -48,9 +48,9 @@
 //!
 //! ```no_run
 //! # tokio_test::block_on(async {
-//! use faktory::WorkerBuilder;
+//! use faktory::Worker;
 //! use std::io;
-//! let mut w = WorkerBuilder::default()
+//! let mut w = Worker::builder()
 //!     .register_fn("foobar", |job| async move {
 //!         println!("{:?}", job);
 //!         Ok::<(), io::Error>(())
@@ -77,7 +77,8 @@ mod worker;
 pub use crate::error::Error;
 
 pub use crate::proto::{
-    Client, DataSnapshot, FaktoryState, Job, JobBuilder, JobId, Reconnect, ServerSnapshot, WorkerId,
+    Client, Connection, DataSnapshot, FaktoryState, Job, JobBuilder, JobId, Reconnect,
+    ServerSnapshot, WorkerId,
 };
 
 pub use crate::worker::{JobRunner, StopDetails, StopReason, Worker, WorkerBuilder};

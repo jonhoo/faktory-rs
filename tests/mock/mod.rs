@@ -4,7 +4,7 @@ use std::{
     pin::Pin,
     sync::{Arc, Mutex},
 };
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 
 mod inner;
 
@@ -23,18 +23,18 @@ impl Default for Stream {
 
 #[async_trait::async_trait]
 impl Reconnect for Stream {
-    async fn reconnect(&mut self) -> Result<Self, io::Error> {
+    async fn reconnect(&mut self) -> io::Result<Box<dyn faktory::Connection>> {
         let mine = self
             .all
             .lock()
             .unwrap()
             .take_stream()
             .expect("tried to make a new stream, but no more connections expected");
-        Ok(Stream {
+        Ok(Box::new(BufStream::new(Stream {
             mine,
             all: Arc::clone(&self.all),
             check_count: self.check_count,
-        })
+        })))
     }
 }
 

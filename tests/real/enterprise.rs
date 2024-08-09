@@ -456,7 +456,7 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
                     .is_ok());
                 // Let's update the progress once again, to check the 'set_progress' shortcut:
                 assert!(t
-                    .set_progress(ProgressUpdate::set(job_id.clone(), 33))
+                    .set_progress(&ProgressUpdate::set(job_id.clone(), 33))
                     .await
                     .is_ok());
 
@@ -465,7 +465,7 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
 
                 // ... and read the progress info
                 let result = t
-                    .get_progress(job_id.clone())
+                    .get_progress(&job_id)
                     .await
                     .expect("Retrieved progress update over the wire");
 
@@ -490,7 +490,7 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
     let progress = t
         .lock()
         .expect("lock acquired successfully")
-        .get_progress(job_id.clone())
+        .get_progress(&job_id)
         .await
         .expect("Retrieved progress update over the wire once again")
         .expect("Some progress");
@@ -510,12 +510,12 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
         .desc("Final stage.".to_string())
         .percent(99)
         .build();
-    assert!(t.lock().unwrap().set_progress(upd).await.is_ok());
+    assert!(t.lock().unwrap().set_progress(&upd).await.is_ok());
 
     let progress = t
         .lock()
         .unwrap()
-        .get_progress(job_id)
+        .get_progress(&job_id)
         .await
         .expect("Retrieved progress update over the wire once again")
         .expect("Some progress");
@@ -523,7 +523,7 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
     if progress.percent != Some(100) {
         let upd = progress.update_percent(100);
         assert_eq!(upd.desc, progress.desc);
-        assert!(t.lock().unwrap().set_progress(upd).await.is_ok())
+        assert!(t.lock().unwrap().set_progress(&upd).await.is_ok())
     }
 
     // What about 'ordinary' job ?
@@ -538,7 +538,7 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
     let progress = t
         .lock()
         .expect("lock acquired")
-        .get_progress(job_id.clone())
+        .get_progress(&job_id)
         .await
         .expect("Retrieved progress update over the wire once again")
         .expect("Some progress");
