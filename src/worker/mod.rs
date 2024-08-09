@@ -2,7 +2,9 @@ use super::proto::Client;
 use crate::error::Error;
 use crate::proto::{Ack, Fail, Job};
 use fnv::FnvHashMap;
+use futures::FutureExt;
 use std::future::Future;
+use std::panic::AssertUnwindSafe;
 use std::pin::Pin;
 use std::process;
 use std::sync::{atomic, Arc};
@@ -214,7 +216,8 @@ impl<E> Worker<E> {
 
 enum Failed<E: StdError, JE: StdError> {
     Application(E),
-    HandlerPanic(JE),
+    HandlerPanic(String),
+    SyncHandlerPanic(JE),
     BadJobType(String),
 }
 
@@ -225,11 +228,23 @@ impl<E: StdError + 'static + Send> Worker<E> {
             .get(job.kind())
             .ok_or(Failed::BadJobType(job.kind().to_string()))?;
         match handler {
-            Callback::Async(cb) => cb.run(job).await.map_err(Failed::Application),
+            Callback::Async(cb) => AssertUnwindSafe(cb.run(job))
+                .catch_unwind()
+                .await
+                .map_err(|any| {
+                    if any.is::<String>() {
+                        Failed::HandlerPanic(*any.downcast::<String>().unwrap())
+                    } else if any.is::<&str>() {
+                        Failed::HandlerPanic((*any.downcast::<&str>().unwrap()).to_string())
+                    } else {
+                        Failed::HandlerPanic("Panic in handler".into())
+                    }
+                })?
+                .map_err(Failed::Application),
             Callback::Sync(cb) => {
                 let cb = Arc::clone(cb);
                 match spawn_blocking(move || cb(job)).await {
-                    Err(join_error) => Err(Failed::HandlerPanic(join_error)),
+                    Err(join_error) => Err(Failed::SyncHandlerPanic(join_error)),
                     Ok(processing_result) => processing_result.map_err(Failed::Application),
                 }
             }
@@ -330,7 +345,8 @@ impl<E: StdError + 'static + Send> Worker<E> {
                 let fail = match e {
                     Failed::BadJobType(jt) => Fail::generic(jid, format!("No handler for {}", jt)),
                     Failed::Application(e) => Fail::generic_with_backtrace(jid, e),
-                    Failed::HandlerPanic(e) => Fail::generic_with_backtrace(jid, e),
+                    Failed::HandlerPanic(e) => Fail::generic(jid, e),
+                    Failed::SyncHandlerPanic(e) => Fail::generic_with_backtrace(jid, e),
                 };
                 self.worker_states.register_failure(worker, fail.clone());
                 self.c.issue(&fail).await?.read_ok().await?;
