@@ -93,7 +93,7 @@ async fn roundtrip_tls_with_worker_builder() {
         .unwrap();
 
     // "one-shot" producer
-    Client::connect(None)
+    Client::connect(Some(&env::var("FAKTORY_URL").unwrap()))
         .await
         .unwrap()
         .enqueue(Job::new(local, vec!["z"]).on_queue(local))
