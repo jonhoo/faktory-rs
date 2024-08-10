@@ -87,7 +87,7 @@ async fn roundtrip_tls_with_worker_builder() {
 
     let mut worker = Worker::builder()
         .register(local, fixtures::JobHandler::new(tx))
-        .use_rustls()
+        .with_rustls()
         .connect(Some(&env::var("FAKTORY_URL_SECURE").unwrap()))
         .await
         .unwrap();

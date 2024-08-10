@@ -1,13 +1,19 @@
 use super::{runner::Closure, CallbacksRegistry, Client, ShutdownSignal, Worker};
 use crate::{
     proto::{utils, ClientOptions},
-    Error, Job, JobRunner, Reconnect, TlsKind, WorkerId,
+    Error, Job, JobRunner, Reconnect, WorkerId,
 };
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum TlsKind {
+    Native,
+    Rust,
+}
 
 /// Convenience wrapper for building a Faktory worker.
 ///
@@ -245,7 +251,7 @@ impl<E: 'static> WorkerBuilder<E> {
     /// will be connected to the Faktory server with the stream you've provided to `connect_with`.
     #[cfg(feature = "native_tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "native_tls")))]
-    pub fn use_native_tls(mut self) -> Self {
+    pub fn with_native_tls(mut self) -> Self {
         self.tls_kind = Some(TlsKind::Native);
         self
     }
@@ -257,7 +263,7 @@ impl<E: 'static> WorkerBuilder<E> {
     /// will be connected to the Faktory server with the stream you've provided to `connect_with`.
     #[cfg(feature = "rustls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
-    pub fn use_rustls(mut self) -> Self {
+    pub fn with_rustls(mut self) -> Self {
         self.tls_kind = Some(TlsKind::Rust);
         self
     }
