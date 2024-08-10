@@ -57,8 +57,10 @@
 mod mock;
 
 use faktory::*;
-use std::{io, time::Duration};
-use tokio::{spawn, time::sleep};
+use std::{io, sync::Arc, time::Duration};
+use tokio::io::BufStream;
+use tokio::{spawn, sync::Mutex, time::sleep};
+use tokio_util::sync::CancellationToken;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn hello() {
@@ -102,7 +104,7 @@ async fn hello_pwd() {
     let mut s = mock::Stream::with_salt(1545, "55104dc76695721d");
     let w: Worker<io::Error> = WorkerBuilder::default()
         .register_fn("never_called", |_j: Job| async move { unreachable!() })
-        .connect_with(s.clone(), Some("foobar".to_string()))
+        .connect_with_buffered(BufStream::new(s.clone()), Some("foobar".to_string()))
         .await
         .unwrap();
     let written = s.pop_bytes_written(0);
@@ -259,7 +261,9 @@ async fn well_behaved() {
     s.push_bytes_to_read(0, b"+{\"state\":\"terminate\"}\r\n");
 
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
-    assert_eq!(jh.await.unwrap().unwrap(), 0);
+    let details = jh.await.unwrap().unwrap();
+    assert_eq!(details.reason, StopReason::ServerInstruction);
+    assert_eq!(details.workers_still_running, 0);
 
     // heartbeat should have seen two beats (quiet + terminate)
     let written = s.pop_bytes_written(0);
@@ -326,7 +330,9 @@ async fn no_first_job() {
     s.push_bytes_to_read(0, b"+{\"state\":\"terminate\"}\r\n");
 
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
-    assert_eq!(jh.await.unwrap().unwrap(), 0);
+    let details = jh.await.unwrap().unwrap();
+    assert_eq!(details.reason, StopReason::ServerInstruction);
+    assert_eq!(details.workers_still_running, 0);
 
     // heartbeat should have seen two beats (quiet + terminate)
     let written = s.pop_bytes_written(0);
@@ -403,7 +409,9 @@ async fn well_behaved_many() {
     s.push_bytes_to_read(0, b"+{\"state\":\"terminate\"}\r\n");
 
     // at this point, c.run() should eventually return with Ok(0) indicating that it finished.
-    assert_eq!(jh.await.unwrap().unwrap(), 0);
+    let details = jh.await.unwrap().unwrap();
+    assert_eq!(details.reason, StopReason::ServerInstruction);
+    assert_eq!(details.workers_still_running, 0);
 
     // heartbeat should have seen two beats (quiet + terminate)
     let written = s.pop_bytes_written(0);
@@ -471,7 +479,7 @@ async fn terminate() {
     );
 
     let jh = spawn(async move {
-        // Note how running a coordinating leads to mock::Stream::reconnect:
+        // Note how running a coordinating worker leads to mock::Stream::reconnect:
         // `Worker::run` -> `Worker::spawn_worker_into` -> `Worker::for_worker` -> `Client::connect_again` -> `Stream::reconnect`
         //
         // So when the `w.run` is triggered, `Stream::reconnect` will fire and the `take_next` member on the `mock::Inner` struct
@@ -487,7 +495,9 @@ async fn terminate() {
 
     // at this point, c.run() should immediately return with Ok(1) indicating that one job is still
     // running.
-    assert_eq!(jh.await.unwrap().unwrap(), 1);
+    let details = jh.await.unwrap().unwrap();
+    assert_eq!(details.reason, StopReason::ServerInstruction);
+    assert_eq!(details.workers_still_running, 1);
 
     // Heartbeat Thread (stream with index 0).
     //
@@ -532,4 +542,115 @@ async fn terminate() {
     //
     // But generally speaking, the graceful situation is when the number of `HI`s and the number of `END`s are
     // equal. Why did they decide for `END` instead of `BYE` in Faktory ? :smile:
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn heart_broken() {
+    // prepare streams for a coordinator, a worker, and potentially another yet
+    // another worker
+    let mut s = mock::Stream::new_unchecked(3);
+
+    // create a token
+    let token = CancellationToken::new();
+    let child_token = token.child_token();
+
+    // create a signalling future
+    let signal = async move { child_token.cancelled().await };
+
+    // prepare a worker without any handlers
+    let w: Worker<io::Error> = Worker::builder()
+        .with_graceful_shutdown(signal)
+        .shutdown_timeout(Duration::from_millis(500))
+        .register_fn("foobar", |_j| async move {
+            // this magic 7 means: give the coordinating worker (and namely its heartbeat task)
+            // just enough time to send a heartbeat message to the server and get disappointed
+            // with the server response
+            println!("{:?}", _j);
+            sleep(Duration::from_secs(7)).await;
+            Ok(())
+        })
+        .connect_with(s.clone(), None)
+        .await
+        .unwrap();
+
+    // as if some producing client has enqueued a job
+    s.push_bytes_to_read(
+        1,
+        b"$186\r\n\
+            {\
+            \"jid\":\"forever\",\
+            \"queue\":\"default\",\
+            \"jobtype\":\"foobar\",\
+            \"args\":[],\
+            \"created_at\":\"2024-07-18T17:41:35.772981326Z\",\
+            \"enqueued_at\":\"2024-07-18T17:41:35.773318394Z\",\
+            \"reserve_for\":600,\
+            \"retry\":25\
+            }\r\n",
+    );
+
+    // ignore the HELLO from the coordinatior
+    s.ignore(0);
+
+    // start consuming
+    let w = Arc::new(Mutex::new(w));
+    let w_clone = w.clone();
+    let jh = spawn(async move { w_clone.lock().await.run(&["default"]).await });
+
+    // ack that the worker has processed the job
+    s.ok(1);
+
+    // as if the Fatory sent non-sense in reply to the HEARTBEAT message,
+    // making this way the `Worker::run` stop, but without marking this worker
+    // as terminated
+    s.push_bytes_to_read(0, b"+{\"state\":\"heartbroken response\"}\r\n");
+
+    // at this point the `Worker::run` should have return control
+    // with an error rather that `StopDetails`, because the run was discontinued
+    // due to protocol error rather than a signal from the user code or the Faktory server
+    let error = jh.await.expect("joined ok").unwrap_err();
+
+    match error {
+        Error::Protocol(error::Protocol::BadType { expected, received }) => {
+            assert_eq!(expected, "heartbeat response");
+            assert_eq!(received, "{\"state\":\"heartbroken response\"}")
+        }
+        e => unreachable!("{:?}", e),
+    }
+
+    s.pop_bytes_written(0); // HEARTBEAT 1
+
+    // again, as if some producing client has enqueued a job
+    s.push_bytes_to_read(
+        2,
+        b"$186\r\n\
+            {\
+            \"jid\":\"ornever\",\
+            \"queue\":\"default\",\
+            \"jobtype\":\"foobar\",\
+            \"args\":[],\
+            \"created_at\":\"2024-07-18T17:41:36.772981326Z\",\
+            \"enqueued_at\":\"2024-07-18T17:41:36.773318394Z\",\
+            \"reserve_for\":600,\
+            \"retry\":25\
+            }\r\n",
+    );
+
+    // we can re-run the worker and this will not cause a panic since this worker
+    // was not marked as terminated, so let's start consuming (reminder: we got one vacant stream)
+    let jh = spawn(async move { w.lock().await.run(&["default"]).await });
+
+    // give the newly spawned "processing" worker some time to consume the job and ...
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    // ... send a signal to return control
+    token.cancel();
+
+    let stop_details = jh
+        .await
+        .expect("joined ok")
+        .expect("stop details rather than error");
+    assert_eq!(stop_details.reason, StopReason::GracefulShutdown);
+    // the worker was still processing the job
+    assert_eq!(stop_details.workers_still_running, 1);
 }

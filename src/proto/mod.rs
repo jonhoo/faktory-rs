@@ -39,6 +39,16 @@ pub trait Reconnect {
 }
 
 #[async_trait::async_trait]
+impl<S> Reconnect for Box<S>
+where
+    S: Reconnect + Send,
+{
+    async fn reconnect(&mut self) -> io::Result<BoxedConnection> {
+        (**self).reconnect().await
+    }
+}
+
+#[async_trait::async_trait]
 impl Reconnect for TokioStream {
     async fn reconnect(&mut self) -> io::Result<BoxedConnection> {
         let addr = &self.peer_addr().expect("socket address");

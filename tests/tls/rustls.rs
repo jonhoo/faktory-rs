@@ -6,6 +6,7 @@ use std::{
     sync::{self, Arc},
 };
 use tokio_rustls::rustls::{ClientConfig, SignatureScheme};
+use url::Url;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn roundtrip_tls() {
@@ -23,6 +24,7 @@ async fn roundtrip_tls() {
     }
     let local = "roundtrip_tls";
     let (tx, rx) = sync::mpsc::channel();
+
     let tls = || async {
         let verifier = fixtures::TestServerCertVerifier::new(
             SignatureScheme::RSA_PSS_SHA512,
@@ -45,16 +47,21 @@ async fn roundtrip_tls() {
         .unwrap()
     };
 
+    let password = Url::parse(&env::var("FAKTORY_URL_SECURE").expect("faktory url to be set..."))
+        .expect("...and be valid")
+        .password()
+        .map(|p| p.to_string());
+
     let mut worker = WorkerBuilder::default()
         .hostname("tester".to_string())
         .wid(WorkerId::new(local))
         .register(local, fixtures::JobHandler::new(tx))
-        .connect_with(tls().await, None)
+        .connect_with(tls().await, password.clone())
         .await
         .unwrap();
 
-    // "one-shot" producer
-    Client::connect_with(tls().await, None)
+    // "one-shot" client
+    Client::connect_with(tls().await, password)
         .await
         .unwrap()
         .enqueue(Job::new(local, vec!["z"]).on_queue(local))

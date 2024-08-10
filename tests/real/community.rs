@@ -1,8 +1,9 @@
 use crate::{assert_gte, skip_check};
-use faktory::{Client, Job, JobBuilder, JobId, Worker, WorkerBuilder, WorkerId};
+use faktory::{Client, Job, JobBuilder, JobId, StopReason, Worker, WorkerBuilder, WorkerId};
 use serde_json::Value;
 use std::{io, sync, time::Duration};
 use tokio::time as tokio_time;
+use tokio_util::sync::CancellationToken;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn hello_client() {
@@ -105,9 +106,6 @@ async fn server_state() {
     ); // at least two clients from the current test
     assert_ne!(server_state.server.uptime.as_secs(), 0); // if IPC is happenning, this should hold :)
 
-    let nenqueued = server_state.data.total_enqueued;
-    let nqueues = server_state.data.total_queues;
-
     // push 1 job
     client
         .enqueue(
@@ -125,21 +123,32 @@ async fn server_state() {
     // we only pushed 1 job on this queue
     let server_state = client.current_info().await.unwrap();
     assert_eq!(*server_state.data.queues.get(local).unwrap(), 1);
-    // `total_enqueued` should be at least +1 job from from last read
+
+    // It is tempting to make an assertion like `total enqueued this time >= total enqueued last time + 1`,
+    // but since we've got a server shared among numerous tests that are running in parallel, this
+    // assertion will not always work (though it will be true in the majority of test runs). Imagine
+    // a situation where between our last asking for server data state and now they have consumed all
+    // the pending jobs in _other_ queues. This is highly unlikely, but _is_ possible. So the only
+    // more or less guaranteed thing is that there is one pending job in our _local_ queue. It is "more or less"
+    // because another test _may_ still push onto and consume from this queue if we copypasta this test's
+    // contents and forget to update the local queue name, i.e. do not guarantee isolation at the queues level.
     assert_gte!(
         server_state.data.total_enqueued,
-        nenqueued + 1,
+        1,
         "`total_enqueued` equals {} which is not greater than or equal to {}",
         server_state.data.total_enqueued,
-        nenqueued + 1
+        1
     );
-    // `total_queues` should be at least +1 queue from last read
+    // Similar to the case above, we may want to assert `number of queues this time >= number of queues last time + 1`,
+    // but it may not always hold, due to the fact that there is a `remove_queue` operation and if they
+    // use it in other tests as a clean-up phase (just like we are doing at the end of this test),
+    // the `server_state.data.total_queues` may reach `1`, meaning only our local queue is left.
     assert_gte!(
         server_state.data.total_queues,
-        nqueues + 1,
+        1,
         "`total_queues` equals {} which is not greater than or equal to {}",
         server_state.data.total_queues,
-        nqueues + 1
+        1
     );
 
     // let's know consume that job ...
@@ -155,7 +164,7 @@ async fn server_state() {
     // volumes to perform the next test run. Also note that on CI we are always starting a-fresh.
     let server_state = client.current_info().await.unwrap();
     assert_eq!(*server_state.data.queues.get(local).unwrap(), 0);
-    // `total_processed` should be at least +1 queue from last read
+    // `total_processed` should be at least +1 job from last read
     assert_gte!(
         server_state.data.total_processed,
         1,
@@ -593,4 +602,165 @@ async fn test_jobs_created_with_builder() {
         .await
         .unwrap();
     assert!(had_job);
+}
+
+use std::future::Future;
+use std::pin::Pin;
+use tokio::sync::mpsc;
+fn process_hard_task(
+    sender: sync::Arc<mpsc::Sender<bool>>,
+) -> Box<
+    dyn Fn(Job) -> Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send>>
+        + Send
+        + Sync
+        + 'static,
+> {
+    return Box::new(move |j: Job| {
+        let sender = sync::Arc::clone(&sender);
+        Box::pin(async move {
+            let complexity = j.args()[0].as_u64().unwrap();
+            sender.send(true).await.unwrap(); // inform that we are now starting to process the job
+            tokio::time::sleep(tokio::time::Duration::from_millis(complexity)).await;
+            Ok::<(), io::Error>(())
+        })
+    });
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_shutdown_signals_handling() {
+    skip_check!();
+
+    let qname = "test_shutdown_signals_handling";
+    let jkind = "heavy";
+    let shutdown_timeout = Duration::from_millis(500);
+
+    // get a client and a job to enqueue
+    let mut cl = Client::connect(None).await.unwrap();
+    let j = JobBuilder::new(jkind)
+        .queue(qname)
+        // task will be being processed for at least 1 second
+        .args(vec![1000])
+        .build();
+
+    let (tx, mut rx_for_test_purposes) = tokio::sync::mpsc::channel::<bool>(1);
+    let tx = sync::Arc::new(tx);
+
+    // create a token
+    let token = CancellationToken::new();
+    let child_token = token.child_token();
+
+    // create a signalling future
+    let signal = async move { child_token.cancelled().await };
+
+    // get a connected worker
+    let mut w = WorkerBuilder::default()
+        .with_graceful_shutdown(signal)
+        .shutdown_timeout(shutdown_timeout)
+        .register_fn(jkind, process_hard_task(tx))
+        .connect(None)
+        .await
+        .unwrap();
+
+    // start consuming
+    let jh = tokio::spawn(async move { w.run(&[qname]).await });
+
+    // enqueue the job and wait for a message from the handler and ...
+    cl.enqueue(j).await.unwrap();
+    rx_for_test_purposes.recv().await;
+
+    assert!(!jh.is_finished());
+
+    // ... immediately signal to return control
+    token.cancel();
+
+    // one worker was processing a task when we interrupted it
+    let stop_details = jh.await.expect("joined ok").unwrap();
+    assert_eq!(stop_details.reason, StopReason::GracefulShutdown);
+    assert_eq!(stop_details.workers_still_running, 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_jobs_with_blocking_handlers() {
+    skip_check!();
+
+    let local = "test_jobs_with_blocking_handlers";
+
+    let mut w = Worker::builder()
+        .register_blocking_fn("cpu_intensive", |_j| {
+            // Imagine some compute heavy operations:serializing, sorting, matrix multiplication, etc.
+            std::thread::sleep(Duration::from_millis(1000));
+            Ok::<(), io::Error>(())
+        })
+        .register_fn("io_intensive", |_j| async move {
+            // Imagine fetching data for this user from various origins,
+            // updating an entry on them in the database, and then sending them
+            // an email and pushing a follow-up task on the Faktory queue
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            Ok::<(), io::Error>(())
+        })
+        .register_fn(
+            "general_workload",
+            |_j| async move { Ok::<(), io::Error>(()) },
+        )
+        .connect(None)
+        .await
+        .unwrap();
+
+    Client::connect(None)
+        .await
+        .unwrap()
+        .enqueue_many([
+            Job::builder("cpu_intensive").queue(local).build(),
+            Job::builder("io_intensive").queue(local).build(),
+            Job::builder("general_workload").queue(local).build(),
+        ])
+        .await
+        .unwrap();
+
+    for _ in 0..2 {
+        assert!(w.run_one(0, &[local]).await.unwrap());
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_panic_in_handler() {
+    skip_check!();
+
+    let local = "test_panic_in_handler";
+
+    let mut w = Worker::builder::<io::Error>()
+        .register_blocking_fn("panic_SYNC_handler", |_j| {
+            panic!("Panic inside the handler...");
+        })
+        .register_fn("panic_ASYNC_handler", |j| async move {
+            // potentially going out of bounds
+            let arg1 = &j.args()[0];
+            let arg2 = &j.args()[1];
+            let _ = arg1.as_i64().unwrap() + arg2.as_i64().unwrap();
+            Ok::<(), io::Error>(())
+        })
+        .connect(None)
+        .await
+        .unwrap();
+
+    let mut c = Client::connect(None).await.unwrap();
+
+    // note how we are not specifying any args for this job,
+    // so indexing into `job.args()` will panic
+    c.enqueue(Job::builder("panic_SYNC_handler").queue(local).build())
+        .await
+        .unwrap();
+
+    // we _did_ consume and process the job, the processing result itself though
+    // was a failure; however, a panic in the handler was "intercepted" and communicated
+    // to the Faktory server via the FAIL command;
+    // note how the test run is not interrupted with a panic
+    assert!(w.run_one(0, &[local]).await.unwrap());
+
+    c.enqueue(Job::builder("panic_ASYNC_handler").queue(local).build())
+        .await
+        .unwrap();
+
+    // same for async handler, note how the test run is not interrupted with a panic
+    assert!(w.run_one(0, &[local]).await.unwrap());
 }

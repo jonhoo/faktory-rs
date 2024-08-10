@@ -43,23 +43,28 @@ serde_json = "1.0"
 sha2 = "0.10.0"
 thiserror = "1.0.30"
 tokio = { version = "1.35.1", features = [
-    "io-util",
-    "net",
-    "rt",
-    "rt-multi-thread",
-    "time",
+    "sync",            # gives us an asynchronous `Mutex`
+    "io-util",         # enables `AsyncWriteExt`, `AsyncReadExt`, and `AsyncBufReadExt` in `tokio::io` namespace
+    "macros",          # brings in `tokio::select!` we are utilizing in `Worker::run`
+    "net",             # enables `tokio::net` namespace with `TcpStream` we are heavily relying upon
+    "rt-multi-thread", # allows for `tokio::task::block_in_place()` in Client::drop
+    "time",            # anables `tokio::time` namespace holding the `sleep` utility and `Duraction` struct
 ] }
 tokio-native-tls = { version = "0.3.1", optional = true }
 tokio-rustls = { version = "0.25.0", optional = true }
-url = "2"
-semver = { version = "1.0.23", features = ["serde"] }
 rustls-native-certs = { version = "0.7.1", optional = true }
 rustls-pki-types = { version = "1.0.1", optional = true }
+tracing = "0.1"
+url = "2"
+semver = { version = "1.0.23", features = ["serde"] }
+futures = "0.3.30"
 
 [dev-dependencies]
 rustls-pki-types = "1.0.1"
 tokio = { version = "1.35.1", features = ["rt", "macros"] }
 tokio-test = "0.4.3"
+tokio-util = "0.7.11"
+tracing-subscriber = "0.3.18"
 x509-parser = "0.15.1"
 
 # to make -Zminimal-versions work
