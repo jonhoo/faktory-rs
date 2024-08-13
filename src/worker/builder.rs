@@ -11,7 +11,14 @@ use tokio::net::TcpStream as TokioStream;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum TlsKind {
+    None,
+
+    #[cfg(feature = "rustls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "native_tls")))]
     Native,
+
+    #[cfg(feature = "rustls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
     Rust,
 }
 
@@ -24,7 +31,9 @@ pub struct WorkerBuilder<E> {
     callbacks: CallbacksRegistry<E>,
     shutdown_timeout: Option<Duration>,
     shutdown_signal: Option<ShutdownSignal>,
-    tls_kind: Option<TlsKind>,
+    tls_kind: TlsKind,
+    #[cfg(any(feature = "native_tls", feature = "rustls"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "native_tls", feature = "rustls"))))]
     skip_verify_server_certs: bool,
 }
 
@@ -46,8 +55,10 @@ impl<E> Default for WorkerBuilder<E> {
             callbacks: CallbacksRegistry::default(),
             shutdown_timeout: None,
             shutdown_signal: None,
-            tls_kind: None,
-            skip_verify_server_certs: true,
+            tls_kind: TlsKind::None,
+            #[cfg(any(feature = "native_tls", feature = "rustls"))]
+            #[cfg_attr(docsrs, doc(cfg(any(feature = "native_tls", feature = "rustls"))))]
+            skip_verify_server_certs: false,
         }
     }
 }
@@ -252,7 +263,7 @@ impl<E: 'static> WorkerBuilder<E> {
     #[cfg(feature = "native_tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "native_tls")))]
     pub fn with_native_tls(mut self) -> Self {
-        self.tls_kind = Some(TlsKind::Native);
+        self.tls_kind = TlsKind::Native;
         self
     }
 
@@ -264,7 +275,15 @@ impl<E: 'static> WorkerBuilder<E> {
     #[cfg(feature = "rustls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
     pub fn with_rustls(mut self) -> Self {
-        self.tls_kind = Some(TlsKind::Rust);
+        self.tls_kind = TlsKind::Rust;
+        self
+    }
+
+    /// Do not verify the server certificates.
+    #[cfg(any(feature = "native_tls", feature = "rustls"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "native_tls", feature = "rustls"))))]
+    pub fn dangerously_skip_verify_server_certs(mut self) -> Self {
+        self.skip_verify_server_certs = true;
         self
     }
 
@@ -325,12 +344,12 @@ impl<E: 'static> WorkerBuilder<E> {
         let addr = utils::host_from_url(&url);
         let stream = TokioStream::connect(addr).await?;
         match self.tls_kind {
-            None => {
+            TlsKind::None => {
                 self.connect_with(stream, url.password().map(|p| p.to_string()))
                     .await
             }
             #[cfg(feature = "rustls")]
-            Some(TlsKind::Rust) => {
+            TlsKind::Rust => {
                 let hostname = url.host_str().unwrap().to_string();
                 let tls_tream = crate::rustls::TlsStream::with_native_certs(
                     stream,
@@ -341,7 +360,8 @@ impl<E: 'static> WorkerBuilder<E> {
                 self.connect_with(tls_tream, url.password().map(|p| p.to_string()))
                     .await
             }
-            _ => unimplemented!(),
+            #[cfg(feature = "native_tls")]
+            TlsKind::Native => unimplemented!(),
         }
     }
 }
