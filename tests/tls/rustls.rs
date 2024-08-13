@@ -27,7 +27,7 @@ async fn roundtrip_tls() {
 
     let tls = || async {
         let verifier = fixtures::TestServerCertVerifier::new(
-            SignatureScheme::RSA_PSS_SHA512,
+            SignatureScheme::ECDSA_NISTP384_SHA384,
             env::current_dir()
                 .unwrap()
                 .join("docker")

@@ -194,14 +194,11 @@ impl ServerCertVerifier for NoCertVerification {
 
     fn verify_tls13_signature(
         &self,
-        _message: &[u8],
-        _cert: &CertificateDer<'_>,
-        _dss: &DigitallySignedStruct,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, RustlsError> {
-        // TODO: figure out what's wring with the test cert
-        // IO(Custom { kind: ConnectionAborted, error: Custom { kind: InvalidData, error: InvalidCertificate(Other(OtherError(UnsupportedCertVersion))) } })
-        // self.0.verify_tls13_signature(message, cert, dss)
-        Ok(HandshakeSignatureValid::assertion())
+        self.0.verify_tls13_signature(message, cert, dss)
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
