@@ -13,7 +13,7 @@ use tokio::net::TcpStream as TokioStream;
 pub(crate) enum TlsKind {
     None,
 
-    #[cfg(feature = "rustls")]
+    #[cfg(feature = "native_tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "native_tls")))]
     Native,
 
