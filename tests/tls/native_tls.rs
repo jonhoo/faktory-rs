@@ -73,7 +73,7 @@ async fn roundtrip_tls_with_worker_builder() {
     let mut worker = Worker::builder()
         .register(local, fixtures::JobHandler::new(tx))
         .with_native_tls()
-        .dangerously_skip_verify_server_certs()
+        .dangerously_without_cert_verification()
         .connect(Some(&env::var("FAKTORY_URL_SECURE").unwrap()))
         .await
         .unwrap();

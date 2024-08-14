@@ -34,7 +34,7 @@ pub struct WorkerBuilder<E> {
     tls_kind: TlsKind,
     #[cfg(any(feature = "native_tls", feature = "rustls"))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "native_tls", feature = "rustls"))))]
-    skip_verify_server_certs: bool,
+    verify_server_cert: bool,
 }
 
 impl<E> Default for WorkerBuilder<E> {
@@ -58,7 +58,7 @@ impl<E> Default for WorkerBuilder<E> {
             tls_kind: TlsKind::None,
             #[cfg(any(feature = "native_tls", feature = "rustls"))]
             #[cfg_attr(docsrs, doc(cfg(any(feature = "native_tls", feature = "rustls"))))]
-            skip_verify_server_certs: false,
+            verify_server_cert: true,
         }
     }
 }
@@ -258,10 +258,10 @@ impl<E: 'static> WorkerBuilder<E> {
     /// _SecureTransport_ on OSX, and _OpenSSL_ on other platforms.
     ///
     /// Internally, will use [`TlsStream::connect`](crate::native_tls::TlsStream::connect) to establish
-    /// a TLS stream to the Faktory server. If [`WorkerBuilder::dangerously_skip_verify_server_certs`]
+    /// a TLS stream to the Faktory server. If [`WorkerBuilder::dangerously_without_cert_verification`]
     /// has been called on this builder, [`TlsStream::connect_dangerously_skipping_verification`](crate::native_tls::TlsStream::connect_dangerously_skipping_verification)
     /// will be used.
-    /// 
+    ///
     /// Note that if you use this method on the builder, but eventually use [`WorkerBuilder::connect_with`]
     /// (rather than [`WorkerBuilder::connect`]) to create an instance of [`Worker`], this worker
     /// will be connected to the Faktory server with the stream you've provided to `connect_with`.
@@ -275,10 +275,10 @@ impl<E: 'static> WorkerBuilder<E> {
     /// Make the traffic between this worker and Faktory encrypted with [`rustls`](https://github.com/rustls/rustls).
     ///
     /// Internally, will use [`TlsStream::connect_with_native_certs`](crate::rustls::TlsStream::connect_with_native_certs)
-    /// to establish a TLS stream to the Faktory server. If [`WorkerBuilder::dangerously_skip_verify_server_certs`]
+    /// to establish a TLS stream to the Faktory server. If [`WorkerBuilder::dangerously_without_cert_verification`]
     /// has been called on this builder, a `true` will provided to [`TlsStream::connect_with_native_certs`](crate::rustls::TlsStream::connect_with_native_certs)
     /// as an argument for `dangerously_skip_verify`.
-    /// 
+    ///
     /// Note that if you use this method on the builder, but eventually use [`WorkerBuilder::connect_with`]
     /// (rather than [`WorkerBuilder::connect`]) to create an instance of [`Worker`], this worker
     /// will be connected to the Faktory server with the stream you've provided to `connect_with`.
@@ -289,11 +289,11 @@ impl<E: 'static> WorkerBuilder<E> {
         self
     }
 
-    /// Do not verify the server certificates.
+    /// Do not verify the server certificate.
     #[cfg(any(feature = "native_tls", feature = "rustls"))]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "native_tls", feature = "rustls"))))]
-    pub fn dangerously_skip_verify_server_certs(mut self) -> Self {
-        self.skip_verify_server_certs = true;
+    pub fn dangerously_without_cert_verification(mut self) -> Self {
+        self.verify_server_cert = false;
         self
     }
 
@@ -362,18 +362,18 @@ impl<E: 'static> WorkerBuilder<E> {
             TlsKind::Rust => {
                 let stream = crate::rustls::TlsStream::connect_with_native_certs(
                     url,
-                    self.skip_verify_server_certs,
+                    !self.verify_server_cert,
                 )
                 .await?;
                 self.connect_with(stream, password).await
             }
             #[cfg(feature = "native_tls")]
             TlsKind::Native => {
-                let stream = if self.skip_verify_server_certs {
+                let stream = if self.verify_server_cert {
+                    crate::native_tls::TlsStream::connect(url).await?
+                } else {
                     crate::native_tls::TlsStream::connect_dangerously_skipping_verification(url)
                         .await?
-                } else {
-                    crate::native_tls::TlsStream::connect(url).await?
                 };
                 self.connect_with(stream, password).await
             }
