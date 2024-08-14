@@ -61,8 +61,8 @@ impl TlsStream<TokioTcpStream> {
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
     ///
-    /// Internally creates a `ClientConfig` with an empty root certificates store and no client
-    /// authentication. Use [`with_client_config`](TlsStream::with_client_config)
+    /// Internally creates a `ClientConfig` with an _empty_ root certificates store and _no client
+    /// authentication_. Use [`with_client_config`](TlsStream::with_client_config)
     /// or [`with_connector`](TlsStream::with_connector) for customized
     /// `ClientConfig` and `TlsConnector` accordingly.
     pub async fn connect(url: Option<&str>) -> Result<Self, Error> {
@@ -71,6 +71,39 @@ impl TlsStream<TokioTcpStream> {
             .with_no_client_auth();
         let con = TlsConnector::from(Arc::new(conf));
         TlsStream::with_connector(con, url).await
+    }
+
+    /// Create a new TLS connection over TCP using native certificates.
+    ///
+    /// Unlike [`TlsStream::connect`], creates a root certificates store populated with the certificates
+    /// loaded from a platform-native certificate store. Thos method also allows to ***dangerously***
+    /// skip server certificates verification.
+    pub async fn connect_with_native_certs(
+        url: Option<&str>,
+        dangerously_skip_verify: bool,
+    ) -> Result<Self, Error> {
+        let mut store = RootCertStore::empty();
+        for cert in rustls_native_certs::load_native_certs()? {
+            store.add(cert).map_err(io::Error::other)?;
+        }
+
+        let config = if dangerously_skip_verify {
+            let cert_verifier = WebPkiServerVerifier::builder(Arc::new(store.clone()))
+                .build()
+                .expect("can construct standard verifier");
+            let mut config = ClientConfig::builder()
+                .with_root_certificates(store)
+                .with_no_client_auth();
+            config
+                .dangerous()
+                .set_certificate_verifier(Arc::new(NoCertVerification(cert_verifier)));
+            config
+        } else {
+            ClientConfig::builder()
+                .with_root_certificates(store)
+                .with_no_client_auth()
+        };
+        TlsStream::with_connector(TlsConnector::from(Arc::new(config)), url).await
     }
 
     /// Create a new TLS connection over TCP using a non-default TLS configuration.
@@ -112,42 +145,6 @@ where
             .with_no_client_auth();
 
         Self::new(stream, TlsConnector::from(Arc::new(conf)), hostname).await
-    }
-
-    /// Create a new TLS connection on an existing stream using native certificates.
-    ///
-    /// Internally creates a `ClientConfig` with no client authenticatiom and a root certificates
-    /// store populated with the certificates loaded from a platform-native certificate store.
-    ///
-    /// Use [`new`](TlsStream::new) for a customized `TlsConnector`.
-    pub async fn with_native_certs(
-        stream: S,
-        hostname: String,
-        skip_verify: bool,
-    ) -> io::Result<Self> {
-        let mut store = RootCertStore::empty();
-        for cert in rustls_native_certs::load_native_certs()? {
-            store.add(cert).map_err(io::Error::other)?;
-        }
-
-        let config = if skip_verify {
-            let cert_verifier = WebPkiServerVerifier::builder(Arc::new(store.clone()))
-                .build()
-                .expect("can construct standard verifier");
-            let mut config = ClientConfig::builder()
-                .with_root_certificates(store)
-                .with_no_client_auth();
-            config
-                .dangerous()
-                .set_certificate_verifier(Arc::new(NoCertVerification(cert_verifier)));
-            config
-        } else {
-            ClientConfig::builder()
-                .with_root_certificates(store)
-                .with_no_client_auth()
-        };
-
-        Self::new(stream, TlsConnector::from(Arc::new(config)), hostname).await
     }
 
     /// Create a new TLS connection on an existing stream with a non-default TLS configuration.

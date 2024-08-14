@@ -340,28 +340,33 @@ impl<E: 'static> WorkerBuilder<E> {
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
     pub async fn connect(self, url: Option<&str>) -> Result<Worker<E>, Error> {
-        let url = utils::parse_provided_or_from_env(url)?;
-        let addr = utils::host_from_url(&url);
-        let stream = TokioStream::connect(addr).await?;
+        let parsed_url = utils::parse_provided_or_from_env(url)?;
+        let password = parsed_url.password().map(|p| p.to_string());
         match self.tls_kind {
             TlsKind::None => {
-                self.connect_with(stream, url.password().map(|p| p.to_string()))
-                    .await
+                let addr = utils::host_from_url(&parsed_url);
+                let stream = TokioStream::connect(addr).await?;
+                self.connect_with(stream, password).await
             }
             #[cfg(feature = "rustls")]
             TlsKind::Rust => {
-                let hostname = url.host_str().unwrap().to_string();
-                let tls_tream = crate::rustls::TlsStream::with_native_certs(
-                    stream,
-                    hostname,
+                let stream = crate::rustls::TlsStream::connect_with_native_certs(
+                    url,
                     self.skip_verify_server_certs,
                 )
                 .await?;
-                self.connect_with(tls_tream, url.password().map(|p| p.to_string()))
-                    .await
+                self.connect_with(stream, password).await
             }
             #[cfg(feature = "native_tls")]
-            TlsKind::Native => unimplemented!(),
+            TlsKind::Native => {
+                let stream = if self.skip_verify_server_certs {
+                    crate::native_tls::TlsStream::connect_dangerously_skipping_verification(url)
+                        .await?
+                } else {
+                    crate::native_tls::TlsStream::connect(url).await?
+                };
+                self.connect_with(stream, password).await
+            }
         }
     }
 }
