@@ -78,11 +78,12 @@ let mut w = Worker::builder()
         println!("{:?}", job);
         Ok::<(), io::Error>(())
     })
-    .register_blocking_fn("fibo", |job|
+    .register_blocking_fn("fibo", |job| {
         std::thread::sleep(Duration::from_millis(1000));
         println!("{:?}", job);
         Ok::<(), io::Error>(())
     })
+    .with_rustls() // available on `rustls` feature only
     .connect(None)
     .await
     .unwrap();
@@ -96,6 +97,7 @@ match w.run(&["default"]).await {
             stop_details.workers_still_running
         );
     }
+}
 ```
 
 Also see some usage examples in `examples` directory in the project's root. You can run an example with:

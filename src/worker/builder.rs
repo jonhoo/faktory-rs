@@ -257,6 +257,11 @@ impl<E: 'static> WorkerBuilder<E> {
     /// The underlying crate (`native-tls`) will use _SChannel_ on Windows,
     /// _SecureTransport_ on OSX, and _OpenSSL_ on other platforms.
     ///
+    /// Internally, will use [`TlsStream::connect`](crate::native_tls::TlsStream::connect) to establish
+    /// a TLS stream to the Faktory server. If [`WorkerBuilder::dangerously_skip_verify_server_certs`]
+    /// has been called on this builder, [`TlsStream::connect_dangerously_skipping_verification`](crate::native_tls::TlsStream::connect_dangerously_skipping_verification)
+    /// will be used.
+    /// 
     /// Note that if you use this method on the builder, but eventually use [`WorkerBuilder::connect_with`]
     /// (rather than [`WorkerBuilder::connect`]) to create an instance of [`Worker`], this worker
     /// will be connected to the Faktory server with the stream you've provided to `connect_with`.
@@ -269,6 +274,11 @@ impl<E: 'static> WorkerBuilder<E> {
 
     /// Make the traffic between this worker and Faktory encrypted with [`rustls`](https://github.com/rustls/rustls).
     ///
+    /// Internally, will use [`TlsStream::connect_with_native_certs`](crate::rustls::TlsStream::connect_with_native_certs)
+    /// to establish a TLS stream to the Faktory server. If [`WorkerBuilder::dangerously_skip_verify_server_certs`]
+    /// has been called on this builder, a `true` will provided to [`TlsStream::connect_with_native_certs`](crate::rustls::TlsStream::connect_with_native_certs)
+    /// as an argument for `dangerously_skip_verify`.
+    /// 
     /// Note that if you use this method on the builder, but eventually use [`WorkerBuilder::connect_with`]
     /// (rather than [`WorkerBuilder::connect`]) to create an instance of [`Worker`], this worker
     /// will be connected to the Faktory server with the stream you've provided to `connect_with`.
