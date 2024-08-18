@@ -5,6 +5,7 @@ use std::{
     env,
     sync::{self, Arc},
 };
+use tokio::io::BufStream;
 use tokio_rustls::rustls::{ClientConfig, SignatureScheme};
 use url::Url;
 
@@ -39,12 +40,13 @@ async fn roundtrip_tls() {
             .with_custom_certificate_verifier(Arc::new(verifier))
             .with_no_client_auth();
 
-        TlsStream::with_client_config(
+        let stream = TlsStream::with_client_config(
             client_config,
             Some(&env::var("FAKTORY_URL_SECURE").unwrap()),
         )
         .await
-        .unwrap()
+        .unwrap();
+        BufStream::new(stream)
     };
 
     let password = Url::parse(&env::var("FAKTORY_URL_SECURE").expect("faktory url to be set..."))

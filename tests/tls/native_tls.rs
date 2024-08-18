@@ -2,6 +2,7 @@ use faktory::native_tls::TlsStream;
 use faktory::{Client, Job, Worker, WorkerId};
 use serde_json::Value;
 use std::{env, sync};
+use tokio::io::BufStream;
 use url::Url;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -27,9 +28,11 @@ async fn roundtrip_tls() {
             .danger_accept_invalid_certs(true)
             .build()
             .unwrap();
-        TlsStream::with_connector(connector, Some(&env::var("FAKTORY_URL_SECURE").unwrap()))
-            .await
-            .unwrap()
+        let stream =
+            TlsStream::with_connector(connector, Some(&env::var("FAKTORY_URL_SECURE").unwrap()))
+                .await
+                .unwrap();
+        BufStream::new(stream)
     };
 
     let password = Url::parse(&env::var("FAKTORY_URL_SECURE").expect("faktory url to be set..."))

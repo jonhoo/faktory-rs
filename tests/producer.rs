@@ -1,12 +1,13 @@
 mod mock;
 
 use faktory::*;
+use tokio::io::BufStream;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn hello() {
     let mut s = mock::Stream::default();
-
-    let p = Client::connect_with(s.clone(), None).await.unwrap();
+    let buffered = BufStream::new(s.clone());
+    let p = Client::connect_with(buffered, None).await.unwrap();
     let written = s.pop_bytes_written(0);
     assert!(written.starts_with(b"HELLO {"));
     let written: serde_json::Value = serde_json::from_slice(&written[b"HELLO ".len()..]).unwrap();
@@ -25,8 +26,8 @@ async fn hello() {
 #[tokio::test(flavor = "multi_thread")]
 async fn hello_pwd() {
     let mut s = mock::Stream::with_salt(1545, "55104dc76695721d");
-
-    let c = Client::connect_with(s.clone(), Some("foobar".to_string()))
+    let buffered = BufStream::new(s.clone());
+    let c = Client::connect_with(buffered, Some("foobar".to_string()))
         .await
         .unwrap();
     let written = s.pop_bytes_written(0);
@@ -44,7 +45,8 @@ async fn hello_pwd() {
 #[tokio::test(flavor = "multi_thread")]
 async fn enqueue() {
     let mut s = mock::Stream::default();
-    let mut p = Client::connect_with(s.clone(), None).await.unwrap();
+    let buffered = BufStream::new(s.clone());
+    let mut p = Client::connect_with(buffered, None).await.unwrap();
     s.ignore(0);
 
     s.ok(0);
@@ -85,7 +87,8 @@ async fn enqueue() {
 #[tokio::test(flavor = "multi_thread")]
 async fn queue_control() {
     let mut s = mock::Stream::default();
-    let mut p = Client::connect_with(s.clone(), None).await.unwrap();
+    let buffered = BufStream::new(s.clone());
+    let mut p = Client::connect_with(buffered, None).await.unwrap();
     s.ignore(0);
 
     s.ok(0);

@@ -24,8 +24,9 @@ use tokio_native_tls::{native_tls::TlsConnector, TlsConnector as AsyncTlsConnect
 /// use faktory::native_tls::TlsStream;
 /// use tokio::io::BufStream;
 ///
-/// let tls = TlsStream::connect(None).await.unwrap();
-/// let cl = Client::connect_with(tls, None).await.unwrap();
+/// let stream = TlsStream::connect(None).await.unwrap();
+/// let buffered = BufStream::new(stream);
+/// let cl = Client::connect_with(buffered, None).await.unwrap();
 /// # drop(cl);
 /// # });
 /// ```

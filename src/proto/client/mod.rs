@@ -10,7 +10,7 @@ use super::{utils, PushBulk};
 use crate::error::{self, Error};
 use crate::{Job, Reconnect, WorkerId};
 use std::collections::HashMap;
-use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, BufStream};
+use tokio::io::{AsyncBufRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
 mod options;
@@ -186,23 +186,9 @@ pub(crate) enum HeartbeatStatus {
 impl Client {
     /// Create new [`Client`] and connect to a Faktory server with a non-standard stream.
     ///
-    /// Iternally, the `stream` will be buffered. In case you've got a `stream` that is _already_
-    /// buffered (and so it is `AsyncBufRead`), you will want to use [`Client::connect_with_buffered`]
-    /// in order to avoid buffering the stream twice.
+    /// In case you've got a `stream` that doesn't already implement `AsyncBufRead`, you will
+    /// want to wrap it in `tokio::io::BufStream`.
     pub async fn connect_with<S>(stream: S, pwd: Option<String>) -> Result<Client, Error>
-    where
-        S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
-        BufStream<S>: Reconnect,
-    {
-        let stream = BufStream::new(stream);
-        Client::connect_with_buffered(stream, pwd).await
-    }
-
-    /// Create new [`Client`] and connect to a Faktory server with a non-standard buffered stream.
-    ///
-    /// In case you've got a `stream` that is _not_ buffered just yet, you may want to use [`Client::connect_with`]
-    /// that will do this buffering for you.
-    pub async fn connect_with_buffered<S>(stream: S, pwd: Option<String>) -> Result<Client, Error>
     where
         S: AsyncBufRead + AsyncWrite + Reconnect + Send + Sync + Unpin + 'static,
     {
@@ -229,7 +215,8 @@ impl Client {
     pub async fn connect(url: Option<&str>) -> Result<Client, Error> {
         let url = utils::parse_provided_or_from_env(url)?;
         let stream = TokioStream::connect(utils::host_from_url(&url)).await?;
-        Self::connect_with(stream, url.password().map(|p| p.to_string())).await
+        let buffered_stream = BufStream::new(stream);
+        Self::connect_with(buffered_stream, url.password().map(|p| p.to_string())).await
     }
 }
 
