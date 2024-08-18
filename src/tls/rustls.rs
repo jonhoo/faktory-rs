@@ -76,7 +76,7 @@ impl TlsStream<TokioTcpStream> {
     /// Create a new TLS connection over TCP using native certificates.
     ///
     /// Unlike [`TlsStream::connect`], creates a root certificates store populated with the certificates
-    /// loaded from a platform-native certificate store. Thos method also allows to ***dangerously***
+    /// loaded from a platform-native certificate store. Thos method also allows to **dangerously**
     /// skip server certificates verification.
     pub async fn connect_with_native_certs(
         url: Option<&str>,
