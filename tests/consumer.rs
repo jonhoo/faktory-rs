@@ -77,7 +77,7 @@ async fn hello() {
         .add_to_labels(["will".to_string()])
         .add_to_labels(["be".to_string(), "added".to_string()])
         .register_fn("never_called", |_j: Job| async move { unreachable!() })
-        .connect_with(s.clone(), None)
+        .connect_with(BufStream::new(s.clone()), None)
         .await
         .unwrap();
     let written = s.pop_bytes_written(0);
@@ -104,7 +104,7 @@ async fn hello_pwd() {
     let mut s = mock::Stream::with_salt(1545, "55104dc76695721d");
     let w: Worker<io::Error> = WorkerBuilder::default()
         .register_fn("never_called", |_j: Job| async move { unreachable!() })
-        .connect_with_buffered(BufStream::new(s.clone()), Some("foobar".to_string()))
+        .connect_with(BufStream::new(s.clone()), Some("foobar".to_string()))
         .await
         .unwrap();
     let written = s.pop_bytes_written(0);
@@ -126,7 +126,7 @@ async fn dequeue() {
             assert_eq!(job.args(), &["z"]);
             Ok::<(), io::Error>(())
         })
-        .connect_with(s.clone(), None)
+        .connect_with(BufStream::new(s.clone()), None)
         .await
         .unwrap();
     s.ignore(0);
@@ -167,7 +167,7 @@ async fn dequeue_first_empty() {
             assert_eq!(job.args(), &["z"]);
             Ok::<(), io::Error>(())
         })
-        .connect_with(s.clone(), None)
+        .connect_with(BufStream::new(s.clone()), None)
         .await
         .unwrap();
     s.ignore(0);
@@ -226,7 +226,7 @@ async fn well_behaved() {
             sleep(Duration::from_secs(7)).await;
             Ok::<(), io::Error>(())
         })
-        .connect_with(s.clone(), None)
+        .connect_with(BufStream::new(s.clone()), None)
         .await
         .unwrap();
     s.ignore(0);
@@ -295,7 +295,7 @@ async fn no_first_job() {
             sleep(Duration::from_secs(7)).await;
             Ok::<(), io::Error>(())
         })
-        .connect_with(s.clone(), None)
+        .connect_with(BufStream::new(s.clone()), None)
         .await
         .unwrap();
     s.ignore(0);
@@ -366,7 +366,7 @@ async fn well_behaved_many() {
             sleep(Duration::from_secs(7)).await;
             Ok::<(), io::Error>(())
         })
-        .connect_with(s.clone(), None)
+        .connect_with(BufStream::new(s.clone()), None)
         .await
         .unwrap();
     s.ignore(0);
@@ -451,7 +451,7 @@ async fn terminate() {
                 sleep(Duration::from_secs(5)).await;
             }
         })
-        .connect_with(s.clone(), None)
+        .connect_with(BufStream::new(s.clone()), None)
         .await
         .unwrap();
 
@@ -569,7 +569,7 @@ async fn heart_broken() {
             sleep(Duration::from_secs(7)).await;
             Ok(())
         })
-        .connect_with(s.clone(), None)
+        .connect_with(BufStream::new(s.clone()), None)
         .await
         .unwrap();
 

@@ -5,7 +5,7 @@ use crate::{
 };
 use std::future::Future;
 use std::time::Duration;
-use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, BufStream};
+use tokio::io::{AsyncBufRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -280,23 +280,9 @@ impl<E: 'static> WorkerBuilder<E> {
 
     /// Connect to a Faktory server with a non-standard stream.
     ///
-    /// Iternally, the `stream` will be buffered. In case you've got a `stream` that is _already_
-    /// buffered (and so it is `AsyncBufRead`), you will want to use [`WorkerBuilder::connect_with_buffered`]
-    /// in order to avoid buffering the stream twice.
-    pub async fn connect_with<S>(self, stream: S, pwd: Option<String>) -> Result<Worker<E>, Error>
-    where
-        S: AsyncRead + AsyncWrite + Send + Sync + Unpin + 'static,
-        BufStream<S>: Reconnect,
-    {
-        let stream = BufStream::new(stream);
-        WorkerBuilder::connect_with_buffered(self, stream, pwd).await
-    }
-
-    /// Connect to a Faktory server with a non-standard buffered stream.
-    ///
-    /// In case you've got a `stream` that is _not_ buffered just yet, you may want to use
-    /// [`WorkerBuilder::connect_with`] that will do this buffering for you.
-    pub async fn connect_with_buffered<S>(
+    /// In case you've got a `stream` that doesn't already implement `AsyncBufRead`, you will
+    /// want to wrap it in `tokio::io::BufStream`.
+    pub async fn connect_with<S>(
         mut self,
         stream: S,
         pwd: Option<String>,
@@ -337,17 +323,20 @@ impl<E: 'static> WorkerBuilder<E> {
             TlsKind::None => {
                 let addr = utils::host_from_url(&parsed_url);
                 let stream = TokioStream::connect(addr).await?;
-                self.connect_with(stream, password).await
+                let buffered = BufStream::new(stream);
+                self.connect_with(buffered, password).await
             }
             #[cfg(feature = "rustls")]
             TlsKind::Rust => {
                 let stream = crate::rustls::TlsStream::connect_with_native_certs(url).await?;
-                self.connect_with(stream, password).await
+                let buffered = BufStream::new(stream);
+                self.connect_with(buffered, password).await
             }
             #[cfg(feature = "native_tls")]
             TlsKind::Native => {
                 let stream = crate::native_tls::TlsStream::connect(url).await?;
-                self.connect_with(stream, password).await
+                let buffered = BufStream::new(stream);
+                self.connect_with(buffered, password).await
             }
         }
     }
