@@ -730,14 +730,10 @@ async fn test_panic_in_handler() {
 
     let mut w = Worker::builder::<io::Error>()
         .register_blocking_fn("panic_SYNC_handler", |_j| {
-            panic!("Panic inside the handler...");
+            panic!("Panic inside sync the handler...");
         })
-        .register_fn("panic_ASYNC_handler", |j| async move {
-            // potentially going out of bounds
-            let arg1 = &j.args()[0];
-            let arg2 = &j.args()[1];
-            let _ = arg1.as_i64().unwrap() + arg2.as_i64().unwrap();
-            Ok::<(), io::Error>(())
+        .register_fn("panic_ASYNC_handler", |_j| async move {
+            panic!("Panic inside async handler...");
         })
         .connect(None)
         .await
@@ -745,8 +741,6 @@ async fn test_panic_in_handler() {
 
     let mut c = Client::connect(None).await.unwrap();
 
-    // note how we are not specifying any args for this job,
-    // so indexing into `job.args()` will panic
     c.enqueue(Job::builder("panic_SYNC_handler").queue(local).build())
         .await
         .unwrap();
