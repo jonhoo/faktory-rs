@@ -32,9 +32,6 @@ pub struct WorkerBuilder<E> {
     shutdown_timeout: Option<Duration>,
     shutdown_signal: Option<ShutdownSignal>,
     tls_kind: TlsKind,
-    #[cfg(any(feature = "native_tls", feature = "rustls"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "native_tls", feature = "rustls"))))]
-    verify_server_cert: bool,
 }
 
 impl<E> Default for WorkerBuilder<E> {
@@ -56,9 +53,6 @@ impl<E> Default for WorkerBuilder<E> {
             shutdown_timeout: None,
             shutdown_signal: None,
             tls_kind: TlsKind::None,
-            #[cfg(any(feature = "native_tls", feature = "rustls"))]
-            #[cfg_attr(docsrs, doc(cfg(any(feature = "native_tls", feature = "rustls"))))]
-            verify_server_cert: true,
         }
     }
 }
@@ -258,9 +252,7 @@ impl<E: 'static> WorkerBuilder<E> {
     /// _SecureTransport_ on OSX, and _OpenSSL_ on other platforms.
     ///
     /// Internally, will use [`TlsStream::connect`](crate::native_tls::TlsStream::connect) to establish
-    /// a TLS stream to the Faktory server. If [`WorkerBuilder::dangerously_without_cert_verification`]
-    /// has been called on this builder, [`TlsStream::connect_dangerously_skipping_verification`](crate::native_tls::TlsStream::connect_dangerously_skipping_verification)
-    /// will be used.
+    /// a TLS stream to the Faktory server.
     ///
     /// Note that if you use this method on the builder, but eventually use [`WorkerBuilder::connect_with`]
     /// (rather than [`WorkerBuilder::connect`]) to create an instance of [`Worker`], this worker
@@ -275,9 +267,7 @@ impl<E: 'static> WorkerBuilder<E> {
     /// Make the traffic between this worker and Faktory encrypted with [`rustls`](https://github.com/rustls/rustls).
     ///
     /// Internally, will use [`TlsStream::connect_with_native_certs`](crate::rustls::TlsStream::connect_with_native_certs)
-    /// to establish a TLS stream to the Faktory server. If [`WorkerBuilder::dangerously_without_cert_verification`]
-    /// has been called on this builder, a `true` will provided to [`TlsStream::connect_with_native_certs`](crate::rustls::TlsStream::connect_with_native_certs)
-    /// as an argument for `dangerously_skip_verify`.
+    /// to establish a TLS stream to the Faktory server.
     ///
     /// Note that if you use this method on the builder, but eventually use [`WorkerBuilder::connect_with`]
     /// (rather than [`WorkerBuilder::connect`]) to create an instance of [`Worker`], this worker
@@ -286,14 +276,6 @@ impl<E: 'static> WorkerBuilder<E> {
     #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
     pub fn with_rustls(mut self) -> Self {
         self.tls_kind = TlsKind::Rust;
-        self
-    }
-
-    /// Do not verify the server certificate.
-    #[cfg(any(feature = "native_tls", feature = "rustls"))]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "native_tls", feature = "rustls"))))]
-    pub fn dangerously_without_cert_verification(mut self) -> Self {
-        self.verify_server_cert = false;
         self
     }
 
@@ -360,21 +342,12 @@ impl<E: 'static> WorkerBuilder<E> {
             }
             #[cfg(feature = "rustls")]
             TlsKind::Rust => {
-                let stream = crate::rustls::TlsStream::connect_with_native_certs(
-                    url,
-                    !self.verify_server_cert,
-                )
-                .await?;
+                let stream = crate::rustls::TlsStream::connect_with_native_certs(url).await?;
                 self.connect_with(stream, password).await
             }
             #[cfg(feature = "native_tls")]
             TlsKind::Native => {
-                let stream = if self.verify_server_cert {
-                    crate::native_tls::TlsStream::connect(url).await?
-                } else {
-                    crate::native_tls::TlsStream::connect_dangerously_skipping_verification(url)
-                        .await?
-                };
+                let stream = crate::native_tls::TlsStream::connect(url).await?;
                 self.connect_with(stream, password).await
             }
         }

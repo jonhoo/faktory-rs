@@ -3,20 +3,13 @@ use crate::{Client, WorkerBuilder};
 
 use crate::proto::{self, utils};
 use crate::{Error, Reconnect};
-use rustls_pki_types::{CertificateDer, ServerName, UnixTime};
 use std::io;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioTcpStream;
 use tokio_rustls::client::TlsStream as RustlsStream;
-use tokio_rustls::rustls::client::danger::{
-    HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
-};
-use tokio_rustls::rustls::{
-    client::WebPkiServerVerifier, ClientConfig, DigitallySignedStruct, Error as RustlsError,
-    RootCertStore, SignatureScheme,
-};
+use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_rustls::TlsConnector;
 
 /// A reconnectable stream encrypted with TLS.
@@ -75,34 +68,16 @@ impl TlsStream<TokioTcpStream> {
 
     /// Create a new TLS connection over TCP using native certificates.
     ///
-    /// Unlike [`TlsStream::connect`], creates a root certificates store populated with the certificates
-    /// loaded from a platform-native certificate store. Thos method also allows to **dangerously**
-    /// skip server certificates verification.
-    pub async fn connect_with_native_certs(
-        url: Option<&str>,
-        dangerously_skip_verify: bool,
-    ) -> Result<Self, Error> {
+    /// Unlike [`TlsStream::connect`], creates a root certificates store populated
+    /// with the certificates loaded from a platform-native certificate store.
+    pub async fn connect_with_native_certs(url: Option<&str>) -> Result<Self, Error> {
         let mut store = RootCertStore::empty();
         for cert in rustls_native_certs::load_native_certs()? {
             store.add(cert).map_err(io::Error::other)?;
         }
-
-        let config = if dangerously_skip_verify {
-            let cert_verifier = WebPkiServerVerifier::builder(Arc::new(store.clone()))
-                .build()
-                .expect("can construct standard verifier");
-            let mut config = ClientConfig::builder()
-                .with_root_certificates(store)
-                .with_no_client_auth();
-            config
-                .dangerous()
-                .set_certificate_verifier(Arc::new(NoCertVerification(cert_verifier)));
-            config
-        } else {
-            ClientConfig::builder()
-                .with_root_certificates(store)
-                .with_no_client_auth()
-        };
+        let config = ClientConfig::builder()
+            .with_root_certificates(store)
+            .with_no_client_auth();
         TlsStream::with_connector(TlsConnector::from(Arc::new(config)), url).await
     }
 
@@ -162,44 +137,6 @@ where
             hostname,
             stream: tls_stream,
         })
-    }
-}
-
-#[derive(Debug)]
-struct NoCertVerification(Arc<WebPkiServerVerifier>);
-
-impl ServerCertVerifier for NoCertVerification {
-    fn verify_server_cert(
-        &self,
-        _: &CertificateDer<'_>,
-        _: &[CertificateDer<'_>],
-        _: &ServerName<'_>,
-        _: &[u8],
-        _: UnixTime,
-    ) -> Result<ServerCertVerified, RustlsError> {
-        Ok(ServerCertVerified::assertion())
-    }
-
-    fn verify_tls12_signature(
-        &self,
-        message: &[u8],
-        cert: &rustls_pki_types::CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, RustlsError> {
-        self.0.verify_tls12_signature(message, cert, dss)
-    }
-
-    fn verify_tls13_signature(
-        &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, RustlsError> {
-        self.0.verify_tls13_signature(message, cert, dss)
-    }
-
-    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        self.0.supported_verify_schemes()
     }
 }
 

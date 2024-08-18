@@ -62,24 +62,6 @@ impl TlsStream<TokioTcpStream> {
         .await
     }
 
-    /// Create a new TLS connection over TCP **dangerously** skipping TLS verification.
-    ///
-    /// Similar to [`TlsStream::connect`], but accepting invalid server certificates and
-    /// invalid hostnames.
-    pub async fn connect_dangerously_skipping_verification(
-        url: Option<&str>,
-    ) -> Result<Self, Error> {
-        TlsStream::with_connector(
-            TlsConnector::builder()
-                .danger_accept_invalid_certs(true)
-                .danger_accept_invalid_hostnames(true)
-                .build()
-                .map_err(error::Stream::NativeTls)?,
-            url,
-        )
-        .await
-    }
-
     /// Create a new TLS connection over TCP using a non-default TLS configuration.
     ///
     /// See `connect` for details about the `url` parameter.

@@ -1,5 +1,5 @@
 use faktory::rustls::TlsStream;
-use faktory::{Client, Job, Worker, WorkerBuilder, WorkerId};
+use faktory::{Client, Job, Worker, WorkerId};
 use serde_json::Value;
 use std::{
     env,
@@ -52,7 +52,7 @@ async fn roundtrip_tls() {
         .password()
         .map(|p| p.to_string());
 
-    let mut worker = WorkerBuilder::default()
+    let mut worker = Worker::builder()
         .hostname("tester".to_string())
         .wid(WorkerId::new(local))
         .register(local, fixtures::JobHandler::new(tx))
@@ -62,39 +62,6 @@ async fn roundtrip_tls() {
 
     // "one-shot" client
     Client::connect_with(tls().await, password)
-        .await
-        .unwrap()
-        .enqueue(Job::new(local, vec!["z"]).on_queue(local))
-        .await
-        .unwrap();
-
-    worker.run_one(0, &[local]).await.unwrap();
-
-    let job = rx.recv().unwrap();
-    assert_eq!(job.queue, local);
-    assert_eq!(job.kind(), local);
-    assert_eq!(job.args(), &[Value::from("z")]);
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn roundtrip_tls_with_worker_builder() {
-    if env::var_os("FAKTORY_URL_SECURE").is_none() {
-        return;
-    }
-
-    let local = "roundtrip_tls_with_worker_builder";
-    let (tx, rx) = sync::mpsc::channel();
-
-    let mut worker = Worker::builder()
-        .register(local, fixtures::JobHandler::new(tx))
-        .with_rustls()
-        .dangerously_without_cert_verification()
-        .connect(Some(&env::var("FAKTORY_URL_SECURE").unwrap()))
-        .await
-        .unwrap();
-
-    // "one-shot" producer
-    Client::connect(Some(&env::var("FAKTORY_URL").unwrap()))
         .await
         .unwrap()
         .enqueue(Job::new(local, vec!["z"]).on_queue(local))
