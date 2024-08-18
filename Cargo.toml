@@ -19,7 +19,6 @@ native_tls = ["dep:pin-project", "dep:tokio-native-tls"]
 rustls = [
     "dep:pin-project",
     "dep:tokio-rustls",
-    "dep:rustls-pki-types",
     "dep:rustls-native-certs",
 ]
 binaries = ["dep:clap", "tokio/macros"]
