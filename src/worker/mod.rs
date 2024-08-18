@@ -8,7 +8,7 @@ use std::process;
 use std::sync::{atomic, Arc};
 use std::time::Duration;
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
-use tokio::task::{spawn_blocking, AbortHandle, JoinError, JoinSet};
+use tokio::task::{spawn, spawn_blocking, AbortHandle, JoinError, JoinSet};
 use tokio::time::sleep as tokio_sleep;
 
 mod builder;
@@ -29,7 +29,7 @@ type ShutdownSignal = Pin<Box<dyn Future<Output = ()> + 'static + Send>>;
 
 pub(crate) enum Callback<E> {
     Async(runner::BoxedJobRunner<E>),
-    Sync(Arc<dyn Fn(Job) -> Result<(), E> + Sync + Send + 'static>),
+    Sync(Box<dyn Fn(Job) -> Result<(), E> + Sync + Send + 'static>),
 }
 
 type CallbacksRegistry<E> = FnvHashMap<String, Callback<E>>;
@@ -222,31 +222,37 @@ impl<E: StdError + 'static + Send> Worker<E> {
     async fn run_job(&mut self, job: Job) -> Result<(), Failed<E, JoinError>> {
         let handler = self
             .callbacks
-            .get(job.kind())
+            .get(&job.kind)
             .ok_or(Failed::BadJobType(job.kind().to_string()))?;
-        match handler {
+        let spawning_result = match handler {
             Callback::Async(_) => {
                 let callbacks = self.callbacks.clone();
-                let process = async move {
-                    let cb = callbacks.get(job.kind()).unwrap();
-                    if let Callback::Async(cb) = cb {
+                let processing_task = async move {
+                    let callback = callbacks.get(&job.kind).unwrap();
+                    if let Callback::Async(cb) = callback {
                         cb.run(job).await
                     } else {
                         unreachable!()
                     }
                 };
-                match tokio::spawn(process).await {
-                    Err(join_error) => Err(Failed::HandlerPanic(join_error)),
-                    Ok(processing_result) => processing_result.map_err(Failed::Application),
-                }
+                spawn(processing_task).await
             }
-            Callback::Sync(cb) => {
-                let cb = Arc::clone(cb);
-                match spawn_blocking(move || cb(job)).await {
-                    Err(join_error) => Err(Failed::HandlerPanic(join_error)),
-                    Ok(processing_result) => processing_result.map_err(Failed::Application),
-                }
+            Callback::Sync(_) => {
+                let callbacks = self.callbacks.clone();
+                let processing_task = move || {
+                    let callback = callbacks.get(&job.kind).unwrap();
+                    if let Callback::Sync(cb) = callback {
+                        cb(job)
+                    } else {
+                        unreachable!()
+                    }
+                };
+                spawn_blocking(processing_task).await
             }
+        };
+        match spawning_result {
+            Err(join_error) => Err(Failed::HandlerPanic(join_error)),
+            Ok(processing_result) => processing_result.map_err(Failed::Application),
         }
     }
 

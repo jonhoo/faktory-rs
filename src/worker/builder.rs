@@ -4,7 +4,6 @@ use crate::{
     Error, Job, JobRunner, Reconnect, WorkerId,
 };
 use std::future::Future;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
@@ -225,7 +224,7 @@ impl<E: 'static> WorkerBuilder<E> {
         H: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
     {
         self.callbacks
-            .insert(kind.into(), super::Callback::Sync(Arc::new(handler)));
+            .insert(kind.into(), super::Callback::Sync(Box::new(handler)));
         self
     }
 
