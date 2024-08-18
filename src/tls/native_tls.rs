@@ -62,7 +62,7 @@ impl TlsStream<TokioTcpStream> {
         .await
     }
 
-    /// Create a new TLS connection over TCP ***dangerously*** skipping TLS verification.
+    /// Create a new TLS connection over TCP **dangerously** skipping TLS verification.
     ///
     /// Similar to [`TlsStream::connect`], but accepting invalid server certificates and
     /// invalid hostnames.
