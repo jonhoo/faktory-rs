@@ -1,5 +1,5 @@
 use faktory::rustls::TlsStream;
-use faktory::{Client, Job, WorkerBuilder, WorkerId};
+use faktory::{Client, Job, Worker, WorkerId};
 use serde_json::Value;
 use std::{
     env,
@@ -27,7 +27,7 @@ async fn roundtrip_tls() {
 
     let tls = || async {
         let verifier = fixtures::TestServerCertVerifier::new(
-            SignatureScheme::RSA_PSS_SHA512,
+            SignatureScheme::ECDSA_NISTP384_SHA384,
             env::current_dir()
                 .unwrap()
                 .join("docker")
@@ -52,7 +52,7 @@ async fn roundtrip_tls() {
         .password()
         .map(|p| p.to_string());
 
-    let mut worker = WorkerBuilder::default()
+    let mut worker = Worker::builder()
         .hostname("tester".to_string())
         .wid(WorkerId::new(local))
         .register(local, fixtures::JobHandler::new(tx))

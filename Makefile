@@ -59,6 +59,7 @@ test/e2e:
 .PHONY: test/e2e/tls
 test/e2e/tls:
 	FAKTORY_URL_SECURE=tcp://:${FAKTORY_PASSWORD}@${FAKTORY_HOST}:${FAKTORY_PORT_SECURE} \
+	FAKTORY_URL=tcp://:${FAKTORY_PASSWORD}@${FAKTORY_HOST}:${FAKTORY_PORT} \
 	cargo test --locked --features native_tls,rustls --test tls -- --nocapture
 
 .PHONY: test/load

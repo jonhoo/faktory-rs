@@ -33,4 +33,5 @@ jobs:
       - name: Run tests
         env:
           FAKTORY_URL_SECURE: tcp://:uredinales@localhost:17419
+          FAKTORY_URL: tcp://:uredinales@localhost:7419
         run: cargo test --locked --features native_tls,rustls --test tls

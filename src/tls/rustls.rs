@@ -54,8 +54,8 @@ impl TlsStream<TokioTcpStream> {
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
     ///
-    /// Internally creates a `ClientConfig` with an empty root certificates store and no client
-    /// authentication. Use [`with_client_config`](TlsStream::with_client_config)
+    /// Internally creates a `ClientConfig` with an _empty_ root certificates store and _no client
+    /// authentication_. Use [`with_client_config`](TlsStream::with_client_config)
     /// or [`with_connector`](TlsStream::with_connector) for customized
     /// `ClientConfig` and `TlsConnector` accordingly.
     pub async fn connect(url: Option<&str>) -> Result<Self, Error> {
@@ -64,6 +64,21 @@ impl TlsStream<TokioTcpStream> {
             .with_no_client_auth();
         let con = TlsConnector::from(Arc::new(conf));
         TlsStream::with_connector(con, url).await
+    }
+
+    /// Create a new TLS connection over TCP using native certificates.
+    ///
+    /// Unlike [`TlsStream::connect`], creates a root certificates store populated
+    /// with the certificates loaded from a platform-native certificate store.
+    pub async fn connect_with_native_certs(url: Option<&str>) -> Result<Self, Error> {
+        let mut store = RootCertStore::empty();
+        for cert in rustls_native_certs::load_native_certs()? {
+            store.add(cert).map_err(io::Error::other)?;
+        }
+        let config = ClientConfig::builder()
+            .with_root_certificates(store)
+            .with_no_client_auth();
+        TlsStream::with_connector(TlsConnector::from(Arc::new(config)), url).await
     }
 
     /// Create a new TLS connection over TCP using a non-default TLS configuration.
@@ -96,7 +111,9 @@ where
     /// Create a new TLS connection on an existing stream.
     ///
     /// Internally creates a `ClientConfig` with an empty root certificates store and no client
-    /// authentication. Use [`new`](TlsStream::new) for a customized `TlsConnector`.
+    /// authentication.
+    ///
+    /// Use [`new`](TlsStream::new) for a customized `TlsConnector`.
     pub async fn default(stream: S, hostname: String) -> io::Result<Self> {
         let conf = ClientConfig::builder()
             .with_root_certificates(RootCertStore::empty())
