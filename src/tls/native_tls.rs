@@ -2,11 +2,11 @@
 use crate::{Client, WorkerBuilder};
 
 use crate::error::{self, Error};
-use crate::proto::utils;
+use crate::proto::{self, utils};
 use crate::Reconnect;
 use std::io;
 use std::ops::{Deref, DerefMut};
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioTcpStream;
 use tokio_native_tls::TlsStream as NativeTlsStream;
 use tokio_native_tls::{native_tls::TlsConnector, TlsConnector as AsyncTlsConnector};
@@ -22,8 +22,11 @@ use tokio_native_tls::{native_tls::TlsConnector, TlsConnector as AsyncTlsConnect
 /// # tokio_test::block_on(async {
 /// use faktory::Client;
 /// use faktory::native_tls::TlsStream;
-/// let tls = TlsStream::connect(None).await.unwrap();
-/// let cl = Client::connect_with(tls, None).await.unwrap();
+/// use tokio::io::BufStream;
+///
+/// let stream = TlsStream::connect(None).await.unwrap();
+/// let buffered = BufStream::new(stream);
+/// let cl = Client::connect_with(buffered, None).await.unwrap();
 /// # drop(cl);
 /// # });
 /// ```
@@ -111,19 +114,46 @@ where
 }
 
 #[async_trait::async_trait]
-impl<S> Reconnect for TlsStream<S>
-where
-    S: AsyncRead + AsyncWrite + Send + Unpin + Reconnect,
-{
-    async fn reconnect(&mut self) -> io::Result<Self> {
+impl Reconnect for BufStream<TlsStream<tokio::net::TcpStream>> {
+    async fn reconnect(&mut self) -> io::Result<proto::BoxedConnection> {
         let stream = self
+            .get_mut()
             .stream
             .get_mut()
             .get_mut()
             .get_mut()
             .reconnect()
             .await?;
-        Self::new(stream, self.connector.clone(), self.hostname.clone()).await
+        let res = TlsStream::new(
+            stream,
+            self.get_ref().connector.clone(),
+            self.get_ref().hostname.clone(),
+        )
+        .await?;
+        let buffered = BufStream::new(res);
+        Ok(Box::new(buffered))
+    }
+}
+
+#[async_trait::async_trait]
+impl Reconnect for BufStream<TlsStream<proto::BoxedConnection>> {
+    async fn reconnect(&mut self) -> io::Result<proto::BoxedConnection> {
+        let stream = self
+            .get_mut()
+            .stream
+            .get_mut()
+            .get_mut()
+            .get_mut()
+            .reconnect()
+            .await?;
+        let res = TlsStream::new(
+            stream,
+            self.get_ref().connector.clone(),
+            self.get_ref().hostname.clone(),
+        )
+        .await?;
+        let buffered = BufStream::new(res);
+        Ok(Box::new(buffered))
     }
 }
 

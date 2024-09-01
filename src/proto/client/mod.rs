@@ -5,16 +5,20 @@ mod ent;
 #[cfg(doc)]
 use crate::proto::{BatchStatus, Progress, ProgressUpdate};
 
-use super::{single, Info, Push, QueueAction, QueueControl, Reconnect};
+use super::{single, Info, Push, QueueAction, QueueControl};
 use super::{utils, PushBulk};
 use crate::error::{self, Error};
-use crate::{Job, WorkerId};
+use crate::{Job, Reconnect, WorkerId};
 use std::collections::HashMap;
-use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, BufStream};
+use tokio::io::{AsyncBufRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
 
 mod options;
 pub(crate) use options::ClientOptions;
+
+mod conn;
+pub(crate) use conn::BoxedConnection;
+pub use conn::Connection;
 
 pub(crate) const EXPECTED_PROTOCOL_VERSION: usize = 2;
 
@@ -120,14 +124,14 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// use faktory::{Client, JobId, ent::ProgressUpdateBuilder};
+/// use faktory::{Client, JobId, ent::ProgressUpdate};
 /// let jid = JobId::new("W8qyVle9vXzUWQOf");
 /// let mut cl = Client::connect(None).await?;
-/// let progress = ProgressUpdateBuilder::new(jid)
+/// let progress = ProgressUpdate::builder(jid)
 ///     .desc("Almost done...".to_owned())
 ///     .percent(99)
 ///     .build();
-/// cl.set_progress(progress).await?;
+/// cl.set_progress(&progress).await?;
 /// # Ok::<(), faktory::Error>(())
 /// });
 ///````
@@ -145,15 +149,11 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// # Ok::<(), faktory::Error>(())
 /// });
 /// ```
-pub struct Client<S: AsyncWrite + Unpin + Send> {
-    stream: S,
+pub struct Client {
+    stream: BoxedConnection,
     opts: ClientOptions,
 }
-
-impl<S> Client<S>
-where
-    S: AsyncBufRead + AsyncWrite + Unpin + Send + Reconnect,
-{
+impl Client {
     pub(crate) async fn connect_again(&mut self) -> Result<Self, Error> {
         let s = self.stream.reconnect().await?;
         Client::new(s, self.opts.clone()).await
@@ -165,10 +165,7 @@ where
     }
 }
 
-impl<S> Drop for Client<S>
-where
-    S: AsyncWrite + Unpin + Send,
-{
+impl Drop for Client {
     fn drop(&mut self) {
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
@@ -186,22 +183,24 @@ pub(crate) enum HeartbeatStatus {
     Quiet,
 }
 
-impl<S: AsyncRead + AsyncWrite + Send + Unpin> Client<BufStream<S>> {
+impl Client {
     /// Create new [`Client`] and connect to a Faktory server with a non-standard stream.
-    pub async fn connect_with(
-        stream: S,
-        pwd: Option<String>,
-    ) -> Result<Client<BufStream<S>>, Error> {
-        let buffered = BufStream::new(stream);
+    ///
+    /// In case you've got a `stream` that doesn't already implement `AsyncBufRead`, you will
+    /// want to wrap it in `tokio::io::BufStream`.
+    pub async fn connect_with<S>(stream: S, pwd: Option<String>) -> Result<Client, Error>
+    where
+        S: AsyncBufRead + AsyncWrite + Reconnect + Send + Sync + Unpin + 'static,
+    {
         let opts = ClientOptions {
             password: pwd,
             ..Default::default()
         };
-        Client::new(buffered, opts).await
+        Client::new(Box::new(stream), opts).await
     }
 }
 
-impl Client<BufStream<TokioStream>> {
+impl Client {
     /// Create new [`Client`] and connect to a Faktory server.
     ///
     /// If `url` is not given, will use the standard Faktory environment variables. Specifically,
@@ -213,17 +212,15 @@ impl Client<BufStream<TokioStream>> {
     /// ```text
     /// tcp://localhost:7419
     /// ```
-    pub async fn connect(url: Option<&str>) -> Result<Client<BufStream<TokioStream>>, Error> {
+    pub async fn connect(url: Option<&str>) -> Result<Client, Error> {
         let url = utils::parse_provided_or_from_env(url)?;
         let stream = TokioStream::connect(utils::host_from_url(&url)).await?;
-        Self::connect_with(stream, url.password().map(|p| p.to_string())).await
+        let buffered_stream = BufStream::new(stream);
+        Self::connect_with(buffered_stream, url.password().map(|p| p.to_string())).await
     }
 }
 
-impl<S> Client<S>
-where
-    S: AsyncBufRead + AsyncWrite + Unpin + Send,
-{
+impl Client {
     async fn init(&mut self) -> Result<(), Error> {
         let hi = single::read_hi(&mut self.stream).await?;
         check_protocols_match(hi.version)?;
@@ -264,7 +261,7 @@ where
         Ok(())
     }
 
-    pub(crate) async fn new(stream: S, opts: ClientOptions) -> Result<Client<S>, Error> {
+    pub(crate) async fn new(stream: BoxedConnection, opts: ClientOptions) -> Result<Client, Error> {
         let mut c = Client { stream, opts };
         c.init().await?;
         Ok(c)
@@ -273,7 +270,7 @@ where
     pub(crate) async fn issue<FC: single::FaktoryCommand>(
         &mut self,
         c: &FC,
-    ) -> Result<ReadToken<'_, S>, Error> {
+    ) -> Result<ReadToken<'_>, Error> {
         single::write_command(&mut self.stream, c).await?;
         Ok(ReadToken(self))
     }
@@ -328,10 +325,7 @@ where
     }
 }
 
-impl<S> Client<S>
-where
-    S: AsyncBufRead + AsyncWrite + Unpin + Send,
-{
+impl Client {
     /// Enqueue the given job on the Faktory server.
     ///
     /// Returns `Ok` if the job was successfully queued by the Faktory server.
@@ -435,11 +429,9 @@ where
     }
 }
 
-pub struct ReadToken<'a, S>(pub(crate) &'a mut Client<S>)
-where
-    S: AsyncWrite + Unpin + Send;
+pub struct ReadToken<'a>(pub(crate) &'a mut Client);
 
-impl<'a, S: AsyncBufRead + AsyncWrite + Unpin + Send> ReadToken<'a, S> {
+impl ReadToken<'_> {
     pub(crate) async fn read_ok(self) -> Result<(), Error> {
         single::read_ok(&mut self.0.stream).await
     }

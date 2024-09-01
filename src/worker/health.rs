@@ -5,15 +5,13 @@ use std::{
     sync::{atomic, Arc},
     time::{self, Duration},
 };
-use tokio::io::{AsyncBufRead, AsyncWrite};
 use tokio::time::sleep as tokio_sleep;
 
 const CHECK_STATE_INTERVAL: Duration = Duration::from_millis(100);
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 
-impl<S, E> Worker<S, E>
+impl<E> Worker<E>
 where
-    S: AsyncBufRead + AsyncWrite + Send + Unpin,
     E: StdError,
 {
     /// Send beats to Fakotry and quiet/terminate workers if signalled so.

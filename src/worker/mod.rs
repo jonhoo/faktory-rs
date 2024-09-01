@@ -1,4 +1,4 @@
-use super::proto::{Client, Reconnect};
+use super::proto::Client;
 use crate::error::Error;
 use crate::proto::{Ack, Fail, Job};
 use fnv::FnvHashMap;
@@ -8,9 +8,7 @@ use std::process;
 use std::sync::{atomic, Arc};
 use std::time::Duration;
 use std::{error::Error as StdError, sync::atomic::AtomicUsize};
-use tokio::io::{AsyncBufRead, AsyncWrite};
-use tokio::net::TcpStream;
-use tokio::task::{spawn_blocking, AbortHandle, JoinError, JoinSet};
+use tokio::task::{spawn, spawn_blocking, AbortHandle, JoinError, JoinSet};
 use tokio::time::sleep as tokio_sleep;
 
 mod builder;
@@ -31,7 +29,7 @@ type ShutdownSignal = Pin<Box<dyn Future<Output = ()> + 'static + Send>>;
 
 pub(crate) enum Callback<E> {
     Async(runner::BoxedJobRunner<E>),
-    Sync(Arc<dyn Fn(Job) -> Result<(), E> + Sync + Send + 'static>),
+    Sync(Box<dyn Fn(Job) -> Result<(), E> + Sync + Send + 'static>),
 }
 
 type CallbacksRegistry<E> = FnvHashMap<String, Callback<E>>;
@@ -131,8 +129,15 @@ type CallbacksRegistry<E> = FnvHashMap<String, Callback<E>>;
 ///     .await
 ///     .unwrap();
 ///
-/// if let Err(e) = w.run(&["default"]).await {
-///     println!("worker failed: {}", e);
+/// match w.run(&["default"]).await {
+///     Err(e) => println!("worker failed: {}", e),
+///     Ok(stop_details) => {
+///         println!(
+///            "Stop reason: {}, number of workers that were running: {}",
+///             stop_details.reason,
+///             stop_details.workers_still_running
+///         );
+///     }
 /// }
 /// # });
 /// ```
@@ -157,8 +162,8 @@ type CallbacksRegistry<E> = FnvHashMap<String, Callback<E>>;
 /// You can also register anything that implements [`JobRunner`] to handle jobs
 /// with [`register`](WorkerBuilder::register).
 ///
-pub struct Worker<S: AsyncWrite + Send + Unpin, E> {
-    c: Client<S>,
+pub struct Worker<E> {
+    c: Client,
     worker_states: Arc<state::WorkerStatesRegistry>,
     callbacks: Arc<CallbacksRegistry<E>>,
     terminated: bool,
@@ -170,7 +175,7 @@ pub struct Worker<S: AsyncWrite + Send + Unpin, E> {
     shutdown_signal: Option<ShutdownSignal>,
 }
 
-impl Worker<TcpStream, ()> {
+impl Worker<()> {
     /// Creates an ergonomic constructor for a new [`Worker`].
     ///
     /// Also equivalent to [`WorkerBuilder::default`].
@@ -179,15 +184,15 @@ impl Worker<TcpStream, ()> {
     }
 }
 
-impl<S: AsyncBufRead + AsyncWrite + Send + Unpin + Reconnect, E> Worker<S, E> {
+impl<E> Worker<E> {
     async fn reconnect(&mut self) -> Result<(), Error> {
         self.c.reconnect().await
     }
 }
 
-impl<S: AsyncWrite + Send + Unpin, E> Worker<S, E> {
-    async fn new(
-        c: Client<S>,
+impl<E> Worker<E> {
+    fn new(
+        c: Client,
         workers_count: usize,
         callbacks: CallbacksRegistry<E>,
         shutdown_timeout: Option<Duration>,
@@ -213,21 +218,41 @@ enum Failed<E: StdError, JE: StdError> {
     BadJobType(String),
 }
 
-impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> Worker<S, E> {
+impl<E: StdError + 'static + Send> Worker<E> {
     async fn run_job(&mut self, job: Job) -> Result<(), Failed<E, JoinError>> {
         let handler = self
             .callbacks
-            .get(job.kind())
+            .get(&job.kind)
             .ok_or(Failed::BadJobType(job.kind().to_string()))?;
-        match handler {
-            Callback::Async(cb) => cb.run(job).await.map_err(Failed::Application),
-            Callback::Sync(cb) => {
-                let cb = Arc::clone(cb);
-                match spawn_blocking(move || cb(job)).await {
-                    Err(join_error) => Err(Failed::HandlerPanic(join_error)),
-                    Ok(processing_result) => processing_result.map_err(Failed::Application),
-                }
+        let spawning_result = match handler {
+            Callback::Async(_) => {
+                let callbacks = self.callbacks.clone();
+                let processing_task = async move {
+                    let callback = callbacks.get(&job.kind).unwrap();
+                    if let Callback::Async(cb) = callback {
+                        cb.run(job).await
+                    } else {
+                        unreachable!()
+                    }
+                };
+                spawn(processing_task).await
             }
+            Callback::Sync(_) => {
+                let callbacks = self.callbacks.clone();
+                let processing_task = move || {
+                    let callback = callbacks.get(&job.kind).unwrap();
+                    if let Callback::Sync(cb) = callback {
+                        cb(job)
+                    } else {
+                        unreachable!()
+                    }
+                };
+                spawn_blocking(processing_task).await
+            }
+        };
+        match spawning_result {
+            Err(join_error) => Err(Failed::HandlerPanic(join_error)),
+            Ok(processing_result) => processing_result.map_err(Failed::Application),
         }
     }
 
@@ -338,11 +363,7 @@ impl<S: AsyncBufRead + AsyncWrite + Send + Unpin, E: StdError + 'static + Send> 
     }
 }
 
-impl<
-        S: AsyncBufRead + AsyncWrite + Reconnect + Send + Unpin + 'static,
-        E: StdError + 'static + Send,
-    > Worker<S, E>
-{
+impl<E: StdError + 'static + Send> Worker<E> {
     async fn for_worker(&mut self) -> Result<Self, Error> {
         Ok(Worker {
             // We actually only need:

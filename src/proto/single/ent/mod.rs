@@ -5,7 +5,7 @@ mod cmd;
 mod progress;
 mod utils;
 
-pub use cmd::Track;
+pub(crate) use cmd::FetchProgress;
 pub use progress::{JobState, Progress, ProgressUpdate, ProgressUpdateBuilder};
 
 impl JobBuilder {

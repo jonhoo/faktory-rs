@@ -1,10 +1,11 @@
 use faktory::rustls::TlsStream;
-use faktory::{Client, Job, WorkerBuilder, WorkerId};
+use faktory::{Client, Job, Worker, WorkerId};
 use serde_json::Value;
 use std::{
     env,
     sync::{self, Arc},
 };
+use tokio::io::BufStream;
 use tokio_rustls::rustls::{ClientConfig, SignatureScheme};
 use url::Url;
 
@@ -27,7 +28,7 @@ async fn roundtrip_tls() {
 
     let tls = || async {
         let verifier = fixtures::TestServerCertVerifier::new(
-            SignatureScheme::RSA_PSS_SHA512,
+            SignatureScheme::ECDSA_NISTP384_SHA384,
             env::current_dir()
                 .unwrap()
                 .join("docker")
@@ -39,12 +40,13 @@ async fn roundtrip_tls() {
             .with_custom_certificate_verifier(Arc::new(verifier))
             .with_no_client_auth();
 
-        TlsStream::with_client_config(
+        let stream = TlsStream::with_client_config(
             client_config,
             Some(&env::var("FAKTORY_URL_SECURE").unwrap()),
         )
         .await
-        .unwrap()
+        .unwrap();
+        BufStream::new(stream)
     };
 
     let password = Url::parse(&env::var("FAKTORY_URL_SECURE").expect("faktory url to be set..."))
@@ -52,7 +54,7 @@ async fn roundtrip_tls() {
         .password()
         .map(|p| p.to_string());
 
-    let mut worker = WorkerBuilder::default()
+    let mut worker = Worker::builder()
         .hostname("tester".to_string())
         .wid(WorkerId::new(local))
         .register(local, fixtures::JobHandler::new(tx))

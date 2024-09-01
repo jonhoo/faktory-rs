@@ -4,8 +4,10 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream as TokioStream;
 
 mod client;
-pub use client::Client;
-pub(crate) use client::{ClientOptions, HeartbeatStatus, EXPECTED_PROTOCOL_VERSION};
+pub(crate) use client::{
+    BoxedConnection, ClientOptions, HeartbeatStatus, EXPECTED_PROTOCOL_VERSION,
+};
+pub use client::{Client, Connection};
 
 mod single;
 
@@ -16,7 +18,10 @@ pub(crate) use single::{Ack, Fail, Info, Push, PushBulk, QueueAction, QueueContr
 pub(crate) mod utils;
 
 #[cfg(feature = "ent")]
-pub use self::single::ent::{JobState, Progress, ProgressUpdate, ProgressUpdateBuilder, Track};
+pub use self::single::ent::{JobState, Progress, ProgressUpdate, ProgressUpdateBuilder};
+
+#[cfg(feature = "ent")]
+pub(crate) use self::single::ent::FetchProgress;
 
 #[cfg(feature = "ent")]
 pub use self::single::BatchId;
@@ -28,16 +33,27 @@ pub use batch::{Batch, BatchBuilder, BatchHandle, BatchStatus, CallbackState};
 
 /// A stream that can be re-established after failing.
 #[async_trait::async_trait]
-pub trait Reconnect: Sized {
+pub trait Reconnect {
     /// Re-establish the stream.
-    async fn reconnect(&mut self) -> io::Result<Self>;
+    async fn reconnect(&mut self) -> io::Result<BoxedConnection>;
+}
+
+#[async_trait::async_trait]
+impl<S> Reconnect for Box<S>
+where
+    S: Reconnect + Send,
+{
+    async fn reconnect(&mut self) -> io::Result<BoxedConnection> {
+        (**self).reconnect().await
+    }
 }
 
 #[async_trait::async_trait]
 impl Reconnect for TokioStream {
-    async fn reconnect(&mut self) -> io::Result<Self> {
+    async fn reconnect(&mut self) -> io::Result<BoxedConnection> {
         let addr = &self.peer_addr().expect("socket address");
-        TokioStream::connect(addr).await
+        let stream = TokioStream::connect(addr).await?;
+        Ok(Box::new(BufStream::new(stream)))
     }
 }
 
@@ -46,8 +62,7 @@ impl<S> Reconnect for BufStream<S>
 where
     S: AsyncRead + AsyncWrite + Reconnect + Send + Sync,
 {
-    async fn reconnect(&mut self) -> io::Result<Self> {
-        let stream = self.get_mut().reconnect().await?;
-        Ok(Self::new(stream))
+    async fn reconnect(&mut self) -> io::Result<BoxedConnection> {
+        self.get_mut().reconnect().await
     }
 }

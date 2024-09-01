@@ -1,11 +1,12 @@
 #[cfg(doc)]
 use crate::{Client, WorkerBuilder};
 
-use crate::{proto::utils, Error, Reconnect};
+use crate::proto::{self, utils};
+use crate::{Error, Reconnect};
 use std::io;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioTcpStream;
 use tokio_rustls::client::TlsStream as RustlsStream;
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};
@@ -22,8 +23,11 @@ use tokio_rustls::TlsConnector;
 /// # tokio_test::block_on(async {
 /// use faktory::Client;
 /// use faktory::rustls::TlsStream;
-/// let tls = TlsStream::connect(None).await.unwrap();
-/// let cl = Client::connect_with(tls, None).await.unwrap();
+/// use tokio::io::BufStream;
+///
+/// let stream = TlsStream::connect(None).await.unwrap();
+/// let buffered = BufStream::new(stream);
+/// let cl = Client::connect_with(buffered, None).await.unwrap();
 /// # drop(cl);
 /// # });
 /// ```
@@ -51,8 +55,8 @@ impl TlsStream<TokioTcpStream> {
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
     ///
-    /// Internally creates a `ClientConfig` with an empty root certificates store and no client
-    /// authentication. Use [`with_client_config`](TlsStream::with_client_config)
+    /// Internally creates a `ClientConfig` with an _empty_ root certificates store and _no client
+    /// authentication_. Use [`with_client_config`](TlsStream::with_client_config)
     /// or [`with_connector`](TlsStream::with_connector) for customized
     /// `ClientConfig` and `TlsConnector` accordingly.
     pub async fn connect(url: Option<&str>) -> Result<Self, Error> {
@@ -61,6 +65,21 @@ impl TlsStream<TokioTcpStream> {
             .with_no_client_auth();
         let con = TlsConnector::from(Arc::new(conf));
         TlsStream::with_connector(con, url).await
+    }
+
+    /// Create a new TLS connection over TCP using native certificates.
+    ///
+    /// Unlike [`TlsStream::connect`], creates a root certificates store populated
+    /// with the certificates loaded from a platform-native certificate store.
+    pub async fn connect_with_native_certs(url: Option<&str>) -> Result<Self, Error> {
+        let mut store = RootCertStore::empty();
+        for cert in rustls_native_certs::load_native_certs()? {
+            store.add(cert).map_err(io::Error::other)?;
+        }
+        let config = ClientConfig::builder()
+            .with_root_certificates(store)
+            .with_no_client_auth();
+        TlsStream::with_connector(TlsConnector::from(Arc::new(config)), url).await
     }
 
     /// Create a new TLS connection over TCP using a non-default TLS configuration.
@@ -93,7 +112,9 @@ where
     /// Create a new TLS connection on an existing stream.
     ///
     /// Internally creates a `ClientConfig` with an empty root certificates store and no client
-    /// authentication. Use [`new`](TlsStream::new) for a customized `TlsConnector`.
+    /// authentication.
+    ///
+    /// Use [`new`](TlsStream::new) for a customized `TlsConnector`.
     pub async fn default(stream: S, hostname: String) -> io::Result<Self> {
         let conf = ClientConfig::builder()
             .with_root_certificates(RootCertStore::empty())
@@ -121,13 +142,32 @@ where
 }
 
 #[async_trait::async_trait]
-impl<S> Reconnect for TlsStream<S>
-where
-    S: AsyncRead + AsyncWrite + Send + Unpin + Reconnect,
-{
-    async fn reconnect(&mut self) -> io::Result<Self> {
-        let stream = self.stream.get_mut().0.reconnect().await?;
-        TlsStream::new(stream, self.connector.clone(), self.hostname.clone()).await
+impl Reconnect for BufStream<TlsStream<tokio::net::TcpStream>> {
+    async fn reconnect(&mut self) -> io::Result<proto::BoxedConnection> {
+        let stream = self.get_mut().stream.get_mut().0.reconnect().await?;
+        let tls_stream = TlsStream::new(
+            stream,
+            self.get_ref().connector.clone(),
+            self.get_ref().hostname.clone(),
+        )
+        .await?;
+        let buffered = BufStream::new(tls_stream);
+        Ok(Box::new(buffered))
+    }
+}
+
+#[async_trait::async_trait]
+impl Reconnect for BufStream<TlsStream<proto::BoxedConnection>> {
+    async fn reconnect(&mut self) -> io::Result<proto::BoxedConnection> {
+        let stream = self.get_mut().stream.get_mut().0.reconnect().await?;
+        let tls_stream = TlsStream::new(
+            stream,
+            self.get_ref().connector.clone(),
+            self.get_ref().hostname.clone(),
+        )
+        .await?;
+        let buffered = BufStream::new(tls_stream);
+        Ok(Box::new(buffered))
     }
 }
 

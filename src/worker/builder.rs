@@ -1,13 +1,25 @@
 use super::{runner::Closure, CallbacksRegistry, Client, ShutdownSignal, Worker};
 use crate::{
     proto::{utils, ClientOptions},
-    Error, Job, JobRunner, WorkerId,
+    Error, Job, JobRunner, Reconnect, WorkerId,
 };
 use std::future::Future;
-use std::sync::Arc;
 use std::time::Duration;
-use tokio::io::{AsyncRead, AsyncWrite, BufStream};
+use tokio::io::{AsyncBufRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum TlsKind {
+    None,
+
+    #[cfg(feature = "native_tls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "native_tls")))]
+    Native,
+
+    #[cfg(feature = "rustls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
+    Rust,
+}
 
 /// Convenience wrapper for building a Faktory worker.
 ///
@@ -18,6 +30,7 @@ pub struct WorkerBuilder<E> {
     callbacks: CallbacksRegistry<E>,
     shutdown_timeout: Option<Duration>,
     shutdown_signal: Option<ShutdownSignal>,
+    tls_kind: TlsKind,
 }
 
 impl<E> Default for WorkerBuilder<E> {
@@ -38,6 +51,7 @@ impl<E> Default for WorkerBuilder<E> {
             callbacks: CallbacksRegistry::default(),
             shutdown_timeout: None,
             shutdown_signal: None,
+            tls_kind: TlsKind::None,
         }
     }
 }
@@ -210,7 +224,7 @@ impl<E: 'static> WorkerBuilder<E> {
         H: Fn(Job) -> Result<(), E> + Send + Sync + 'static,
     {
         self.callbacks
-            .insert(kind.into(), super::Callback::Sync(Arc::new(handler)));
+            .insert(kind.into(), super::Callback::Sync(Box::new(handler)));
         self
     }
 
@@ -231,24 +245,62 @@ impl<E: 'static> WorkerBuilder<E> {
         self
     }
 
+    /// Make the traffic between this worker and Faktory encrypted with native TLS.
+    ///
+    /// The underlying crate (`native-tls`) will use _SChannel_ on Windows,
+    /// _SecureTransport_ on OSX, and _OpenSSL_ on other platforms.
+    ///
+    /// Internally, will use [`TlsStream::connect`](crate::native_tls::TlsStream::connect) to establish
+    /// a TLS stream to the Faktory server.
+    ///
+    /// Note that if you use this method on the builder, but eventually use [`WorkerBuilder::connect_with`]
+    /// (rather than [`WorkerBuilder::connect`]) to create an instance of [`Worker`], this worker
+    /// will be connected to the Faktory server with the stream you've provided to `connect_with`.
+    #[cfg(feature = "native_tls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "native_tls")))]
+    pub fn with_native_tls(mut self) -> Self {
+        self.tls_kind = TlsKind::Native;
+        self
+    }
+
+    /// Make the traffic between this worker and Faktory encrypted with [`rustls`](https://github.com/rustls/rustls).
+    ///
+    /// Internally, will use [`TlsStream::connect_with_native_certs`](crate::rustls::TlsStream::connect_with_native_certs)
+    /// to establish a TLS stream to the Faktory server.
+    ///
+    /// Note that if you use this method on the builder, but eventually use [`WorkerBuilder::connect_with`]
+    /// (rather than [`WorkerBuilder::connect`]) to create an instance of [`Worker`], this worker
+    /// will be connected to the Faktory server with the stream you've provided to `connect_with`.
+    #[cfg(feature = "rustls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
+    pub fn with_rustls(mut self) -> Self {
+        self.tls_kind = TlsKind::Rust;
+        self
+    }
+
     /// Connect to a Faktory server with a non-standard stream.
-    pub async fn connect_with<S: AsyncRead + AsyncWrite + Send + Unpin>(
+    ///
+    /// In case you've got a `stream` that doesn't already implement `AsyncBufRead`, you will
+    /// want to wrap it in `tokio::io::BufStream`.
+    pub async fn connect_with<S>(
         mut self,
         stream: S,
         pwd: Option<String>,
-    ) -> Result<Worker<BufStream<S>, E>, Error> {
+    ) -> Result<Worker<E>, Error>
+    where
+        S: AsyncBufRead + AsyncWrite + Reconnect + Send + Sync + Unpin + 'static,
+    {
         self.opts.password = pwd;
         self.opts.is_worker = true;
-        let buffered = BufStream::new(stream);
-        let client = Client::new(buffered, self.opts).await?;
-        Ok(Worker::new(
+        let client = Client::new(Box::new(stream), self.opts).await?;
+        let worker = Worker::new(
             client,
             self.workers_count,
             self.callbacks,
             self.shutdown_timeout,
             self.shutdown_signal,
-        )
-        .await)
+        );
+        Ok(worker)
     }
 
     /// Connect to a Faktory server.
@@ -264,13 +316,28 @@ impl<E: 'static> WorkerBuilder<E> {
     /// ```
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
-    pub async fn connect(
-        self,
-        url: Option<&str>,
-    ) -> Result<Worker<BufStream<TokioStream>, E>, Error> {
-        let url = utils::parse_provided_or_from_env(url)?;
-        let stream = TokioStream::connect(utils::host_from_url(&url)).await?;
-        self.connect_with(stream, url.password().map(|p| p.to_string()))
-            .await
+    pub async fn connect(self, url: Option<&str>) -> Result<Worker<E>, Error> {
+        let parsed_url = utils::parse_provided_or_from_env(url)?;
+        let password = parsed_url.password().map(|p| p.to_string());
+        match self.tls_kind {
+            TlsKind::None => {
+                let addr = utils::host_from_url(&parsed_url);
+                let stream = TokioStream::connect(addr).await?;
+                let buffered = BufStream::new(stream);
+                self.connect_with(buffered, password).await
+            }
+            #[cfg(feature = "rustls")]
+            TlsKind::Rust => {
+                let stream = crate::rustls::TlsStream::connect_with_native_certs(url).await?;
+                let buffered = BufStream::new(stream);
+                self.connect_with(buffered, password).await
+            }
+            #[cfg(feature = "native_tls")]
+            TlsKind::Native => {
+                let stream = crate::native_tls::TlsStream::connect(url).await?;
+                let buffered = BufStream::new(stream);
+                self.connect_with(buffered, password).await
+            }
+        }
     }
 }

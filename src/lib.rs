@@ -48,14 +48,43 @@
 //!
 //! ```no_run
 //! # tokio_test::block_on(async {
-//! use faktory::WorkerBuilder;
+//! use async_trait::async_trait;
+//! use faktory::{Job, JobRunner, Worker};
 //! use std::io;
-//! let mut w = WorkerBuilder::default()
+//!
+//! struct DomainEntity(i32);
+//!
+//! impl DomainEntity {
+//!     fn new(buzz: i32) -> Self {
+//!         DomainEntity(buzz)
+//!     }
+//! }
+//!
+//! #[async_trait]
+//! impl JobRunner for DomainEntity {
+//!     type Error = io::Error;
+//!
+//!     async fn run(&self, job: Job) -> Result<(), Self::Error> {
+//!         println!("{:?}, buzz={}", job, self.0);
+//!         Ok(())
+//!     }
+//! }
+//!
+//! let mut w = Worker::builder()
+//!     .register("fizz", DomainEntity::new(1))
 //!     .register_fn("foobar", |job| async move {
 //!         println!("{:?}", job);
 //!         Ok::<(), io::Error>(())
 //!     })
-//!     .connect(None).await.unwrap();
+//!     .register_blocking_fn("fibo", |job| {
+//!         std::thread::sleep(std::time::Duration::from_millis(1000));
+//!         println!("{:?}", job);
+//!         Ok::<(), io::Error>(())
+//!     })
+//!     .with_rustls() // available on `rustls` feature only
+//!     .connect(None)
+//!     .await
+//!     .unwrap();
 //!
 //! if let Err(e) = w.run(&["default"]).await {
 //!     println!("worker failed: {}", e);
@@ -77,7 +106,8 @@ mod worker;
 pub use crate::error::Error;
 
 pub use crate::proto::{
-    Client, DataSnapshot, FaktoryState, Job, JobBuilder, JobId, Reconnect, ServerSnapshot, WorkerId,
+    Client, Connection, DataSnapshot, FaktoryState, Job, JobBuilder, JobId, Reconnect,
+    ServerSnapshot, WorkerId,
 };
 
 pub use crate::worker::{JobRunner, StopDetails, StopReason, Worker, WorkerBuilder};
