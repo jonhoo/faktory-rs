@@ -756,5 +756,6 @@ async fn test_panic_in_handler() {
         .unwrap();
 
     // same for async handler, note how the test run is not interrupted with a panic
+    assert!(!w.is_terminated());
     assert!(w.run_one(0, &[local]).await.unwrap());
 }
