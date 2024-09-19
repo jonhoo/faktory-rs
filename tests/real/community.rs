@@ -493,7 +493,7 @@ async fn test_jobs_pushed_in_bulk() {
             Job::builder("broken")
                 .jid(JobId::new("3sZCbdp8e9WX__1"))
                 .queue(local_3)
-                .reserve_for(864001) // reserve_for exceeded
+                .reserve_for(Duration::from_secs(864001)) // reserve_for exceeded
                 .build(),
             // plus some valid ones:
             Job::builder("very_special").queue(local_4).build(),

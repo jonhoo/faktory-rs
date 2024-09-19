@@ -30,12 +30,34 @@ where
     serializer.serialize_u64(secs)
 }
 
+pub(crate) fn ser_optional_duration<S>(
+    value: &Option<Duration>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match value {
+        None => serializer.serialize_none(),
+        Some(dur) => serializer.serialize_u64(dur.as_secs()),
+    }
+}
+
 pub(crate) fn deser_duration<'de, D>(value: D) -> Result<Duration, D::Error>
 where
     D: Deserializer<'de>,
 {
     let secs = u64::deserialize(value)?;
     Ok(Duration::from_secs(secs))
+}
+
+pub(crate) fn deser_as_optional_duration<'de, D>(value: D) -> Result<Option<Duration>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(u64::deserialize(value)
+        .ok()
+        .map(|value| (Duration::from_secs(value))))
 }
 
 pub(crate) fn ser_server_time<S>(value: &NaiveTime, serializer: S) -> Result<S::Ok, S::Error>
