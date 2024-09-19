@@ -55,9 +55,7 @@ pub(crate) fn deser_as_optional_duration<'de, D>(value: D) -> Result<Option<Dura
 where
     D: Deserializer<'de>,
 {
-    Ok(u64::deserialize(value)
-        .ok()
-        .map(|value| (Duration::from_secs(value))))
+    Ok(u64::deserialize(value).ok().map(Duration::from_secs))
 }
 
 pub(crate) fn ser_server_time<S>(value: &NaiveTime, serializer: S) -> Result<S::Ok, S::Error>

@@ -331,7 +331,7 @@ impl<E: StdError + 'static + Send> Worker<E> {
     /// discontinued due to a signal from the Faktory server or a graceful shutdown signal,
     /// calling this method will mean you are trying to run a _terminated_ worker which will
     /// cause a panic. You will need to build and run a new worker instead.
-    /// 
+    ///
     /// You can check if the worker has been terminated with [`Worker::is_terminated`].
     pub async fn run_one<Q>(&mut self, worker: usize, queues: &[Q]) -> Result<bool, Error>
     where
@@ -440,7 +440,7 @@ impl<E: StdError + 'static + Send> Worker<E> {
     /// Note that if you provided a shutdown signal when building this worker (see [`WorkerBuilder::with_graceful_shutdown`]),
     /// and this signal resolved, the worker will be marked as terminated and calling this method will cause a panic.
     /// You will need to build and run a new worker instead.
-    /// 
+    ///
     /// You can check if the worker has been terminated with [`Worker::is_terminated`].
     pub async fn run<Q>(&mut self, queues: &[Q]) -> Result<StopDetails, Error>
     where
