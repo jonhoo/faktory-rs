@@ -24,7 +24,7 @@ use tokio_native_tls::{native_tls::TlsConnector, TlsConnector as AsyncTlsConnect
 /// use faktory::native_tls::TlsStream;
 /// use tokio::io::BufStream;
 ///
-/// let stream = TlsStream::connect(None).await.unwrap();
+/// let stream = TlsStream::connect().await.unwrap();
 /// let buffered = BufStream::new(stream);
 /// let cl = Client::connect_with(buffered, None).await.unwrap();
 /// # drop(cl);
@@ -40,7 +40,7 @@ pub struct TlsStream<S> {
 }
 
 impl TlsStream<TokioTcpStream> {
-    /// Create a new TLS connection over TCP.
+    /// Create a new TLS connection to Faktory over TCP.
     ///
     /// If `url` is not given, will use the standard Faktory environment variables. Specifically,
     /// `FAKTORY_PROVIDER` is read to get the name of the environment variable to get the address
@@ -53,12 +53,23 @@ impl TlsStream<TokioTcpStream> {
     /// ```
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
-    pub async fn connect(url: Option<&str>) -> Result<Self, Error> {
+    pub async fn connect() -> Result<Self, Error> {
         TlsStream::with_connector(
             TlsConnector::builder()
                 .build()
                 .map_err(error::Stream::NativeTls)?,
-            url,
+            None,
+        )
+        .await
+    }
+
+    /// Create a new TLS connection to Faktory over TCP using specified address.
+    pub async fn connect_to(addr: &str) -> Result<Self, Error> {
+        TlsStream::with_connector(
+            TlsConnector::builder()
+                .build()
+                .map_err(error::Stream::NativeTls)?,
+            Some(addr),
         )
         .await
     }

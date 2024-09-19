@@ -125,7 +125,7 @@ type CallbacksRegistry<E> = FnvHashMap<String, Callback<E>>;
 ///
 /// let mut w = Worker::builder()
 ///     .register_fn("foo", process_job)
-///     .connect(None)
+///     .connect()
 ///     .await
 ///     .unwrap();
 ///
@@ -153,7 +153,7 @@ type CallbacksRegistry<E> = FnvHashMap<String, Callback<E>>;
 ///         println!("{:?}", job);
 ///         Ok::<(), io::Error>(())
 ///     })
-///     .connect(None)
+///     .connect()
 ///     .await
 ///     .unwrap();
 /// });

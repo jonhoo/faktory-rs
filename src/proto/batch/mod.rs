@@ -34,7 +34,7 @@ pub(crate) use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// # use faktory::Error;
 /// use faktory::{Client, Job, ent::Batch};
 ///
-/// let mut cl = Client::connect(None).await?;
+/// let mut cl = Client::connect().await?;
 /// let job1 = Job::builder("job_type").build();
 /// let job2 = Job::builder("job_type").build();
 /// let job_cb = Job::builder("callback_job_type").build();
@@ -57,7 +57,7 @@ pub(crate) use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// # tokio_test::block_on(async {
 /// # use faktory::{Client, Job, Error};
 /// # use faktory::ent::Batch;
-/// # let mut cl = Client::connect(None).await?;
+/// # let mut cl = Client::connect().await?;
 /// let parent_job1 = Job::builder("job_type").build();
 /// let parent_job2 = Job::builder("another_job_type").build();
 /// let parent_cb = Job::builder("callback_job_type").build();
@@ -97,7 +97,7 @@ pub(crate) use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// # use faktory::{Job, Client};
 /// # use faktory::ent::{Batch, CallbackState};
 /// # tokio_test::block_on(async {
-/// let mut cl = Client::connect(None).await?;
+/// let mut cl = Client::connect().await?;
 /// let job = Job::builder("job_type").build();
 /// let cb_job = Job::builder("callback_job_type").build();
 /// let b = Batch::builder()
@@ -109,7 +109,7 @@ pub(crate) use cmd::{CommitBatch, GetBatchStatus, OpenBatch};
 /// b.add(job).await?;
 /// b.commit().await?;
 ///
-/// let mut t = Client::connect(None).await?;
+/// let mut t = Client::connect().await?;
 /// let s = t.get_batch_status(bid).await?.unwrap();
 /// assert_eq!(s.total, 1);
 /// assert_eq!(s.pending, 1);

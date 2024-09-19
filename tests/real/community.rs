@@ -8,7 +8,7 @@ use tokio_util::sync::CancellationToken;
 #[tokio::test(flavor = "multi_thread")]
 async fn hello_client() {
     skip_check!();
-    let p = Client::connect(None).await.unwrap();
+    let p = Client::connect().await.unwrap();
     drop(p);
 }
 
@@ -19,7 +19,7 @@ async fn hello_worker() {
         .hostname("tester".to_string())
         .labels(vec!["foo".to_string(), "bar".to_string()])
         .register_fn("never_called", |_| async move { unreachable!() })
-        .connect(None)
+        .connect()
         .await
         .unwrap();
     drop(w);
@@ -28,7 +28,7 @@ async fn hello_worker() {
 #[tokio::test(flavor = "multi_thread")]
 async fn enqueue_job() {
     skip_check!();
-    let mut p = Client::connect(None).await.unwrap();
+    let mut p = Client::connect().await.unwrap();
     p.enqueue(JobBuilder::new("order").build()).await.unwrap();
 }
 
@@ -50,11 +50,11 @@ async fn roundtrip() {
             Ok::<(), io::Error>(())
         })
         .register_fn("image", |_| async move { unreachable!() })
-        .connect(None)
+        .connect()
         .await
         .unwrap();
 
-    let mut client = Client::connect(None).await.unwrap();
+    let mut client = Client::connect().await.unwrap();
     client
         .enqueue(
             JobBuilder::new("order")
@@ -81,12 +81,12 @@ async fn server_state() {
     // prepare a worker
     let mut w = WorkerBuilder::default()
         .register_fn(local, move |_| async move { Ok::<(), io::Error>(()) })
-        .connect(None)
+        .connect()
         .await
         .unwrap();
 
     // prepare a producing client
-    let mut client = Client::connect(None).await.unwrap();
+    let mut client = Client::connect().await.unwrap();
 
     // examine server state before pushing anything
     let server_state = client.current_info().await.unwrap();
@@ -201,11 +201,11 @@ async fn multi() {
                 Ok::<(), io::Error>(())
             })
         })
-        .connect(None)
+        .connect()
         .await
         .unwrap();
 
-    let mut p = Client::connect(None).await.unwrap();
+    let mut p = Client::connect().await.unwrap();
     p.enqueue(Job::new(local, vec![Value::from(1), Value::from("foo")]).on_queue(local))
         .await
         .unwrap();
@@ -244,11 +244,11 @@ async fn fail() {
                 Err(io::Error::new(io::ErrorKind::Other, "nope"))
             })
         })
-        .connect(None)
+        .connect()
         .await
         .unwrap();
 
-    let mut p = Client::connect(None).await.unwrap();
+    let mut p = Client::connect().await.unwrap();
 
     // note that *enqueueing* the jobs didn't fail!
     p.enqueue(Job::new(local, vec![Value::from(1), Value::from("foo")]).on_queue(local))
@@ -286,11 +286,11 @@ async fn queue_control_actions() {
             let tx = sync::Arc::clone(&tx_2);
             Box::pin(async move { tx.lock().unwrap().send(true) })
         })
-        .connect(None)
+        .connect()
         .await
         .unwrap();
 
-    let mut client = Client::connect(None).await.unwrap();
+    let mut client = Client::connect().await.unwrap();
 
     // enqueue three jobs
     client
@@ -395,11 +395,11 @@ async fn queue_control_actions_wildcard() {
             let tx = sync::Arc::clone(&tx_2);
             Box::pin(async move { tx.lock().unwrap().send(true) })
         })
-        .connect(None)
+        .connect()
         .await
         .unwrap();
 
-    let mut client = Client::connect(None).await.unwrap();
+    let mut client = Client::connect().await.unwrap();
 
     // enqueue two jobs on each queue
     client
@@ -461,7 +461,7 @@ async fn test_jobs_pushed_in_bulk() {
     let local_3 = "test_jobs_pushed_in_bulk_3";
     let local_4 = "test_jobs_pushed_in_bulk_4";
 
-    let mut p = Client::connect(None).await.unwrap();
+    let mut p = Client::connect().await.unwrap();
     let (enqueued_count, errors) = p
         .enqueue_many(vec![
             Job::builder("common").queue(local_1).build(),
@@ -529,7 +529,7 @@ async fn test_jobs_pushed_in_bulk() {
             Ok::<(), io::Error>(())
         })
         .register_fn("broken", move |_job| async { Ok::<(), io::Error>(()) })
-        .connect(None)
+        .connect()
         .await
         .unwrap();
 
@@ -558,11 +558,11 @@ async fn test_jobs_created_with_builder() {
     skip_check!();
 
     // prepare a client and a worker:
-    let mut cl = Client::connect(None).await.unwrap();
+    let mut cl = Client::connect().await.unwrap();
     let mut w = Worker::builder()
         .register_fn("rebuild_index", assert_args_empty)
         .register_fn("register_order", assert_args_not_empty)
-        .connect(None)
+        .connect()
         .await
         .unwrap();
 
@@ -635,7 +635,7 @@ async fn test_shutdown_signals_handling() {
     let shutdown_timeout = Duration::from_millis(500);
 
     // get a client and a job to enqueue
-    let mut cl = Client::connect(None).await.unwrap();
+    let mut cl = Client::connect().await.unwrap();
     let j = JobBuilder::new(jkind)
         .queue(qname)
         // task will be being processed for at least 1 second
@@ -657,7 +657,7 @@ async fn test_shutdown_signals_handling() {
         .with_graceful_shutdown(signal)
         .shutdown_timeout(shutdown_timeout)
         .register_fn(jkind, process_hard_task(tx))
-        .connect(None)
+        .connect()
         .await
         .unwrap();
 
@@ -702,11 +702,11 @@ async fn test_jobs_with_blocking_handlers() {
             "general_workload",
             |_j| async move { Ok::<(), io::Error>(()) },
         )
-        .connect(None)
+        .connect()
         .await
         .unwrap();
 
-    Client::connect(None)
+    Client::connect()
         .await
         .unwrap()
         .enqueue_many([
@@ -735,11 +735,11 @@ async fn test_panic_in_handler() {
         .register_fn("panic_ASYNC_handler", |_j| async move {
             panic!("Panic inside async handler...");
         })
-        .connect(None)
+        .connect()
         .await
         .unwrap();
 
-    let mut c = Client::connect(None).await.unwrap();
+    let mut c = Client::connect().await.unwrap();
 
     c.enqueue(Job::builder("panic_SYNC_handler").queue(local).build())
         .await

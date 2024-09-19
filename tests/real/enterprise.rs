@@ -41,10 +41,10 @@ async fn ent_expiring_job() {
     let local = "ent_expiring_job";
 
     // prepare a client and a worker:
-    let mut p = Client::connect(Some(&url)).await.unwrap();
+    let mut p = Client::connect_to(&url).await.unwrap();
     let mut w = WorkerBuilder::default()
         .register_fn("AnExpiringJob", print_job)
-        .connect(Some(&url))
+        .connect_to(&url)
         .await
         .unwrap();
 
@@ -92,10 +92,10 @@ async fn ent_unique_job() {
     let job_type = "order";
 
     // prepare client and worker:
-    let mut p = Client::connect(Some(&url)).await.unwrap();
+    let mut p = Client::connect_to(&url).await.unwrap();
     let mut w = WorkerBuilder::default()
         .register_fn(job_type, print_job)
-        .connect(Some(&url))
+        .connect_to(&url)
         .await
         .unwrap();
 
@@ -210,7 +210,7 @@ async fn ent_unique_job_until_success() {
         // send a job difficulty level as a job's args and the lattter
         // will sleep for a corresponding period of time, pretending
         // to work hard:
-        let mut client_a = Client::connect(Some(&url1)).await.unwrap();
+        let mut client_a = Client::connect_to(&url1).await.unwrap();
         let mut worker_a = WorkerBuilder::default()
             .register_fn(job_type, |job| async move {
                 let args = job.args().to_owned();
@@ -225,7 +225,7 @@ async fn ent_unique_job_until_success() {
                 eprintln!("{:?}", job);
                 Ok::<(), io::Error>(())
             })
-            .connect(Some(&url1))
+            .connect_to(&url1)
             .await
             .unwrap();
         let job = JobBuilder::new(job_type)
@@ -243,7 +243,7 @@ async fn ent_unique_job_until_success() {
     time::sleep(time::Duration::from_secs(1)).await;
 
     // continue
-    let mut client_b = Client::connect(Some(&url)).await.unwrap();
+    let mut client_b = Client::connect_to(&url).await.unwrap();
 
     // this one is a 'duplicate' because the job is still
     // being executed in the spawned thread:
@@ -292,7 +292,7 @@ async fn ent_unique_job_until_start() {
 
     let url1 = url.clone();
     let handle = tokio::spawn(async move {
-        let mut client_a = Client::connect(Some(&url1)).await.unwrap();
+        let mut client_a = Client::connect_to(&url1).await.unwrap();
         let mut worker_a = WorkerBuilder::default()
             .register_fn(job_type, |job| async move {
                 let args = job.args().to_owned();
@@ -307,7 +307,7 @@ async fn ent_unique_job_until_start() {
                 eprintln!("{:?}", job);
                 Ok::<(), io::Error>(())
             })
-            .connect(Some(&url1))
+            .connect_to(&url1)
             .await
             .unwrap();
         client_a
@@ -330,7 +330,7 @@ async fn ent_unique_job_until_start() {
     time::sleep(time::Duration::from_secs(1)).await;
 
     // the unique lock has been released by this time, so the job is enqueued successfully:
-    let mut client_b = Client::connect(Some(&url)).await.unwrap();
+    let mut client_b = Client::connect_to(&url).await.unwrap();
     client_b
         .enqueue(
             JobBuilder::new(job_type)
@@ -352,7 +352,7 @@ async fn ent_unique_job_bypass_unique_lock() {
     skip_if_not_enterprise!();
 
     let url = learn_faktory_url();
-    let mut producer = Client::connect(Some(&url)).await.unwrap();
+    let mut producer = Client::connect_to(&url).await.unwrap();
     let queue_name = "ent_unique_job_bypass_unique_lock";
     let job1 = Job::builder("order")
         .queue(queue_name)
@@ -387,7 +387,7 @@ async fn ent_unique_job_bypass_unique_lock() {
     // have been enqueued for real, while the last one has not.
     let mut c = WorkerBuilder::default()
         .register_fn("order", print_job)
-        .connect(Some(&url))
+        .connect_to(&url)
         .await
         .unwrap();
 
@@ -408,12 +408,12 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
     let url = learn_faktory_url();
 
     let t = Arc::new(Mutex::new(
-        Client::connect(Some(&url))
+        Client::connect_to(&url)
             .await
             .expect("job progress tracker created successfully"),
     ));
 
-    let mut p = Client::connect(Some(&url)).await.unwrap();
+    let mut p = Client::connect_to(&url).await.unwrap();
 
     let job_tackable = JobBuilder::new("order")
         .args(vec![Value::from("ISBN-13:9781718501850")])
@@ -439,7 +439,7 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
             let job_id = job_id_copy.clone();
             let url = url_copy.clone();
             Box::pin(async move {
-                let mut t = Client::connect(Some(&url))
+                let mut t = Client::connect_to(&url)
                     .await
                     .expect("job progress tracker created successfully");
 
@@ -482,7 +482,7 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
                 Ok::<(), io::Error>(eprintln!("{:?}", job))
             })
         })
-        .connect(Some(&url))
+        .connect_to(&url)
         .await
         .expect("Successfully ran a handshake with 'Faktory'");
     assert_had_one!(&mut c, "test_tracker_can_send_progress_update");
@@ -562,14 +562,14 @@ async fn test_batch_of_jobs_can_be_initiated() {
     skip_if_not_enterprise!();
     let url = learn_faktory_url();
 
-    let mut p = Client::connect(Some(&url)).await.unwrap();
+    let mut p = Client::connect_to(&url).await.unwrap();
     let mut w = WorkerBuilder::default()
         .register_fn("thumbnail", |_job| async { Ok::<(), io::Error>(()) })
         .register_fn("clean_up", |_job| async { Ok(()) })
-        .connect(Some(&url))
+        .connect_to(&url)
         .await
         .unwrap();
-    let mut t = Client::connect(Some(&url))
+    let mut t = Client::connect_to(&url)
         .await
         .expect("job progress tracker created successfully");
 
@@ -701,13 +701,13 @@ async fn test_batches_can_be_nested() {
     let url = learn_faktory_url();
 
     // Set up 'client', 'worker', and 'tracker':
-    let mut p = Client::connect(Some(&url)).await.unwrap();
+    let mut p = Client::connect_to(&url).await.unwrap();
     let _w = WorkerBuilder::default()
         .register_fn("jobtype", |_job| async { Ok::<(), io::Error>(()) })
-        .connect(Some(&url))
+        .connect_to(&url)
         .await
         .unwrap();
-    let mut t = Client::connect(Some(&url))
+    let mut t = Client::connect_to(&url)
         .await
         .expect("job progress tracker created successfully");
 
@@ -803,12 +803,12 @@ async fn test_callback_will_not_be_queued_unless_batch_gets_committed() {
     let url = learn_faktory_url();
 
     // prepare a client, a worker of 'order' jobs, and a tracker:
-    let mut cl = Client::connect(Some(&url)).await.unwrap();
-    let mut tr = Client::connect(Some(&url)).await.unwrap();
+    let mut cl = Client::connect_to(&url).await.unwrap();
+    let mut tr = Client::connect_to(&url).await.unwrap();
     let mut w = WorkerBuilder::default()
         .register_fn("order", |_job| async { Ok(()) })
         .register_fn("order_clean_up", |_job| async { Ok::<(), io::Error>(()) })
-        .connect(Some(&url))
+        .connect_to(&url)
         .await
         .unwrap();
 
@@ -896,8 +896,8 @@ async fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
 
     skip_if_not_enterprise!();
     let url = learn_faktory_url();
-    let mut cl = Client::connect(Some(&url)).await.unwrap();
-    let mut tracker = Client::connect(Some(&url)).await.unwrap();
+    let mut cl = Client::connect_to(&url).await.unwrap();
+    let mut tracker = Client::connect_to(&url).await.unwrap();
     let q_name = "test_callback_will_be_queued_upon_commit_even_if_batch_is_empty";
     let complete_cb_jobtype = "complete_callback_jobtype";
     let success_cb_jobtype = "success_cb_jobtype";
@@ -947,7 +947,7 @@ async fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
                 "we want this one to fail to test the 'CallbackState' behavior",
             ))
         })
-        .connect(Some(&url))
+        .connect_to(&url)
         .await
         .unwrap();
 
@@ -986,8 +986,8 @@ async fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
 async fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
     skip_if_not_enterprise!();
     let url = learn_faktory_url();
-    let mut p = Client::connect(Some(&url)).await.unwrap();
-    let mut t = Client::connect(Some(&url)).await.unwrap();
+    let mut p = Client::connect_to(&url).await.unwrap();
+    let mut t = Client::connect_to(&url).await.unwrap();
     let mut jobs = some_jobs("order", "test_batch_can_be_reopned_add_extra_jobs_added", 4);
     let mut callbacks = some_jobs(
         "order_clean_up",
