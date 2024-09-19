@@ -25,7 +25,7 @@ use tokio_rustls::TlsConnector;
 /// use faktory::rustls::TlsStream;
 /// use tokio::io::BufStream;
 ///
-/// let stream = TlsStream::connect(None).await.unwrap();
+/// let stream = TlsStream::connect().await.unwrap();
 /// let buffered = BufStream::new(stream);
 /// let cl = Client::connect_with(buffered, None).await.unwrap();
 /// # drop(cl);
@@ -41,7 +41,7 @@ pub struct TlsStream<S> {
 }
 
 impl TlsStream<TokioTcpStream> {
-    /// Create a new TLS connection over TCP.
+    /// Create a new TLS connection to Faktory over TCP.
     ///
     /// If `url` is not given, will use the standard Faktory environment variables. Specifically,
     /// `FAKTORY_PROVIDER` is read to get the name of the environment variable to get the address
@@ -59,19 +59,28 @@ impl TlsStream<TokioTcpStream> {
     /// authentication_. Use [`with_client_config`](TlsStream::with_client_config)
     /// or [`with_connector`](TlsStream::with_connector) for customized
     /// `ClientConfig` and `TlsConnector` accordingly.
-    pub async fn connect(url: Option<&str>) -> Result<Self, Error> {
-        let conf = ClientConfig::builder()
+    pub async fn connect() -> Result<Self, Error> {
+        let config = ClientConfig::builder()
             .with_root_certificates(RootCertStore::empty())
             .with_no_client_auth();
-        let con = TlsConnector::from(Arc::new(conf));
-        TlsStream::with_connector(con, url).await
+        let connnector = TlsConnector::from(Arc::new(config));
+        TlsStream::with_connector(connnector, None).await
+    }
+
+    /// Create a new TLS connection to Faktory over TCP using specified address.
+    pub async fn connect_to(addr: &str) -> Result<Self, Error> {
+        let config = ClientConfig::builder()
+            .with_root_certificates(RootCertStore::empty())
+            .with_no_client_auth();
+        let connector = TlsConnector::from(Arc::new(config));
+        TlsStream::with_connector(connector, Some(addr)).await
     }
 
     /// Create a new TLS connection over TCP using native certificates.
     ///
     /// Unlike [`TlsStream::connect`], creates a root certificates store populated
     /// with the certificates loaded from a platform-native certificate store.
-    pub async fn connect_with_native_certs(url: Option<&str>) -> Result<Self, Error> {
+    pub async fn connect_with_native_certs_to(addr: &str) -> Result<Self, Error> {
         let mut store = RootCertStore::empty();
         for cert in rustls_native_certs::load_native_certs()? {
             store.add(cert).map_err(io::Error::other)?;
@@ -79,7 +88,7 @@ impl TlsStream<TokioTcpStream> {
         let config = ClientConfig::builder()
             .with_root_certificates(store)
             .with_no_client_auth();
-        TlsStream::with_connector(TlsConnector::from(Arc::new(config)), url).await
+        TlsStream::with_connector(TlsConnector::from(Arc::new(config)), Some(addr)).await
     }
 
     /// Create a new TLS connection over TCP using a non-default TLS configuration.

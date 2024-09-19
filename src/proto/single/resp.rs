@@ -196,7 +196,7 @@ pub struct ServerSnapshot {
 /// # tokio_test::block_on(async {
 /// use faktory::Client;
 ///
-/// let mut client = Client::connect(None).await.unwrap();
+/// let mut client = Client::connect().await.unwrap();
 /// let _server_state = client.current_info().await.unwrap();
 /// # });
 /// ```

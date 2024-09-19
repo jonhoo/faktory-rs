@@ -36,7 +36,7 @@
 //! ```no_run
 //! # tokio_test::block_on(async {
 //! use faktory::{Client, Job};
-//! let mut client = Client::connect(None).await.unwrap();
+//! let mut client = Client::connect().await.unwrap();
 //! client.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
 //!
 //! let (enqueued_count, errors) = client.enqueue_many([Job::new("foobar", vec!["z"]), Job::new("foobar", vec!["z"])]).await.unwrap();
@@ -82,7 +82,7 @@
 //!         Ok::<(), io::Error>(())
 //!     })
 //!     .with_rustls() // available on `rustls` feature only
-//!     .connect(None)
+//!     .connect()
 //!     .await
 //!     .unwrap();
 //!

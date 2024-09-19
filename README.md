@@ -42,7 +42,7 @@ If you want to **submit** jobs to Faktory, use `Client`.
 
 ```rust
 use faktory::{Client, Job};
-let mut c = Client::connect(None).await.unwrap();
+let mut c = Client::connect().await.unwrap();
 c.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
 ```
 
@@ -84,7 +84,7 @@ let mut w = Worker::builder()
         Ok::<(), io::Error>(())
     })
     .with_rustls() // available on `rustls` feature only
-    .connect(None)
+    .connect()
     .await
     .unwrap();
 

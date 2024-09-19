@@ -16,7 +16,7 @@ async fn main() {
             println!("{:?}", j);
             Ok::<(), IOError>(())
         })
-        .connect(None)
+        .connect()
         .await
         .expect("Connected to server")
         .run_to_completion(&["default"])

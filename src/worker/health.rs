@@ -5,7 +5,6 @@ use std::{
     sync::{atomic, Arc},
     time::{self, Duration},
 };
-use tokio::time::sleep as tokio_sleep;
 
 const CHECK_STATE_INTERVAL: Duration = Duration::from_millis(100);
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
@@ -34,9 +33,11 @@ where
         let mut target = STATUS_RUNNING;
 
         let mut last = time::Instant::now();
+        let mut check_state_interval = tokio::time::interval(CHECK_STATE_INTERVAL);
+        check_state_interval.tick().await;
 
         loop {
-            tokio_sleep(CHECK_STATE_INTERVAL).await;
+            check_state_interval.tick().await;
 
             // has a worker failed?
             let worker_failure = target == STATUS_RUNNING
