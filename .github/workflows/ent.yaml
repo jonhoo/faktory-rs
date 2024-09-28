@@ -15,7 +15,7 @@ jobs:
   test:
     runs-on: macos-latest
     env:
-      FAKTORY_VERSION: 1.9.0
+      FAKTORY_VERSION: 1.9.1
     steps:
       - uses: actions/checkout@v4
       - name: Install redis
