@@ -172,8 +172,8 @@ pub struct ServerSnapshot {
     pub version: semver::Version,
 
     /// Faktory server process uptime in seconds.
-    #[serde(deserialize_with = "utils::deser_duration")]
-    #[serde(serialize_with = "utils::ser_duration")]
+    #[serde(deserialize_with = "utils::deser_duration_in_seconds")]
+    #[serde(serialize_with = "utils::ser_duration_in_seconds")]
     pub uptime: Duration,
 
     /// Number of clients connected to the server.
