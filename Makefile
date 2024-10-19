@@ -29,7 +29,7 @@ faktory:
 	-p ${FAKTORY_IP}:${FAKTORY_PORT}:7419 \
 	-p ${FAKTORY_IP}:${FAKTORY_PORT_UI}:7420 \
 	--name faktory \
-	contribsys/faktory:latest \
+	contribsys/faktory:1.9.1 \
 	/faktory -b :7419 -w :7420
 
 .PHONY: faktory/kill
