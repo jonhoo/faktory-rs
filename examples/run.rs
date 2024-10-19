@@ -49,7 +49,7 @@ async fn main() {
     let tx = Arc::new(tx);
 
     // create a producing client
-    let mut c = Client::connect(None)
+    let mut c = Client::connect()
         .await
         .expect("client successfully connected");
 
@@ -61,7 +61,7 @@ async fn main() {
     // create a worker
     let mut w = Worker::builder()
         .register("job_type", JobHandler::new(Arc::clone(&tx)))
-        .connect(None)
+        .connect()
         .await
         .expect("Connected to server");
 

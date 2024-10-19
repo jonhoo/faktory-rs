@@ -38,7 +38,7 @@ use std::future::Future;
 ///
 /// let mut w = WorkerBuilder::default()
 ///     .register("foo", handler)
-///     .connect(None)
+///     .connect()
 ///     .await
 ///     .unwrap();
 ///

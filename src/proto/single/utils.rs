@@ -22,7 +22,7 @@ pub(crate) fn gen_random_wid() -> String {
     gen_random_id(WORKER_ID_LENGTH)
 }
 
-pub(crate) fn ser_duration<S>(value: &Duration, serializer: S) -> Result<S::Ok, S::Error>
+pub(crate) fn ser_duration_in_seconds<S>(value: &Duration, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
@@ -30,12 +30,34 @@ where
     serializer.serialize_u64(secs)
 }
 
-pub(crate) fn deser_duration<'de, D>(value: D) -> Result<Duration, D::Error>
+pub(crate) fn ser_optional_duration_in_seconds<S>(
+    value: &Option<Duration>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match value {
+        None => serializer.serialize_none(),
+        Some(dur) => serializer.serialize_u64(dur.as_secs()),
+    }
+}
+
+pub(crate) fn deser_duration_in_seconds<'de, D>(value: D) -> Result<Duration, D::Error>
 where
     D: Deserializer<'de>,
 {
     let secs = u64::deserialize(value)?;
     Ok(Duration::from_secs(secs))
+}
+
+pub(crate) fn deser_as_optional_duration_in_seconds<'de, D>(
+    value: D,
+) -> Result<Option<Duration>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(u64::deserialize(value).ok().map(Duration::from_secs))
 }
 
 pub(crate) fn ser_server_time<S>(value: &NaiveTime, serializer: S) -> Result<S::Ok, S::Error>
@@ -95,8 +117,8 @@ mod test {
     fn test_ser_deser_duration() {
         #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
         struct FaktoryServer {
-            #[serde(deserialize_with = "deser_duration")]
-            #[serde(serialize_with = "ser_duration")]
+            #[serde(deserialize_with = "deser_duration_in_seconds")]
+            #[serde(serialize_with = "ser_duration_in_seconds")]
             uptime: Duration,
         }
 

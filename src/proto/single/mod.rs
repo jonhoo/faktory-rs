@@ -2,6 +2,7 @@ use crate::Error;
 use chrono::{DateTime, Utc};
 use derive_builder::Builder;
 use std::collections::HashMap;
+use std::time::Duration;
 use tokio::io::{AsyncBufRead, AsyncWrite, AsyncWriteExt};
 
 mod cmd;
@@ -22,7 +23,7 @@ pub mod ent;
 pub use id::BatchId;
 
 const JOB_DEFAULT_QUEUE: &str = "default";
-const JOB_DEFAULT_RESERVED_FOR_SECS: usize = 600;
+const JOB_DEFAULT_RESERVED_FOR_SECS: u64 = 600;
 const JOB_DEFAULT_RETRY_COUNT: isize = 25;
 const JOB_DEFAULT_PRIORITY: u8 = 5;
 const JOB_DEFAULT_BACKTRACE: usize = 0;
@@ -108,9 +109,13 @@ pub struct Job {
     /// How long to allow this job to run for.
     ///
     /// Defaults to 600 seconds.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[builder(default = "Some(JOB_DEFAULT_RESERVED_FOR_SECS)")]
-    pub reserve_for: Option<usize>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "utils::ser_optional_duration_in_seconds",
+        deserialize_with = "utils::deser_as_optional_duration_in_seconds"
+    )]
+    #[builder(default = "Some(Duration::from_secs(JOB_DEFAULT_RESERVED_FOR_SECS))")]
+    pub reserve_for: Option<Duration>,
 
     /// Number of times to retry this job.
     ///
@@ -300,7 +305,10 @@ mod test {
 
         assert!(job.enqueued_at.is_none());
         assert!(job.at.is_none());
-        assert_eq!(job.reserve_for, Some(JOB_DEFAULT_RESERVED_FOR_SECS));
+        assert_eq!(
+            job.reserve_for,
+            Some(Duration::from_secs(JOB_DEFAULT_RESERVED_FOR_SECS))
+        );
         assert_eq!(job.retry, Some(JOB_DEFAULT_RETRY_COUNT));
         assert_eq!(job.priority, Some(JOB_DEFAULT_PRIORITY));
         assert_eq!(job.backtrace, Some(JOB_DEFAULT_BACKTRACE));

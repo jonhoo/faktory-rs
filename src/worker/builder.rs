@@ -1,6 +1,9 @@
 use super::{runner::Closure, CallbacksRegistry, Client, ShutdownSignal, Worker};
 use crate::{
-    proto::{utils, ClientOptions},
+    proto::{
+        utils::{self, get_env_url, url_parse},
+        ClientOptions,
+    },
     Error, Job, JobRunner, Reconnect, WorkerId,
 };
 use std::future::Future;
@@ -129,7 +132,7 @@ impl<E: 'static> WorkerBuilder<E> {
     /// use tokio_util::sync::CancellationToken;
     /// use tokio::time::sleep;
     ///
-    /// Client::connect(None)
+    /// Client::connect()
     ///     .await
     ///     .unwrap()
     ///     .enqueue(Job::new("foobar", vec!["z"]))
@@ -145,7 +148,7 @@ impl<E: 'static> WorkerBuilder<E> {
     /// let mut w = Worker::builder()
     ///     .with_graceful_shutdown(signal)
     ///     .register_fn("job_type", move |_| async { Ok::<(), std::io::Error>(()) })
-    ///     .connect(None)
+    ///     .connect()
     ///     .await
     ///     .unwrap();
     ///
@@ -265,7 +268,7 @@ impl<E: 'static> WorkerBuilder<E> {
 
     /// Make the traffic between this worker and Faktory encrypted with [`rustls`](https://github.com/rustls/rustls).
     ///
-    /// Internally, will use [`TlsStream::connect_with_native_certs`](crate::rustls::TlsStream::connect_with_native_certs)
+    /// Internally, will use [`TlsStream::connect_with_native_certs_to`](crate::rustls::TlsStream::connect_with_native_certs_to)
     /// to establish a TLS stream to the Faktory server.
     ///
     /// Note that if you use this method on the builder, but eventually use [`WorkerBuilder::connect_with`]
@@ -316,8 +319,17 @@ impl<E: 'static> WorkerBuilder<E> {
     /// ```
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
-    pub async fn connect(self, url: Option<&str>) -> Result<Worker<E>, Error> {
-        let parsed_url = utils::parse_provided_or_from_env(url)?;
+    pub async fn connect(self) -> Result<Worker<E>, Error> {
+        let url = get_env_url();
+        self.connect_to(&url).await
+    }
+
+    /// Connect to a Faktory server using specified address.
+    ///
+    /// If the address of the Faktory server is present in the environment,
+    /// you may want to simply use [`WorkerBuilder::connect`].
+    pub async fn connect_to(self, addr: &str) -> Result<Worker<E>, Error> {
+        let parsed_url = url_parse(addr)?;
         let password = parsed_url.password().map(|p| p.to_string());
         match self.tls_kind {
             TlsKind::None => {
@@ -328,13 +340,13 @@ impl<E: 'static> WorkerBuilder<E> {
             }
             #[cfg(feature = "rustls")]
             TlsKind::Rust => {
-                let stream = crate::rustls::TlsStream::connect_with_native_certs(url).await?;
+                let stream = crate::rustls::TlsStream::connect_with_native_certs_to(addr).await?;
                 let buffered = BufStream::new(stream);
                 self.connect_with(buffered, password).await
             }
             #[cfg(feature = "native_tls")]
             TlsKind::Native => {
-                let stream = crate::native_tls::TlsStream::connect(url).await?;
+                let stream = crate::native_tls::TlsStream::connect_to(addr).await?;
                 let buffered = BufStream::new(stream);
                 self.connect_with(buffered, password).await
             }

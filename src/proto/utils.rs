@@ -27,10 +27,6 @@ pub(crate) fn url_parse(url: &str) -> Result<Url, Error> {
     Ok(url)
 }
 
-pub(crate) fn parse_provided_or_from_env(url: Option<&str>) -> Result<Url, Error> {
-    url_parse(url.unwrap_or(&get_env_url()))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

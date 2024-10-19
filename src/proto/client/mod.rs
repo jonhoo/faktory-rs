@@ -5,6 +5,7 @@ mod ent;
 #[cfg(doc)]
 use crate::proto::{BatchStatus, Progress, ProgressUpdate};
 
+use super::utils::{get_env_url, url_parse};
 use super::{single, Info, Push, QueueAction, QueueControl};
 use super::{utils, PushBulk};
 use crate::error::{self, Error};
@@ -73,7 +74,7 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// ```no_run
 /// # tokio_test::block_on(async {
 /// use faktory::Client;
-/// let p = Client::connect(None).await.unwrap();
+/// let p = Client::connect().await.unwrap();
 /// # });
 /// ```
 ///
@@ -82,7 +83,7 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// ```no_run
 /// # tokio_test::block_on(async {
 /// use faktory::Client;
-/// let p = Client::connect(Some("tcp://:hunter2@localhost:7439")).await.unwrap();
+/// let p = Client::connect_to("tcp://:hunter2@localhost:7439").await.unwrap();
 /// # })
 /// ```
 ///
@@ -91,7 +92,7 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// ```no_run
 /// # tokio_test::block_on(async {
 /// # use faktory::Client;
-/// # let mut client = Client::connect(None).await.unwrap();
+/// # let mut client = Client::connect().await.unwrap();
 /// use faktory::Job;
 /// client.enqueue(Job::new("foobar", vec!["z"])).await.unwrap();
 /// # });
@@ -108,7 +109,7 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// # tokio_test::block_on(async {
 /// use faktory::{Client, JobId, ent::JobState};
 /// let job_id = JobId::new("W8qyVle9vXzUWQOf");
-/// let mut cl = Client::connect(None).await?;
+/// let mut cl = Client::connect().await?;
 /// if let Some(progress) = cl.get_progress(job_id).await? {
 ///     if let JobState::Success = progress.state {
 ///         # /*
@@ -126,7 +127,7 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// # tokio_test::block_on(async {
 /// use faktory::{Client, JobId, ent::ProgressUpdate};
 /// let jid = JobId::new("W8qyVle9vXzUWQOf");
-/// let mut cl = Client::connect(None).await?;
+/// let mut cl = Client::connect().await?;
 /// let progress = ProgressUpdate::builder(jid)
 ///     .desc("Almost done...".to_owned())
 ///     .percent(99)
@@ -142,7 +143,7 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// # tokio_test::block_on(async {
 /// use faktory::{Client, ent::BatchId};
 /// let bid = BatchId::new("W8qyVle9vXzUWQOg");
-/// let mut cl = Client::connect(None).await?;
+/// let mut cl = Client::connect().await?;
 /// if let Some(status) = cl.get_batch_status(bid).await? {
 ///     println!("This batch created at {}", status.created_at);
 /// }
@@ -203,7 +204,7 @@ impl Client {
 impl Client {
     /// Create new [`Client`] and connect to a Faktory server.
     ///
-    /// If `url` is not given, will use the standard Faktory environment variables. Specifically,
+    /// Will use the standard Faktory environment variables. Specifically,
     /// `FAKTORY_PROVIDER` is read to get the name of the environment variable to get the address
     /// from (defaults to `FAKTORY_URL`), and then that environment variable is read to get the
     /// server address. If the latter environment variable is not defined, the connection will be
@@ -212,8 +213,17 @@ impl Client {
     /// ```text
     /// tcp://localhost:7419
     /// ```
-    pub async fn connect(url: Option<&str>) -> Result<Client, Error> {
-        let url = utils::parse_provided_or_from_env(url)?;
+    pub async fn connect() -> Result<Client, Error> {
+        let url = get_env_url();
+        Self::connect_to(&url).await
+    }
+
+    /// Create new [`Client`] and connect to a Faktory server using specified address.
+    ///
+    /// If the address of the Faktory server is present in the environment,
+    /// you may want to simply use [`Client::connect`].
+    pub async fn connect_to(addr: &str) -> Result<Client, Error> {
+        let url = url_parse(addr)?;
         let stream = TokioStream::connect(utils::host_from_url(&url)).await?;
         let buffered_stream = BufStream::new(stream);
         Self::connect_with(buffered_stream, url.password().map(|p| p.to_string())).await
