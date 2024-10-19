@@ -30,7 +30,7 @@ where
     serializer.serialize_u64(secs)
 }
 
-pub(crate) fn ser_optional_duration<S>(
+pub(crate) fn ser_optional_duration_in_seconds<S>(
     value: &Option<Duration>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
