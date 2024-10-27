@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
 ## [0.13.0] - 2024-10-27
 
 ### Added
@@ -51,7 +63,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#48]: https://github.com/jonhoo/faktory-rs/pull/48
 [#51]: https://github.com/jonhoo/faktory-rs/pull/51
 [#54]: https://github.com/jonhoo/faktory-rs/pull/54
-
 [unreleased]: https://github.com/jonhoo/faktory-rs/compare/v0.13.0...HEAD
 [0.13.0]: https://github.com/jonhoo/faktory-rs/compare/v0.12.5...v0.13.0
 [0.12.5]: https://github.com/jonhoo/faktory-rs/compare/v0.12.4...v0.12.5
