@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.13.0] - 2024-10-27
 
 ### Added
 
@@ -15,8 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Error::Stream` for underlying 'native_tls' and 'rustls' errors
 - Shutdown signal via `WorkerBuilder::with_graceful_shutdown`
 - Shutdown timeout via `WorkerBuilder::shutdown_timeout`
-- [Faktory Enterprise Edition] Batch jobs (`Batch`, `BatchId`, `BatchStatus`)
-- [Faktory Enterprise Edition] Setting and getting a job's progress
+- Faktory Enterprise Edition: batch jobs (`Batch`, `BatchId`, `BatchStatus`)
+- Faktory Enterprise Edition: setting and getting a job's progress
 
 ### Changed
 
@@ -40,5 +40,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [Faktory Enterprise Edition] Setting and getting a job's progress
 
 
-[unreleased]: https://github.com/jonhoo/faktory-rs/compare/ff2a27bd841b097c1db0208ad03d9363d89d21c1...release-0.13
-[0.12.5]: https://github.com/jonhoo/faktory-rs/compare/b5ddd2130661ef8aa72790db3f2868706fc7408c...ff2a27bd841b097c1db0208ad03d9363d89d21c1
+[unreleased]: https://github.com/jonhoo/faktory-rs/compare/v0.12.5...v0.13.0
+[0.12.5]: https://github.com/jonhoo/faktory-rs/compare/v0.12.4...v0.12.5
