@@ -9,14 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `Client::current_info` and `FaktoryState` struct
-- `Client` method for pausing, resuming, and removing queues
-- TLS configurations options to `WorkerBuilder`
-- `Error::Stream` for underlying 'native_tls' and 'rustls' errors
-- Shutdown signal via `WorkerBuilder::with_graceful_shutdown`
-- Shutdown timeout via `WorkerBuilder::shutdown_timeout`
-- Faktory Enterprise Edition: batch jobs (`Batch`, `BatchId`, `BatchStatus`)
-- Faktory Enterprise Edition: setting and getting a job's progress
+- `Error::Stream` for underlying 'native_tls' and 'rustls' errors ([#49])
+- Shutdown signal via `WorkerBuilder::with_graceful_shutdown` ([#57])
+- Shutdown timeout via `WorkerBuilder::shutdown_timeout` ([#57])
+- `Client` method for pausing, resuming, and removing queues ([#59])
+- `Client::current_info` and `FaktoryState` struct ([#63])
+- TLS configurations options to `WorkerBuilder` ([#74])
 
 ### Changed
 
@@ -29,16 +27,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Worker::run` now returns a result with `StopDetails`
 - `Faktory` image version bumped from `1.8.0` to `1.9.1`
 
+[#49]: https://github.com/jonhoo/faktory-rs/pull/49
+[#57]: https://github.com/jonhoo/faktory-rs/pull/57
+[#59]: https://github.com/jonhoo/faktory-rs/pull/59
+[#63]: https://github.com/jonhoo/faktory-rs/pull/63
+[#74]: https://github.com/jonhoo/faktory-rs/pull/74
 
 ## [0.12.5] - 2024-02-18
 
 ### Added
 
-- `JobRunner` trait and `ConsumerBuilder::register_runner`
-- Support for enqueuing numerous jobs with `Producer::enqueue_many`
-- [Faktory Enterprise Edition] Batch jobs (`Batch`, `BatchId`, `BatchStatus`)
-- [Faktory Enterprise Edition] Setting and getting a job's progress
+- `JobRunner` trait and `ConsumerBuilder::register_runner` ([#51])
+- Support for enqueuing numerous jobs with `Producer::enqueue_many` ([#54])
+- Faktory Enterprise Edition: Batch jobs (`Batch`, `BatchId`, `BatchStatus`) ([#48])
+- Faktory Enterprise Edition: Setting and getting a job's progress ([#48])
 
+[#48]: https://github.com/jonhoo/faktory-rs/pull/48
+[#51]: https://github.com/jonhoo/faktory-rs/pull/51
+[#54]: https://github.com/jonhoo/faktory-rs/pull/54
 
 [unreleased]: https://github.com/jonhoo/faktory-rs/compare/v0.12.5...v0.13.0
 [0.12.5]: https://github.com/jonhoo/faktory-rs/compare/v0.12.4...v0.12.5
