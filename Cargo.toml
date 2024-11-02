@@ -66,6 +66,12 @@ native-tls = { version = "0.2.4", optional = true }
 num-bigint = "0.4.2"
 oid-registry = "0.6.1"
 openssl = { version = "0.10.60", optional = true }
+aws-lc-sys = { version = "0.22", optional = true }
+
+# inference error on crate `time` caused by an API change in Rust 1.80.0
+# https://github.com/time-rs/time/pull/671
+# https://github.com/rust-lang/rust/issues/128242
+time = { version = "0.3.35" }
 
 # TryFrom<String> for ServerName<'static> has been implemented:
 # https://github.com/rustls/pki-types/compare/rustls:3793627...rustls:1303efa#
