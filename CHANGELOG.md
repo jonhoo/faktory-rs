@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Use `rustls-platform-verifier` to load native certs ([#82])
+
 ### Deprecated
 
 ### Removed
