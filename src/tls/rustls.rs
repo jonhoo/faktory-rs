@@ -56,10 +56,12 @@ impl TlsStream<TokioTcpStream> {
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
     ///
-    /// Internally creates a `ClientConfig` with an _empty_ root certificates store and _no client
-    /// authentication_. Use [`with_client_config`](TlsStream::with_client_config)
-    /// or [`with_connector`](TlsStream::with_connector) for customized
-    /// `ClientConfig` and `TlsConnector` accordingly.
+    /// Internally, creates a [`ClientConfig`](https://docs.rs/rustls/latest/rustls/client/struct.ClientConfig.html)
+    /// with an _empty_ root certificates store and _no client authentication_.
+    ///
+    /// Use [`with_client_config`](TlsStream::with_client_config) or [`with_connector`](TlsStream::with_connector)
+    /// for customized `ClientConfig` and [`TlsConnector`](https://docs.rs/tokio-rustls/latest/tokio_rustls/struct.TlsConnector.html)
+    /// accordingly.
     pub async fn connect() -> Result<Self, Error> {
         let config = ClientConfig::builder()
             .with_root_certificates(RootCertStore::empty())
@@ -77,10 +79,12 @@ impl TlsStream<TokioTcpStream> {
         TlsStream::with_connector(connector, Some(addr)).await
     }
 
-    /// Create a new TLS connection over TCP using native certificates.
+    /// Create a new TLS connection over TCP using platform certificates.
     ///
     /// Unlike [`TlsStream::connect`], creates a root certificates store populated
     /// with the certificates loaded from a platform-native certificate store.
+    ///
+    /// Similarly to [`TlsStream::connect`], no client authentication will be used.
     pub async fn connect_with_native_certs_to(addr: &str) -> Result<Self, Error> {
         let config = ClientConfig::with_platform_verifier();
         TlsStream::with_connector(TlsConnector::from(Arc::new(config)), Some(addr)).await
@@ -115,10 +119,10 @@ where
 {
     /// Create a new TLS connection on an existing stream.
     ///
-    /// Internally creates a `ClientConfig` with an empty root certificates store and no client
-    /// authentication.
+    /// Internally, creates a [`ClientConfig`](https://docs.rs/tokio-native-tls/latest/tokio_native_tls/native_tls/struct.TlsConnector.html)
+    /// with an empty root certificates store and no client authentication.
     ///
-    /// Use [`new`](TlsStream::new) for a customized `TlsConnector`.
+    /// Use [`new`](TlsStream::new) for a customized [`TlsConnector`](https://docs.rs/tokio-rustls/latest/tokio_rustls/struct.TlsConnector.html).
     pub async fn default(stream: S, hostname: String) -> io::Result<Self> {
         let conf = ClientConfig::builder()
             .with_root_certificates(RootCertStore::empty())

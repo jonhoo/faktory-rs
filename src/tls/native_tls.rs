@@ -94,9 +94,10 @@ where
 {
     /// Create a new TLS connection on an existing stream.
     ///
-    /// Internally creates a `ClientConfig` with an empty root certificates store and no client
-    /// authentication. Use [`new`](TlsStream::new) for a customized `TlsConnector`.
-    /// Create a new TLS connection on an existing stream.
+    /// Internally, creates a [`TlsConnector`](https://docs.rs/tokio-native-tls/latest/tokio_native_tls/native_tls/struct.TlsConnector.html)
+    /// with default settings.
+    ///
+    /// Use [`new`](TlsStream::new) for a customized connector.
     pub async fn default(stream: S, hostname: String) -> io::Result<Self> {
         let connector = TlsConnector::builder()
             .build()
