@@ -54,7 +54,8 @@ test/doc:
 
 .PHONY: test/e2e
 test/e2e:
-	FAKTORY_URL=tcp://${FAKTORY_HOST}:${FAKTORY_PORT} cargo test --locked --all-features --all-targets
+	FAKTORY_URL=tcp://${FAKTORY_HOST}:${FAKTORY_PORT} cargo test \
+	--locked --all-features --all-targets -- $(pattern)
 
 .PHONY: test/e2e/tls
 test/e2e/tls:

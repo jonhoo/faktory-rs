@@ -759,3 +759,41 @@ async fn test_panic_in_handler() {
     assert!(!w.is_terminated());
     assert!(w.run_one(0, &[local]).await.unwrap());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn job_failure_record() {
+    skip_check!();
+
+    // prepare a client and clean up the queue
+    // to ensure there are no left-overs
+    let local = "job_failure_record";
+    let mut client = Client::connect().await.unwrap();
+    client.queue_remove(&[local]).await.unwrap();
+
+    // prepare a worker that will fail the job unconditionally
+    let mut worker = Worker::builder::<io::Error>()
+        .register_fn("rpc_procedure_name", move |_job| async move {
+            panic!("Failure should be recorded");
+        })
+        .connect()
+        .await
+        .unwrap();
+
+    // enqueue a job
+    client
+        .enqueue(JobBuilder::new("rpc_procedure_name").queue(local).build())
+        .await
+        .unwrap();
+
+    // consume and fail it
+    let had_one = worker.run_one(0, &[local]).await.unwrap();
+    assert!(had_one);
+
+    // the Faktory server will now put this job to `retries` set (provided retries are
+    // possible for this job, which they are by default) and after a while requeue it;
+    // we want to be able to accelerate with 'after a while' be means of `MUTATE` API;
+    //
+    // TODO: 1) add MUTATE bindings
+    // TODO: 2) force the job from `retries` to `scheduled`
+    // TODO: 3) examine the job's failture (will need a dedicate PR)
+}
