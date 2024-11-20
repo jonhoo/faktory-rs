@@ -311,3 +311,47 @@ impl<'a, S: AsRef<str>> QueueControl<'a, S> {
         Self { action, queues }
     }
 }
+
+// ---------------------- MUTATE -------------------
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+#[non_exhaustive]
+pub(crate) enum MutationType {
+    Kill,
+    Requeue,
+    Discard,
+    Clear,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+#[non_exhaustive]
+pub enum MutationTarget {
+    Scheduled,
+    Retries,
+    Dead,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[non_exhaustive]
+pub struct MutationFilter<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jids: Option<&'a [&'a str]>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub regexp: Option<&'a str>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "jobtype")]
+    pub kind: Option<&'a str>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct MutationAction<'a> {
+    cmd: MutationType,
+    target: MutationTarget,
+    filter: MutationFilter<'a>,
+}
+
+self_to_cmd!(MutationAction<'_>, "MUTATE");
