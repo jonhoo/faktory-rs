@@ -329,10 +329,21 @@ pub(crate) enum MutationType {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub(crate) struct MutationAction<'a, J> {
-    cmd: MutationType,
-    target: MutationTarget,
+    pub(crate) cmd: MutationType,
+    pub(crate) target: MutationTarget,
     #[serde(skip_serializing_if = "Option::is_none")]
-    filter: Option<MutationFilter<'a, J>>,
+    pub(crate) filter: Option<&'a MutationFilter<'a, J>>,
 }
 
-self_to_cmd!(MutationAction<'_, JobId>, "MUTATE");
+// self_to_cmd!(MutationAction<'_, J>, "MUTATE");
+#[async_trait::async_trait]
+impl<J> FaktoryCommand for MutationAction<'_, J>
+where
+    J: AsRef<JobId> + Sync,
+{
+    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+        let cmd = stringify!($struct).to_uppercase();
+        w.write_all(cmd.as_bytes()).await?;
+        Ok(w.write_all(b"\r\n").await?)
+    }
+}
