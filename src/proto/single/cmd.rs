@@ -3,6 +3,8 @@ use crate::proto::{Job, JobId, WorkerId};
 use std::error::Error as StdError;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
+use super::{MutationFilter, MutationTarget};
+
 #[async_trait::async_trait]
 pub trait FaktoryCommand {
     async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error>;
@@ -31,9 +33,9 @@ macro_rules! self_to_cmd {
             }
         }
     };
-    ($struct:ident<$lt:lifetime>, $cmd:expr) => {
+    ($struct:ident<$lt:lifetime, $t:tt>, $cmd:expr) => {
         #[async_trait::async_trait]
-        impl FaktoryCommand for $struct<$lt> {
+        impl FaktoryCommand for $struct<$lt, $t> {
             async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
                 w.write_all($cmd.as_bytes()).await?;
                 w.write_all(b" ").await?;
@@ -314,10 +316,11 @@ impl<'a, S: AsRef<str>> QueueControl<'a, S> {
 
 // ---------------------- MUTATE -------------------
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub(crate) enum MutationType {
+    #[default]
     Kill,
     Requeue,
     Discard,
@@ -325,33 +328,11 @@ pub(crate) enum MutationType {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-#[non_exhaustive]
-pub enum MutationTarget {
-    Scheduled,
-    Retries,
-    Dead,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[non_exhaustive]
-pub struct MutationFilter<'a> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub jids: Option<&'a [&'a str]>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub regexp: Option<&'a str>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(rename = "jobtype")]
-    pub kind: Option<&'a str>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub(crate) struct MutationAction<'a> {
+pub(crate) struct MutationAction<'a, J> {
     cmd: MutationType,
     target: MutationTarget,
-    filter: MutationFilter<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    filter: Option<MutationFilter<'a, J>>,
 }
 
-self_to_cmd!(MutationAction<'_>, "MUTATE");
+self_to_cmd!(MutationAction<'_, JobId>, "MUTATE");
