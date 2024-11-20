@@ -33,9 +33,9 @@ macro_rules! self_to_cmd {
             }
         }
     };
-    ($struct:ident<$lt:lifetime, $t:tt>, $cmd:expr) => {
+    ($struct:ident<$lt:lifetime>, $cmd:expr) => {
         #[async_trait::async_trait]
-        impl FaktoryCommand for $struct<$lt, $t> {
+        impl FaktoryCommand for $struct<$lt> {
             async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
                 w.write_all($cmd.as_bytes()).await?;
                 w.write_all(b" ").await?;
@@ -327,23 +327,16 @@ pub(crate) enum MutationType {
     Clear,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub(crate) struct MutationAction<'a, J> {
-    pub(crate) cmd: MutationType,
-    pub(crate) target: MutationTarget,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) filter: Option<&'a MutationFilter<'a, J>>,
+fn filter_is_empty(f: &Option<&MutationFilter<'_>>) -> bool {
+    f.is_none_or(|f| f.is_empty())
 }
 
-// self_to_cmd!(MutationAction<'_, J>, "MUTATE");
-#[async_trait::async_trait]
-impl<J> FaktoryCommand for MutationAction<'_, J>
-where
-    J: AsRef<JobId> + Sync,
-{
-    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
-        let cmd = stringify!($struct).to_uppercase();
-        w.write_all(cmd.as_bytes()).await?;
-        Ok(w.write_all(b"\r\n").await?)
-    }
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct MutationAction<'a> {
+    pub(crate) cmd: MutationType,
+    pub(crate) target: MutationTarget,
+    #[serde(skip_serializing_if = "filter_is_empty")]
+    pub(crate) filter: Option<&'a MutationFilter<'a>>,
 }
+
+self_to_cmd!(MutationAction<'_>, "MUTATE");

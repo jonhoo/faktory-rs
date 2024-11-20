@@ -1,5 +1,8 @@
 use crate::{assert_gte, skip_check};
-use faktory::{Client, Job, JobBuilder, JobId, StopReason, Worker, WorkerBuilder, WorkerId};
+use faktory::{
+    Client, Job, JobBuilder, JobId, MutationFilter, MutationTarget, StopReason, Worker,
+    WorkerBuilder, WorkerId,
+};
 use serde_json::Value;
 use std::{io, sync, time::Duration};
 use tokio::time as tokio_time;
@@ -761,12 +764,12 @@ async fn test_panic_in_handler() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn job_failure_record() {
+async fn mutation_requeue_jobs() {
     skip_check!();
 
     // prepare a client and clean up the queue
     // to ensure there are no left-overs
-    let local = "job_failure_record";
+    let local = "mutation_requeue_jobs";
     let mut client = Client::connect().await.unwrap();
     client.queue_remove(&[local]).await.unwrap();
 
@@ -780,20 +783,31 @@ async fn job_failure_record() {
         .unwrap();
 
     // enqueue a job
-    client
-        .enqueue(JobBuilder::new("rpc_procedure_name").queue(local).build())
-        .await
-        .unwrap();
+    let job = JobBuilder::new("rpc_procedure_name").queue(local).build();
+    let job_id = job.id().clone();
+    client.enqueue(job).await.unwrap();
 
     // consume and fail it
     let had_one = worker.run_one(0, &[local]).await.unwrap();
     assert!(had_one);
 
-    // the Faktory server will now put this job to `retries` set (provided retries are
-    // possible for this job, which they are by default) and after a while requeue it;
-    // we want to be able to accelerate with 'after a while' be means of `MUTATE` API;
-    //
-    // TODO: 1) add MUTATE bindings
-    // TODO: 2) force the job from `retries` to `scheduled`
-    // TODO: 3) examine the job's failture (will need a dedicate PR)
+    // the job is now in `retries` set and is due to
+    // be rescheduled by the Faktory server after a while, but ...
+    let had_one = worker.run_one(0, &[local]).await.unwrap();
+    assert!(!had_one);
+
+    // ... we can force it
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::builder().jids(&[&job_id]).build(),
+        )
+        .await
+        .unwrap();
+
+    // the job has been re-enqueued and we consumed it again
+    let had_one = worker.run_one(0, &[local]).await.unwrap();
+    assert!(had_one);
+
+    // TODO: Examine the job's failure (will need a dedicated PR)
 }

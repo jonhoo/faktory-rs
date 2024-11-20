@@ -1,50 +1,40 @@
 use crate::{
     proto::single::{MutationAction, MutationType},
-    Client, Error, JobId, MutationFilter, MutationTarget,
+    Client, Error, MutationFilter, MutationTarget,
 };
 use std::borrow::Borrow;
 
 impl Client {
-    /// TODO
-    pub async fn requeue_all(&mut self, target: MutationTarget) {
-        todo!()
-    }
-
     /// Re-enqueue the jobs.
     ///
     /// This will immediately move the jobs from the targeted set (see [`MutationTarget`])
-    /// to their queues.
+    /// to their queues. This will apply to the jobs satisfying the [`filter`](crate::MutationFilter).
     ///
-    /// Use a [`filter`](crate::MutationFilter) to narrow down the subset of jobs your would
-    /// like to requeue.
     /// ```no_run
     /// # tokio_test::block_on(async {
     /// # use faktory::{JobId, Client, MutationTarget, MutationFilter};
     /// # let mut client = Client::connect().await.unwrap();
-    /// let job_id = JobId::new("3sgE_qwtqw15"); // e.g. a failed job's id
-    /// let ids = [&job_id];
-    /// let filter = MutationFilter::builder().jids(&ids).build();
+    /// let job_id1 = JobId::new("3sgE_qwtqw1501");
+    /// let job_id2 = JobId::new("3sgE_qwtqw1502");
+    /// let failed_ids = [&job_id1, &job_id2];
+    /// let filter = MutationFilter::builder().jids(failed_ids.as_slice()).build();
     /// client.requeue(MutationTarget::Retries, &filter).await.unwrap();
     /// # });
     /// ```
-    pub async fn requeue<'a, F, J>(
-        &mut self,
-        target: MutationTarget,
-        filter: F,
-    ) -> Result<(), Error>
+    pub async fn requeue<'a, F>(&mut self, target: MutationTarget, filter: F) -> Result<(), Error>
     where
-        F: Borrow<MutationFilter<'a, J>>,
-        J: 'a + AsRef<JobId> + Sync,
+        F: Borrow<MutationFilter<'a>>,
     {
         self.issue(&MutationAction {
             cmd: MutationType::Requeue,
             target,
-            filter: filter.borrow().into(),
+            filter: Some(filter.borrow()),
         })
         .await?
         .read_ok()
         .await
     }
+
     /*
     From Go bindings:
 
