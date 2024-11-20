@@ -9,6 +9,16 @@ pub trait FaktoryCommand {
 }
 
 macro_rules! self_to_cmd {
+    ($struct:ident) => {
+        #[async_trait::async_trait]
+        impl FaktoryCommand for $struct {
+            async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+                let cmd = stringify!($struct).to_uppercase();
+                w.write_all(cmd.as_bytes()).await?;
+                Ok(w.write_all(b"\r\n").await?)
+            }
+        }
+    };
     ($struct:ident, $cmd:expr) => {
         #[async_trait::async_trait]
         impl FaktoryCommand for $struct {
@@ -16,6 +26,30 @@ macro_rules! self_to_cmd {
                 w.write_all($cmd.as_bytes()).await?;
                 w.write_all(b" ").await?;
                 let r = serde_json::to_vec(self).map_err(Error::Serialization)?;
+                w.write_all(&r).await?;
+                Ok(w.write_all(b"\r\n").await?)
+            }
+        }
+    };
+    ($struct:ident<$lt:lifetime>, $cmd:expr) => {
+        #[async_trait::async_trait]
+        impl FaktoryCommand for $struct<$lt> {
+            async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+                w.write_all($cmd.as_bytes()).await?;
+                w.write_all(b" ").await?;
+                let r = serde_json::to_vec(self).map_err(Error::Serialization)?;
+                w.write_all(&r).await?;
+                Ok(w.write_all(b"\r\n").await?)
+            }
+        }
+    };
+    ($struct:ident, $cmd:expr, $field:tt) => {
+        #[async_trait::async_trait]
+        impl FaktoryCommand for $struct {
+            async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+                w.write_all($cmd.as_bytes()).await?;
+                w.write_all(b" ").await?;
+                let r = serde_json::to_vec(&self.$field).map_err(Error::Serialization)?;
                 w.write_all(&r).await?;
                 Ok(w.write_all(b"\r\n").await?)
             }
@@ -42,12 +76,7 @@ where
 
 pub(crate) struct Info;
 
-#[async_trait::async_trait]
-impl FaktoryCommand for Info {
-    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
-        Ok(w.write_all(b"INFO\r\n").await?)
-    }
-}
+self_to_cmd!(Info);
 
 // -------------------- ACK ----------------------
 
@@ -138,12 +167,7 @@ self_to_cmd!(Fail, "FAIL");
 
 pub(crate) struct End;
 
-#[async_trait::async_trait]
-impl FaktoryCommand for End {
-    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
-        Ok(w.write_all(b"END\r\n").await?)
-    }
-}
+self_to_cmd!(End);
 
 // --------------------- FETCH --------------------
 
@@ -230,29 +254,13 @@ self_to_cmd!(Hello, "HELLO");
 
 pub(crate) struct Push(Job);
 
-use std::ops::Deref;
-impl Deref for Push {
-    type Target = Job;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 impl From<Job> for Push {
     fn from(j: Job) -> Self {
         Push(j)
     }
 }
 
-#[async_trait::async_trait]
-impl FaktoryCommand for Push {
-    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
-        w.write_all(b"PUSH ").await?;
-        let r = serde_json::to_vec(&**self).map_err(Error::Serialization)?;
-        w.write_all(&r).await?;
-        Ok(w.write_all(b"\r\n").await?)
-    }
-}
+self_to_cmd!(Push, "PUSH", 0);
 
 // ---------------------- PUSHB -------------------
 
@@ -264,15 +272,7 @@ impl From<Vec<Job>> for PushBulk {
     }
 }
 
-#[async_trait::async_trait]
-impl FaktoryCommand for PushBulk {
-    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
-        w.write_all(b"PUSHB ").await?;
-        let r = serde_json::to_vec(&self.0).map_err(Error::Serialization)?;
-        w.write_all(&r).await?;
-        Ok(w.write_all(b"\r\n").await?)
-    }
-}
+self_to_cmd!(PushBulk, "PUSHB", 0);
 
 // ---------------------- QUEUE -------------------
 
