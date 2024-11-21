@@ -811,3 +811,141 @@ async fn mutation_requeue_jobs() {
 
     // TODO: Examine the job's failure (will need a dedicated PR)
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn mutation_requeue_specific_jobs_only() {
+    skip_check!();
+
+    // prepare a client and clean up the queue
+    // to ensure there are no left-overs
+    let local = "mutation_requeue_specific_jobs_only";
+    let mut client = Client::connect().await.unwrap();
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::default(), // just an empty filter
+        )
+        .await
+        .unwrap();
+    client.queue_remove(&[local]).await.unwrap();
+
+    // prepare a worker that will fail the job unconditionally
+    let mut worker = Worker::builder::<io::Error>()
+        .register_fn(local, move |_job| async move {
+            panic!("Force fail this job");
+        })
+        .connect()
+        .await
+        .unwrap();
+
+    // enqueue two jobs
+    let job1 = JobBuilder::new(local)
+        .retry(10)
+        .queue(local)
+        .args(["fizz"])
+        .build();
+    let job_id1 = job1.id().clone();
+    let job2 = JobBuilder::new(local)
+        .retry(10)
+        .queue(local)
+        .args(["buzz"])
+        .build();
+    let job_id2 = job2.id().clone();
+    assert_ne!(job_id1, job_id2); // sanity check
+    client.enqueue_many([job1, job2]).await.unwrap();
+
+    // cosume them (and immediately fail) and make
+    // sure the queue is drained
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+    assert!(!worker.run_one(0, &[local]).await.unwrap());
+
+    // now let's only requeue one job of kind 'mutation_requeue_specific_jobs_only'
+    // following this example from the Faktory docs:
+    //
+    // MUTATE {"cmd":"kill","target":"retries","filter":{"jobtype":"QuickbooksSyncJob", "jids":["123456789", "abcdefgh"]}}
+    // (see: https://github.com/contribsys/faktory/wiki/Mutate-API#examples)
+    //
+    // NB! we only want one single job (with job_id1) to be immediately re-enqueued, but ...
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::builder()
+                .jids(&[&job_id1])
+                .kind(local)
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    // ... looks like _all_ the jobs of that jobtype are re-queued
+    // see: https://github.com/contribsys/faktory/blob/10ccc2270dc2a1c95c3583f7c291a51b0292bb62/server/mutate.go#L96-L98
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+
+    // let's prove that there _is_ still a way to only requeue one
+    // specific jobs, and to do so let's verify the queue is drained
+    // again (since we've just failed the two jobs again):
+    assert!(!worker.run_one(0, &[local]).await.unwrap());
+
+    // now, let's requeue a job _without_ specifying a jobkind, rather
+    // only `jids` in the filter:
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::builder().jids(&[&job_id1]).build(),
+        )
+        .await
+        .unwrap();
+
+    // we can now see that only one job has been re-scheduled, just like we wanted
+    // see: https://github.com/contribsys/faktory/blob/10ccc2270dc2a1c95c3583f7c291a51b0292bb62/server/mutate.go#L100-L110
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+    assert!(!worker.run_one(0, &[local]).await.unwrap()); // drained
+
+    // and - for completeness - let's requeue the jobs using
+    // the comination of `kind` + `pattern` (jobtype and regexp in Faktory's terms);
+    // let's first make sure to force-reschedule the jobs:
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::default(), // just an empty filter
+        )
+        .await
+        .unwrap();
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+    assert!(!worker.run_one(0, &[local]).await.unwrap()); // drained
+
+    // now let's use `kind` + `pattern` combo to only immeduately
+    // reschedule the job with "fizz" in the `args`, but not the
+    // one with "buzz":
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::builder()
+                .kind(local)
+                .pattern(r#"*\"args\":\[\"fizz\"\]*"#)
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    // and indeed only one job has behttps://github.com/contribsys/faktory/blob/b4a93227a3323ab4b1365b0c37c2fac4f9588cc8/server/mutate.go#L83-L94en re-scheduled,
+    // see: https://github.com/contribsys/faktory/blob/b4a93227a3323ab4b1365b0c37c2fac4f9588cc8/server/mutate.go#L83-L94
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+    assert!(!worker.run_one(0, &[local]).await.unwrap()); // drained
+
+    // just for sanity's sake, let's re-queue the "buzz" one:
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::builder()
+                .pattern(r#"*\"args\":\[\"buzz\"\]*"#)
+                .build(),
+        )
+        .await
+        .unwrap();
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+    assert!(!worker.run_one(0, &[local]).await.unwrap()); // drained
+}

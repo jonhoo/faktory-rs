@@ -2,22 +2,19 @@ use derive_builder::Builder;
 
 use crate::JobId;
 
-/// TODO
-///
-/// Use a [`filter`](crate::MutationFilter) to narrow down the subset of jobs your would
-/// like to requeue.
+/// Mutation target set.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum MutationTarget {
-    /// TODO
+    /// A set of currently enqueued jobs.
     #[default]
     Scheduled,
 
-    /// TODO
+    /// A set of jobs that should be retried.
     Retries,
 
-    /// TODO
+    /// A set of failed jobs that will not be retried.
     Dead,
 }
 
@@ -30,7 +27,7 @@ pub enum MutationTarget {
 /// # let mut client = Client::connect().await.unwrap();
 /// let filter = MutationFilter::builder()
 ///     .kind("jobtype_here")
-///     .pattern("*\"args\":[\"bob\"*")
+///     .pattern(r#"*\"args\":\[\"fizz\"\]*"#)
 ///     .build();
 /// client.requeue(MutationTarget::Retries, &filter).await.unwrap();
 /// # })
@@ -44,17 +41,21 @@ pub enum MutationTarget {
 )]
 #[non_exhaustive]
 pub struct MutationFilter<'a> {
-    /// TODO
+    /// A job's [`kind`](crate::Job::kind).
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "jobtype")]
     pub kind: Option<&'a str>,
 
-    /// Match jobs with the given ids.
+    /// Ids of jobs to target.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[builder(setter(custom))]
     pub jids: Option<&'a [&'a JobId]>,
 
-    /// TODO
+    /// Match attern to use for filtering.
+    ///
+    /// Faktory will pass this directly to Redis's `SCAN` command,
+    /// so please see the [`SCAN` documentation](https://redis.io/docs/latest/commands/scan/)
+    /// for further details.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "regexp")]
     pub pattern: Option<&'a str>,
@@ -67,14 +68,14 @@ impl MutationFilter<'_> {
 }
 
 impl<'a> MutationFilter<'_> {
-    /// TODO
+    /// Creates a new builder for a [`MutationFilter`]
     pub fn builder() -> MutationFilterBuilder<'a> {
         MutationFilterBuilder::default()
     }
 }
 
 impl<'a> MutationFilterBuilder<'a> {
-    /// TODO
+    /// Ids of jobs to target.
     pub fn jids(mut self, value: &'a [&JobId]) -> Self {
         self.jids = Some(value).into();
         self
@@ -82,7 +83,7 @@ impl<'a> MutationFilterBuilder<'a> {
 }
 
 impl<'a> MutationFilterBuilder<'a> {
-    /// TODO
+    /// Builds a new [`MutationFilter`] from the parameters of this builder.
     pub fn build(self) -> MutationFilter<'a> {
         self.try_build().expect("infallible")
     }
