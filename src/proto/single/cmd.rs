@@ -328,7 +328,16 @@ pub(crate) enum MutationType {
 }
 
 fn filter_is_empty(f: &Option<&MutationFilter<'_>>) -> bool {
-    f.is_none_or(|f| f.is_empty())
+    // Rust 1.82 has got the genious `Option::is_none_or`, 
+    // and `Option::is_some_and` which will allow us to:
+    // ```rust
+    // f.is_none_or(|f| f.is_empty())
+    // ```
+    // As of crate version `0.13.1-rc0`, we've got `1.70` as MSRV.
+    match f {
+        None => true,
+        Some(f) => f.is_empty()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
