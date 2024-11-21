@@ -771,11 +771,18 @@ async fn mutation_requeue_jobs() {
     // to ensure there are no left-overs
     let local = "mutation_requeue_jobs";
     let mut client = Client::connect().await.unwrap();
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::builder().kind(local).build(),
+        )
+        .await
+        .unwrap();
     client.queue_remove(&[local]).await.unwrap();
 
     // prepare a worker that will fail the job unconditionally
     let mut worker = Worker::builder::<io::Error>()
-        .register_fn("rpc_procedure_name", move |_job| async move {
+        .register_fn(local, move |_job| async move {
             panic!("Failure should be recorded");
         })
         .connect()
@@ -783,7 +790,7 @@ async fn mutation_requeue_jobs() {
         .unwrap();
 
     // enqueue a job
-    let job = JobBuilder::new("rpc_procedure_name").queue(local).build();
+    let job = JobBuilder::new(local).queue(local).build();
     let job_id = job.id().clone();
     client.enqueue(job).await.unwrap();
 
@@ -823,7 +830,7 @@ async fn mutation_requeue_specific_jobs_only() {
     client
         .requeue(
             MutationTarget::Retries,
-            MutationFilter::default(), // just an empty filter
+            MutationFilter::builder().kind(local).build(),
         )
         .await
         .unwrap();
