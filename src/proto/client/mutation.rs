@@ -21,6 +21,10 @@ impl Client {
     /// client.requeue(MutationTarget::Retries, &filter).await.unwrap();
     /// # });
     /// ```
+    // For reference: https://github.com/contribsys/faktory/blob/10ccc2270dc2a1c95c3583f7c291a51b0292bb62/server/mutate.go#L35-L59
+    // The faktory will pull the entire targeted set from Redis to it's memory, iterate over
+    // each stringified job matching against "id":"...",  deserialize the matches into Jobs and
+    // re-queue those jobs.
     pub async fn requeue<'a, F>(&mut self, target: MutationTarget, filter: F) -> Result<(), Error>
     where
         F: Borrow<MutationFilter<'a>>,

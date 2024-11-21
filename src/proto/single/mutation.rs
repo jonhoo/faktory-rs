@@ -21,31 +21,43 @@ pub enum MutationTarget {
     Dead,
 }
 
-/// TODO
+/// Filter to help narrow down the mutation target.
+///
+/// Example usage:
+/// ```no_run
+/// # tokio_test::block_on(async {
+/// # use faktory::{Client, MutationTarget, MutationFilter};
+/// # let mut client = Client::connect().await.unwrap();
+/// let filter = MutationFilter::builder()
+///     .kind("jobtype_here")
+///     .pattern("*\"args\":[\"bob\"*")
+///     .build();
+/// client.requeue(MutationTarget::Retries, &filter).await.unwrap();
+/// # })
+/// ```
 #[derive(Builder, Clone, Debug, Default, PartialEq, Eq, Serialize)]
-#[builder(default, setter(into), build_fn(name = "try_build", private))]
+#[builder(
+    default,
+    setter(into),
+    build_fn(name = "try_build", private),
+    pattern = "owned"
+)]
 #[non_exhaustive]
 pub struct MutationFilter<'a> {
     /// TODO
-    ///
-    /// TODO
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "jobtype")]
+    pub kind: Option<&'a str>,
+
+    /// Match jobs with the given ids.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[builder(setter(custom))]
     pub jids: Option<&'a [&'a JobId]>,
 
     /// TODO
-    ///
-    /// TODO
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "regexp")]
     pub pattern: Option<&'a str>,
-
-    /// TODO
-    ///
-    /// TODO
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(rename = "jobtype")]
-    pub kind: Option<&'a str>,
 }
 
 impl MutationFilter<'_> {
