@@ -914,10 +914,7 @@ async fn mutation_requeue_specific_jobs_only() {
     // the comination of `kind` + `pattern` (jobtype and regexp in Faktory's terms);
     // let's first make sure to force-reschedule the jobs:
     client
-        .requeue(
-            MutationTarget::Retries,
-            MutationFilter::default(), // just an empty filter
-        )
+        .requeue(MutationTarget::Retries, MutationFilter::empty())
         .await
         .unwrap();
     assert!(worker.run_one(0, &[local]).await.unwrap());

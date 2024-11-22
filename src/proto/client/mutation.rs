@@ -21,44 +21,100 @@ impl Client {
     /// client.requeue(MutationTarget::Retries, &filter).await.unwrap();
     /// # });
     /// ```
-    // For reference: https://github.com/contribsys/faktory/blob/10ccc2270dc2a1c95c3583f7c291a51b0292bb62/server/mutate.go#L35-L59
-    // The faktory will pull the entire targeted set from Redis to it's memory, iterate over
-    // each stringified job matching against "id":"...",  deserialize the matches into Jobs and
-    // re-queue those jobs.
     pub async fn requeue<'a, F>(&mut self, target: MutationTarget, filter: F) -> Result<(), Error>
     where
         F: Borrow<MutationFilter<'a>>,
     {
+        self.mutate(MutationType::Requeue, target, Some(filter.borrow()))
+            .await
+    }
+
+    /// Discard the jobs.
+    ///
+    /// Will throw the jobs away without any chance for re-scheduling
+    /// on the server side. If you want to still be able to process the jobs,
+    /// use [`Client::kill`] instead.
+    ///
+    /// E.g. to discard the currently enqueued jobs having "fizz" argument:
+    /// ```no_run
+    /// # tokio_test::block_on(async {
+    /// # use faktory::{Client, MutationTarget, MutationFilter};
+    /// # let mut client = Client::connect().await.unwrap();
+    /// let filter = MutationFilter::builder()
+    ///     .pattern(r#"*\"args\":\[\"fizz\"\]*"#)
+    ///     .build();
+    /// client.discard(MutationTarget::Scheduled, &filter).await.unwrap();
+    /// # });
+    /// ```
+    pub async fn discard<'a, F>(&mut self, target: MutationTarget, filter: F) -> Result<(), Error>
+    where
+        F: Borrow<MutationFilter<'a>>,
+    {
+        self.mutate(MutationType::Discard, target, Some(filter.borrow()))
+            .await
+    }
+
+    /// Kil the jobs.
+    ///
+    /// Moves the jobs from the target structure to the `dead` set, meaning Faktory
+    /// will not touch it further unless you ask it to do so. You then can, for example,
+    /// manually process those jobs via the Web UI or send another mutation command
+    /// targeting [`MutationTarget::Dead`] set.
+    ///
+    /// E.g. to kill the currently enqueued jobs with "bill" argument:
+    /// ```no_run
+    /// # tokio_test::block_on(async {
+    /// # use faktory::{Client, MutationTarget, MutationFilter};
+    /// # let mut client = Client::connect().await.unwrap();
+    /// let filter = MutationFilter::builder()
+    ///     .pattern(r#"*\"args\":\[\"bill\"\]*"#)
+    ///     .build();
+    /// client.kill(MutationTarget::Scheduled, &filter).await.unwrap();
+    /// # });
+    /// ```
+    pub async fn kill<'a, F>(&mut self, target: MutationTarget, filter: F) -> Result<(), Error>
+    where
+        F: Borrow<MutationFilter<'a>>,
+    {
+        self.mutate(MutationType::Kill, target, Some(filter.borrow()))
+            .await
+    }
+
+    /// Purge the targeted structure.
+    ///
+    /// Will have the same effect as [`Client::discard`] with an empty [`MutationFilter`],
+    /// but is special cased by Faktory and so is performed faster. Can be though of as
+    /// `TRUNCATE tablename` operation in the SQL world versus `DELETE FROM tablename`.
+    ///
+    /// E.g. to purged all the jobs that are pending in the `reties` set:
+    /// ```no_run
+    /// # tokio_test::block_on(async {
+    /// # use faktory::{Client, MutationTarget};
+    /// # let mut client = Client::connect().await.unwrap();
+    /// client.clear(MutationTarget::Retries).await.unwrap();
+    /// # });
+    /// ```
+    pub async fn clear(&mut self, target: MutationTarget) -> Result<(), Error> {
+        self.mutate(MutationType::Clear, target, None).await
+    }
+
+    // For reference: https://github.com/contribsys/faktory/blob/10ccc2270dc2a1c95c3583f7c291a51b0292bb62/server/mutate.go#L35-L59
+    // The faktory will pull the targeted set from Redis to it's memory, iterate over each stringified job matching
+    // looking for a substring "id":"..." or performing regexp search, then deserialize the matches into Jobs and
+    // perform the action (e.g. requeue).
+    async fn mutate<'a>(
+        &mut self,
+        mtype: MutationType,
+        mtarget: MutationTarget,
+        mfilter: Option<&'_ MutationFilter<'_>>,
+    ) -> Result<(), Error> {
         self.issue(&MutationAction {
-            cmd: MutationType::Requeue,
-            target,
-            filter: Some(filter.borrow()),
+            cmd: mtype,
+            target: mtarget,
+            filter: mfilter,
         })
         .await?
         .read_ok()
         .await
     }
-
-    /*
-    From Go bindings:
-
-    // Move the given jobs from structure to the Dead set.
-    // Faktory will not touch them anymore but you can still see them in the Web UI.
-    //
-    // Kill(Retries, OfType("DataSyncJob").WithJids("abc", "123"))
-    Kill(name Structure, filter JobFilter) error
-
-    // Move the given jobs to their associated queue so they can be immediately
-    // picked up and processed.
-    Requeue(name Structure, filter JobFilter) error
-
-    // Throw away the given jobs, e.g. if you want to delete all jobs named "QuickbooksSyncJob"
-    //
-    //   Discard(Dead, OfType("QuickbooksSyncJob"))
-    Discard(name Structure, filter JobFilter) error
-
-    // Empty the entire given structure, e.g. if you want to clear all retries.
-    // This is very fast as it is special cased by Faktory.
-    Clear(name Structure) error
-    */
 }

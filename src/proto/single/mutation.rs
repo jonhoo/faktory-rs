@@ -1,6 +1,8 @@
+use crate::JobId;
 use derive_builder::Builder;
 
-use crate::JobId;
+#[cfg(doc)]
+use crate::Job;
 
 /// Mutation target set.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
@@ -32,23 +34,20 @@ pub enum MutationTarget {
 /// client.requeue(MutationTarget::Retries, &filter).await.unwrap();
 /// # })
 /// ```
-#[derive(Builder, Clone, Debug, Default, PartialEq, Eq, Serialize)]
-#[builder(
-    default,
-    setter(into),
-    build_fn(name = "try_build", private),
-    pattern = "owned"
-)]
+#[derive(Builder, Clone, Debug, PartialEq, Eq, Serialize)]
+#[builder(setter(into), build_fn(name = "try_build", private), pattern = "owned")]
 #[non_exhaustive]
 pub struct MutationFilter<'a> {
     /// A job's [`kind`](crate::Job::kind).
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "jobtype")]
+    #[builder(default)]
     pub kind: Option<&'a str>,
 
     /// Ids of jobs to target.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[builder(setter(custom))]
+    #[builder(default)]
     pub jids: Option<&'a [&'a JobId]>,
 
     /// Match attern to use for filtering.
@@ -58,6 +57,7 @@ pub struct MutationFilter<'a> {
     /// for further details.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "regexp")]
+    #[builder(default)]
     pub pattern: Option<&'a str>,
 }
 
@@ -68,6 +68,18 @@ impl MutationFilter<'_> {
 }
 
 impl<'a> MutationFilter<'_> {
+    /// Creates an empty filter.
+    ///
+    /// Sending a mutation command (e.g. [`Client::discard`]) with an empty
+    /// filter effectively means perform no filtering at all.
+    pub fn empty() -> Self {
+        Self {
+            kind: None,
+            jids: None,
+            pattern: None,
+        }
+    }
+
     /// Creates a new builder for a [`MutationFilter`]
     pub fn builder() -> MutationFilterBuilder<'a> {
         MutationFilterBuilder::default()
