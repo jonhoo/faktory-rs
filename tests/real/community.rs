@@ -479,7 +479,7 @@ async fn queue_control_actions_wildcard() {
     // for this, let's enqueue a few jobs that are not supposed to be
     // consumed immediately, rather in a few minutes; this they these
     // jobs will get into the `scheduled` set
-    let soon = Utc::now() + Duration::from_secs(2);
+    let soon = Utc::now() + chrono::Duration::seconds(2);
     client
         .enqueue_many([
             Job::builder(local_1)
