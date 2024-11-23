@@ -1,13 +1,16 @@
 use crate::{
     proto::single::{MutationAction, MutationType},
-    Client, Error, MutationFilter, MutationTarget,
+    Client, Error, JobId, MutationFilter, MutationTarget,
 };
 use std::borrow::Borrow;
 
 impl Client {
     /// Re-enqueue the jobs.
     ///
-    /// This will immediately move the jobs from the targeted set (see [`MutationTarget`])
+    /// ***Warning!*** The `MUTATE` API is not supposed to be used as part of application logic,
+    /// you will want to use it for administration purposes only.
+    ///
+    /// This method will immediately move the jobs from the targeted set (see [`MutationTarget`])
     /// to their queues. This will apply to the jobs satisfying the [`filter`](crate::MutationFilter).
     ///
     /// ```no_run
@@ -29,7 +32,27 @@ impl Client {
             .await
     }
 
+    /// Re-enqueue the jobs with the given ids.
+    /// 
+    /// ***Warning!*** The `MUTATE` API is not supposed to be used as part of application logic,
+    /// you will want to use it for administration purposes only.
+    /// 
+    /// Similar to [`Client::requeue`], but will create a filter (see [`MutationFilter`])
+    /// with the gived `jids` for you.
+    pub async fn requeue_by_ids<'a>(
+        &mut self,
+        target: MutationTarget,
+        jids: &'_ [&'_ JobId],
+    ) -> Result<(), Error> {
+        let filter = MutationFilter::builder().jids(jids).build();
+        self.mutate(MutationType::Requeue, target, Some(&filter))
+            .await
+    }
+
     /// Discard the jobs.
+    ///
+    /// ***Warning!*** The `MUTATE` API is not supposed to be used as part of application logic,
+    /// you will want to use it for administration purposes only.
     ///
     /// Will throw the jobs away without any chance for re-scheduling
     /// on the server side. If you want to still be able to process the jobs,
@@ -54,7 +77,27 @@ impl Client {
             .await
     }
 
+    /// Discard the jobs with the given ids.
+    /// 
+    /// ***Warning!*** The `MUTATE` API is not supposed to be used as part of application logic,
+    /// you will want to use it for administration purposes only.
+    /// 
+    /// Similar to [`Client::discard`], but will create a filter (see [`MutationFilter`])
+    /// with the gived `jids` for you.
+    pub async fn discard_by_ids<'a>(
+        &mut self,
+        target: MutationTarget,
+        jids: &'_ [&'_ JobId],
+    ) -> Result<(), Error> {
+        let filter = MutationFilter::builder().jids(jids).build();
+        self.mutate(MutationType::Discard, target, Some(&filter))
+            .await
+    }
+
     /// Kil the jobs.
+    ///
+    /// ***Warning!*** The `MUTATE` API is not supposed to be used as part of application logic,
+    /// you will want to use it for administration purposes only.
     ///
     /// Moves the jobs from the target structure to the `dead` set, meaning Faktory
     /// will not touch it further unless you ask it to do so. You then can, for example,
@@ -80,7 +123,26 @@ impl Client {
             .await
     }
 
+    /// Kill the jobs with the given ids.
+    /// 
+    /// ***Warning!*** The `MUTATE` API is not supposed to be used as part of application logic,
+    /// you will want to use it for administration purposes only.
+    /// 
+    /// Similar to [`Client::kill`], but will create a filter (see [`MutationFilter`])
+    /// with the gived `jids` for you.
+    pub async fn kill_by_ids<'a>(
+        &mut self,
+        target: MutationTarget,
+        jids: &'_ [&'_ JobId],
+    ) -> Result<(), Error> {
+        let filter = MutationFilter::builder().jids(jids).build();
+        self.mutate(MutationType::Kill, target, Some(&filter)).await
+    }
+
     /// Purge the targeted structure.
+    ///
+    /// ***Warning!*** The `MUTATE` API is not supposed to be used as part of application logic,
+    /// you will want to use it for administration purposes only.
     ///
     /// Will have the same effect as [`Client::discard`] with an empty [`MutationFilter`],
     /// but is special cased by Faktory and so is performed faster. Can be though of as

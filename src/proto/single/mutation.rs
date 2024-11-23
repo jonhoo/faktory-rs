@@ -2,7 +2,7 @@ use crate::JobId;
 use derive_builder::Builder;
 
 #[cfg(doc)]
-use crate::Job;
+use crate::{Client, Job};
 
 /// Mutation target set.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
@@ -20,7 +20,17 @@ pub enum MutationTarget {
     Dead,
 }
 
-/// Filter to help narrow down the mutation target.
+// As of Faktory v1.9.2, not all the fields on the filter
+// will be taken into account, rather EITHER `jids` OR optional `kind`
+// plus optional `pattern`.
+// See: https://github.com/contribsys/faktory/issues/489
+//
+/// A filter to help narrow down the mutation target.
+///
+/// As of Faktory version 1.9.2, if [`MutationFilter::pattern`] and/or [`MutationFilter::kind`]
+/// is specified, the values in [`MutationFilter::jids`] will not be taken into account by the
+/// server. If you want to filter by `jids`, make sure to leave other fields of the filter empty
+/// or use dedicated methods like [`Client::requeue_by_ids`].
 ///
 /// Example usage:
 /// ```no_run
