@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Support Faktory's `MUTATE` API ([#87])
+
 ### Changed
 
 ### Deprecated
@@ -19,16 +21,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+[#87]: https://github.com/jonhoo/faktory-rs/pull/87
+
 ## [0.13.0] - 2024-10-27
 
 ### Added
 
-- `Error::Stream` for underlying 'native_tls' and 'rustls' errors ([#49])
+- rustls, native_tls: `Error::Stream` for underlying `native_tls` and `rustls` errors ([#49])
 - Shutdown signal via `WorkerBuilder::with_graceful_shutdown` ([#57])
 - Shutdown timeout via `WorkerBuilder::shutdown_timeout` ([#57])
 - `Client` method for pausing, resuming, and removing queues ([#59])
 - `Client::current_info` and `FaktoryState` struct ([#63])
-- TLS configurations options to `WorkerBuilder` ([#74])
+- rustls, native_tls: TLS configurations options to `WorkerBuilder` ([#74])
 
 ### Changed
 
@@ -57,13 +61,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `JobRunner` trait and `ConsumerBuilder::register_runner` ([#51])
 - Support for enqueuing numerous jobs with `Producer::enqueue_many` ([#54])
-- Faktory Enterprise Edition: Batch jobs (`Batch`, `BatchId`, `BatchStatus`) ([#48])
-- Faktory Enterprise Edition: Setting and getting a job's progress ([#48])
+- ent: Batch jobs (`Batch`, `BatchId`, `BatchStatus`) ([#48])
+- ent: Setting and getting a job's progress ([#48])
 
 [#48]: https://github.com/jonhoo/faktory-rs/pull/48
 [#51]: https://github.com/jonhoo/faktory-rs/pull/51
 [#54]: https://github.com/jonhoo/faktory-rs/pull/54
-
 [unreleased]: https://github.com/jonhoo/faktory-rs/compare/v0.13.0...HEAD
 [0.13.0]: https://github.com/jonhoo/faktory-rs/compare/v0.12.5...v0.13.0
 [0.12.5]: https://github.com/jonhoo/faktory-rs/compare/v0.12.4...v0.12.5

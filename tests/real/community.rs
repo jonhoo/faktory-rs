@@ -1,8 +1,13 @@
 use crate::{assert_gte, skip_check};
-use faktory::{Client, Job, JobBuilder, JobId, StopReason, Worker, WorkerBuilder, WorkerId};
+use chrono::Utc;
+use faktory::{
+    Client, Job, JobBuilder, JobId, MutationFilter, MutationTarget, StopReason, Worker,
+    WorkerBuilder, WorkerId,
+};
 use serde_json::Value;
-use std::{io, sync, time::Duration};
-use tokio::time as tokio_time;
+use std::time::Duration;
+use std::{io, sync};
+use tokio::time::{self as tokio_time};
 use tokio_util::sync::CancellationToken;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -380,6 +385,26 @@ async fn queue_control_actions_wildcard() {
     let local_1 = "queue_control_wildcard_1";
     let local_2 = "queue_control_wildcard_2";
 
+    // prepare a client and remove any left-overs
+    // from the previous test run
+    let mut client = Client::connect().await.unwrap();
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::builder().kind(local_1).build(),
+        )
+        .await
+        .unwrap();
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::builder().kind(local_2).build(),
+        )
+        .await
+        .unwrap();
+    client.queue_remove(&[local_1]).await.unwrap();
+    client.queue_remove(&[local_2]).await.unwrap();
+
     let (tx, rx) = sync::mpsc::channel();
     let tx_1 = sync::Arc::new(sync::Mutex::new(tx));
     let tx_2 = sync::Arc::clone(&tx_1);
@@ -398,8 +423,6 @@ async fn queue_control_actions_wildcard() {
         .connect()
         .await
         .unwrap();
-
-    let mut client = Client::connect().await.unwrap();
 
     // enqueue two jobs on each queue
     client
@@ -450,6 +473,55 @@ async fn queue_control_actions_wildcard() {
     // our queue are not even mentioned in the server report:
     assert!(queues.get(local_1).is_none());
     assert!(queues.get(local_2).is_none());
+
+    // let's also test here one bit from the Faktory MUTATION API,
+    // which affects the entire target set;
+    // for this, let's enqueue a few jobs that are not supposed to be
+    // consumed immediately, rather in a few minutes; this they these
+    // jobs will get into the `scheduled` set
+    let soon = Utc::now() + chrono::Duration::seconds(2);
+    client
+        .enqueue_many([
+            Job::builder(local_1)
+                .args(vec![Value::from(1)])
+                .queue(local_1)
+                .at(soon)
+                .build(),
+            Job::builder(local_1)
+                .args(vec![Value::from(1)])
+                .queue(local_1)
+                .at(soon)
+                .build(),
+            Job::builder(local_2)
+                .args(vec![Value::from(1)])
+                .queue(local_2)
+                .at(soon)
+                .build(),
+            Job::builder(local_2)
+                .args(vec![Value::from(1)])
+                .queue(local_2)
+                .at(soon)
+                .build(),
+        ])
+        .await
+        .unwrap();
+
+    // now, let's just clear all the scheduled jobs
+    client.clear(MutationTarget::Scheduled).await.unwrap();
+
+    tokio_time::sleep(Duration::from_secs(2)).await;
+
+    // the queue is empty
+    assert!(!worker.run_one(0, &[local_1]).await.unwrap());
+
+    // even if we force-schedule those jobs
+    client
+        .requeue(MutationTarget::Scheduled, MutationFilter::empty())
+        .await
+        .unwrap();
+
+    // still empty, meaing the jobs have been purged for good
+    assert!(!worker.run_one(0, &[local_1]).await.unwrap());
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -758,4 +830,344 @@ async fn test_panic_in_handler() {
     // same for async handler, note how the test run is not interrupted with a panic
     assert!(!w.is_terminated());
     assert!(w.run_one(0, &[local]).await.unwrap());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn mutation_requeue_jobs() {
+    skip_check!();
+
+    // prepare a client and clean up the queue
+    // to ensure there are no left-overs
+    let local = "mutation_requeue_jobs";
+    let mut client = Client::connect().await.unwrap();
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::builder().kind(local).build(),
+        )
+        .await
+        .unwrap();
+    client.queue_remove(&[local]).await.unwrap();
+
+    // prepare a worker that will fail the job unconditionally
+    let mut worker = Worker::builder::<io::Error>()
+        .register_fn(local, move |_job| async move {
+            panic!("Failure should be recorded");
+        })
+        .connect()
+        .await
+        .unwrap();
+
+    // enqueue a job
+    let job = JobBuilder::new(local).queue(local).build();
+    let job_id = job.id().clone();
+    client.enqueue(job).await.unwrap();
+
+    // consume and fail it
+    let had_one = worker.run_one(0, &[local]).await.unwrap();
+    assert!(had_one);
+
+    // the job is now in `retries` set and is due to
+    // be rescheduled by the Faktory server after a while, but ...
+    let had_one = worker.run_one(0, &[local]).await.unwrap();
+    assert!(!had_one);
+
+    // ... we can force it
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::builder().jids(&[&job_id]).build(),
+        )
+        .await
+        .unwrap();
+
+    // the job has been re-enqueued and we consumed it again
+    let had_one = worker.run_one(0, &[local]).await.unwrap();
+    assert!(had_one);
+
+    // TODO: Examine the job's failure (will need a dedicated PR)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn mutation_kill_and_requeue_and_discard() {
+    skip_check!();
+
+    // prepare a client and clean up the queue
+    // to ensure there are no left-overs
+    let local = "mutation_kill_vs_discard";
+    let mut client = Client::connect().await.unwrap();
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::builder().kind(local).build(),
+        )
+        .await
+        .unwrap();
+
+    // enqueue a couple of jobs and ...
+    client.queue_remove(&[local]).await.unwrap();
+    let soon = Utc::now() + chrono::Duration::seconds(2);
+    client
+        .enqueue_many([
+            Job::builder(local)
+                .args(vec![Value::from(1)])
+                .queue(local)
+                .at(soon)
+                .build(),
+            Job::builder(local)
+                .args(vec![Value::from(2)])
+                .queue(local)
+                .at(soon)
+                .build(),
+        ])
+        .await
+        .unwrap();
+
+    // kill them ...
+    client
+        .kill(
+            MutationTarget::Scheduled,
+            MutationFilter::builder().kind(local).build(),
+        )
+        .await
+        .unwrap();
+
+    // the two jobs were moved from `scheduled` to `dead`,
+    // and so the queue is empty
+    let njobs = client
+        .current_info()
+        .await
+        .unwrap()
+        .data
+        .queues
+        .get(local)
+        .map(|v| *v)
+        .unwrap_or_default();
+    assert_eq!(njobs, 0);
+
+    // let's now enqueue those jobs
+    client
+        .requeue(
+            MutationTarget::Dead,
+            MutationFilter::builder().kind(local).build(),
+        )
+        .await
+        .unwrap();
+
+    // they transitioned from `dead` to being enqueued
+    let njobs = client
+        .current_info()
+        .await
+        .unwrap()
+        .data
+        .queues
+        .get(local)
+        .map(|v| *v)
+        .unwrap_or_default();
+    assert_eq!(njobs, 2);
+
+    // prepare a worker that will fail the job unconditionally
+    let mut worker = Worker::builder::<io::Error>()
+        .register_fn(local, move |_job| async move {
+            panic!("force fail this job");
+        })
+        .connect()
+        .await
+        .unwrap();
+
+    // cosume them (and immediately fail them) and make
+    // sure the queue is drained
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+    assert!(!worker.run_one(0, &[local]).await.unwrap());
+    let njobs = client
+        .current_info()
+        .await
+        .unwrap()
+        .data
+        .queues
+        .get(local)
+        .map(|v| *v)
+        .unwrap_or_default();
+    assert_eq!(njobs, 0); // sanity check
+
+    // so the jobs have transitioned from being enqueued
+    // to the `retries` set, and we can now completely discard them
+    client
+        .discard(
+            MutationTarget::Retries,
+            MutationFilter::builder().kind(local).build(),
+        )
+        .await
+        .unwrap();
+
+    // Double-check
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::builder().kind(local).build(),
+        )
+        .await
+        .unwrap();
+    client
+        .requeue(
+            MutationTarget::Dead,
+            MutationFilter::builder().kind(local).build(),
+        )
+        .await
+        .unwrap();
+    client
+        .requeue(
+            MutationTarget::Scheduled,
+            MutationFilter::builder().kind(local).build(),
+        )
+        .await
+        .unwrap();
+
+    // Gone for good
+    let njobs = client
+        .current_info()
+        .await
+        .unwrap()
+        .data
+        .queues
+        .get(local)
+        .map(|v| *v)
+        .unwrap_or_default();
+    assert_eq!(njobs, 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn mutation_requeue_specific_jobs_only() {
+    skip_check!();
+
+    // prepare a client and clean up the queue
+    // to ensure there are no left-overs
+    let local = "mutation_requeue_specific_jobs_only";
+    let mut client = Client::connect().await.unwrap();
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::builder().kind(local).build(),
+        )
+        .await
+        .unwrap();
+    client.queue_remove(&[local]).await.unwrap();
+
+    // prepare a worker that will fail the job unconditionally
+    let mut worker = Worker::builder::<io::Error>()
+        .register_fn(local, move |_job| async move {
+            panic!("force fail this job");
+        })
+        .connect()
+        .await
+        .unwrap();
+
+    // enqueue two jobs
+    let job1 = JobBuilder::new(local)
+        .retry(10)
+        .queue(local)
+        .args(["fizz"])
+        .build();
+    let job_id1 = job1.id().clone();
+    let job2 = JobBuilder::new(local)
+        .retry(10)
+        .queue(local)
+        .args(["buzz"])
+        .build();
+    let job_id2 = job2.id().clone();
+    assert_ne!(job_id1, job_id2); // sanity check
+    client.enqueue_many([job1, job2]).await.unwrap();
+
+    // cosume them (and immediately fail) and make
+    // sure the queue is drained
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+    assert!(!worker.run_one(0, &[local]).await.unwrap());
+
+    // now let's only requeue one job of kind 'mutation_requeue_specific_jobs_only'
+    // following this example from the Faktory docs:
+    //
+    // MUTATE {"cmd":"kill","target":"retries","filter":{"jobtype":"QuickbooksSyncJob", "jids":["123456789", "abcdefgh"]}}
+    // (see: https://github.com/contribsys/faktory/wiki/Mutate-API#examples)
+    //
+    // NB! we only want one single job (with job_id1) to be immediately re-enqueued, but ...
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::builder()
+                .jids(&[&job_id1])
+                .kind(local)
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    // ... looks like _all_ the jobs of that jobtype are re-queued
+    // see: https://github.com/contribsys/faktory/blob/10ccc2270dc2a1c95c3583f7c291a51b0292bb62/server/mutate.go#L96-L98
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+
+    // let's prove that there _is_ still a way to only requeue one
+    // specific jobs, and to do so let's verify the queue is drained
+    // again (since we've just failed the two jobs again):
+    assert!(!worker.run_one(0, &[local]).await.unwrap());
+
+    // now, let's requeue a job _without_ specifying a jobkind, rather
+    // only `jids` in the filter:
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::builder().jids(&[&job_id1]).build(),
+        )
+        .await
+        .unwrap();
+
+    // we can now see that only one job has been re-scheduled, just like we wanted
+    // see: https://github.com/contribsys/faktory/blob/10ccc2270dc2a1c95c3583f7c291a51b0292bb62/server/mutate.go#L100-L110
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+    assert!(!worker.run_one(0, &[local]).await.unwrap()); // drained
+
+    // and - for completeness - let's requeue the jobs using
+    // the comination of `kind` + `pattern` (jobtype and regexp in Faktory's terms);
+    // let's first make sure to force-reschedule the jobs:
+    client
+        .requeue(MutationTarget::Retries, MutationFilter::empty())
+        .await
+        .unwrap();
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+    assert!(!worker.run_one(0, &[local]).await.unwrap()); // drained
+
+    // now let's use `kind` + `pattern` combo to only immeduately
+    // reschedule the job with "fizz" in the `args`, but not the
+    // one with "buzz":
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::builder()
+                .kind(local)
+                .pattern(r#"*\"args\":\[\"fizz\"\]*"#)
+                .build(),
+        )
+        .await
+        .unwrap();
+
+    // and indeed only one job has behttps://github.com/contribsys/faktory/blob/b4a93227a3323ab4b1365b0c37c2fac4f9588cc8/server/mutate.go#L83-L94en re-scheduled,
+    // see: https://github.com/contribsys/faktory/blob/b4a93227a3323ab4b1365b0c37c2fac4f9588cc8/server/mutate.go#L83-L94
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+    assert!(!worker.run_one(0, &[local]).await.unwrap()); // drained
+
+    // just for sanity's sake, let's re-queue the "buzz" one:
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::builder()
+                .pattern(r#"*\"args\":\[\"buzz\"\]*"#)
+                .build(),
+        )
+        .await
+        .unwrap();
+    assert!(worker.run_one(0, &[local]).await.unwrap());
+    assert!(!worker.run_one(0, &[local]).await.unwrap()); // drained
 }
