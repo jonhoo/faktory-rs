@@ -889,13 +889,82 @@ async fn mutation_requeue_jobs() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn mutation_kill_vs_discard() {
-    // Plan:
-    // 1. Create and push a few jobs with Job::at(..) populated
-    // 2. Kill them: `scheduled` -> `dead`
-    // 3. Re-enqueue them: `dead` -> `enqueued`
-    // 4. Consume-fail them: `enqueued` -> `retries`
-    // 5. Discard them: `retries` -> void
+async fn mutation_kill_and_requeue() {
+    skip_check!();
+
+    // prepare a client and clean up the queue
+    // to ensure there are no left-overs
+    let local = "mutation_kill_vs_discard";
+    let mut client = Client::connect().await.unwrap();
+    client
+        .requeue(
+            MutationTarget::Retries,
+            MutationFilter::builder().kind(local).build(),
+        )
+        .await
+        .unwrap();
+
+    // enqueue a couple of jobs and ...
+    client.queue_remove(&[local]).await.unwrap();
+    let soon = Utc::now() + chrono::Duration::seconds(2);
+    client
+        .enqueue_many([
+            Job::builder(local)
+                .args(vec![Value::from(1)])
+                .queue(local)
+                .at(soon)
+                .build(),
+            Job::builder(local)
+                .args(vec![Value::from(2)])
+                .queue(local)
+                .at(soon)
+                .build(),
+        ])
+        .await
+        .unwrap();
+
+    // kill them ...
+    client
+        .kill(
+            MutationTarget::Scheduled,
+            MutationFilter::builder().kind(local).build(),
+        )
+        .await
+        .unwrap();
+
+    // the two jobs were moved from `scheduled` to `dead`,
+    // and so the queue is empty
+    let njobs = client
+        .current_info()
+        .await
+        .unwrap()
+        .data
+        .queues
+        .get(local)
+        .map(|v| *v)
+        .unwrap_or_default();
+    assert_eq!(njobs, 0);
+
+    // let's now enqueue those jobs
+    client
+        .requeue(
+            MutationTarget::Dead,
+            MutationFilter::builder().kind(local).build(),
+        )
+        .await
+        .unwrap();
+
+    // they transitioned from `dead` to being enqueued
+    let njobs = client
+        .current_info()
+        .await
+        .unwrap()
+        .data
+        .queues
+        .get(local)
+        .map(|v| *v)
+        .unwrap_or_default();
+    assert_eq!(njobs, 2);
 }
 
 #[tokio::test(flavor = "multi_thread")]

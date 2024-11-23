@@ -33,10 +33,10 @@ impl Client {
     }
 
     /// Re-enqueue the jobs with the given ids.
-    /// 
+    ///
     /// ***Warning!*** The `MUTATE` API is not supposed to be used as part of application logic,
     /// you will want to use it for administration purposes only.
-    /// 
+    ///
     /// Similar to [`Client::requeue`], but will create a filter (see [`MutationFilter`])
     /// with the gived `jids` for you.
     pub async fn requeue_by_ids<'a>(
@@ -78,10 +78,10 @@ impl Client {
     }
 
     /// Discard the jobs with the given ids.
-    /// 
+    ///
     /// ***Warning!*** The `MUTATE` API is not supposed to be used as part of application logic,
     /// you will want to use it for administration purposes only.
-    /// 
+    ///
     /// Similar to [`Client::discard`], but will create a filter (see [`MutationFilter`])
     /// with the gived `jids` for you.
     pub async fn discard_by_ids<'a>(
@@ -124,10 +124,10 @@ impl Client {
     }
 
     /// Kill the jobs with the given ids.
-    /// 
+    ///
     /// ***Warning!*** The `MUTATE` API is not supposed to be used as part of application logic,
     /// you will want to use it for administration purposes only.
-    /// 
+    ///
     /// Similar to [`Client::kill`], but will create a filter (see [`MutationFilter`])
     /// with the gived `jids` for you.
     pub async fn kill_by_ids<'a>(
