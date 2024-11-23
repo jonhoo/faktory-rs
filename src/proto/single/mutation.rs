@@ -60,7 +60,7 @@ pub struct MutationFilter<'a> {
     #[builder(default)]
     pub jids: Option<&'a [&'a JobId]>,
 
-    /// Match attern to use for filtering.
+    /// Match pattern to use for filtering.
     ///
     /// Faktory will pass this directly to Redis's `SCAN` command,
     /// so please see the [`SCAN` documentation](https://redis.io/docs/latest/commands/scan/)
@@ -81,7 +81,7 @@ impl<'a> MutationFilter<'_> {
     /// Creates an empty filter.
     ///
     /// Sending a mutation command (e.g. [`Client::discard`]) with an empty
-    /// filter effectively means perform no filtering at all.
+    /// filter effectively means performing no filtering at all.
     pub fn empty() -> Self {
         Self {
             kind: None,
@@ -90,7 +90,7 @@ impl<'a> MutationFilter<'_> {
         }
     }
 
-    /// Creates a new builder for a [`MutationFilter`]
+    /// Creates a new builder for a [`MutationFilter`].
     pub fn builder() -> MutationFilterBuilder<'a> {
         MutationFilterBuilder::default()
     }

@@ -38,7 +38,7 @@ impl Client {
     /// you will want to use it for administration purposes only.
     ///
     /// Similar to [`Client::requeue`], but will create a filter (see [`MutationFilter`])
-    /// with the gived `jids` for you.
+    /// with the given `jids` for you.
     pub async fn requeue_by_ids<'a>(
         &mut self,
         target: MutationTarget,
@@ -83,7 +83,7 @@ impl Client {
     /// you will want to use it for administration purposes only.
     ///
     /// Similar to [`Client::discard`], but will create a filter (see [`MutationFilter`])
-    /// with the gived `jids` for you.
+    /// with the given `jids` for you.
     pub async fn discard_by_ids<'a>(
         &mut self,
         target: MutationTarget,
@@ -129,7 +129,7 @@ impl Client {
     /// you will want to use it for administration purposes only.
     ///
     /// Similar to [`Client::kill`], but will create a filter (see [`MutationFilter`])
-    /// with the gived `jids` for you.
+    /// with the given `jids` for you.
     pub async fn kill_by_ids<'a>(
         &mut self,
         target: MutationTarget,
@@ -145,10 +145,10 @@ impl Client {
     /// you will want to use it for administration purposes only.
     ///
     /// Will have the same effect as [`Client::discard`] with an empty [`MutationFilter`],
-    /// but is special cased by Faktory and so is performed faster. Can be though of as
+    /// but is special cased by Faktory and so is performed faster. Can be thought of as
     /// `TRUNCATE tablename` operation in the SQL world versus `DELETE FROM tablename`.
     ///
-    /// E.g. to purged all the jobs that are pending in the `reties` set:
+    /// E.g. to purge all the jobs that are pending in the `reties` set:
     /// ```no_run
     /// # tokio_test::block_on(async {
     /// # use faktory::{Client, MutationTarget};
@@ -161,7 +161,7 @@ impl Client {
     }
 
     // For reference: https://github.com/contribsys/faktory/blob/10ccc2270dc2a1c95c3583f7c291a51b0292bb62/server/mutate.go#L35-L59
-    // The faktory will pull the targeted set from Redis to it's memory, iterate over each stringified job matching
+    // The faktory will pull the targeted set from Redis to it's memory, iterate over each stringified job
     // looking for a substring "id":"..." or performing regexp search, then deserialize the matches into Jobs and
     // perform the action (e.g. requeue).
     async fn mutate<'a>(
