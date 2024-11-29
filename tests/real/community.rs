@@ -6,6 +6,7 @@ use faktory::{
 };
 use rand::Rng;
 use serde_json::Value;
+use std::panic::panic_any;
 use std::time::Duration;
 use std::{io, sync};
 use tokio::time::{self as tokio_time};
@@ -838,6 +839,7 @@ async fn mutation_requeue_jobs() {
     skip_check!();
     let test_started_at = Utc::now();
     let max_retries = rand::thread_rng().gen_range(2..25);
+    let panic_message = "Failure should be recorded";
 
     // prepare a client and clean up the queue
     // to ensure there are no left-overs
@@ -855,7 +857,7 @@ async fn mutation_requeue_jobs() {
     // prepare a worker that will fail the job unconditionally
     let mut worker = Worker::builder::<io::Error>()
         .register_fn(local, move |_job| async move {
-            panic!("Failure should be recorded");
+            panic_any(panic_message);
         })
         .connect()
         .await
@@ -918,8 +920,9 @@ async fn mutation_requeue_jobs() {
     assert_lt!(failure_info.failed_at, Utc::now());
     assert_gt!(failure_info.failed_at, test_started_at);
     assert!(failure_info.next_at.is_some());
-    assert_eq!(failure_info.kind.as_ref().unwrap(), "unknown");
-    assert!(failure_info.message.is_some()); // "task <task number> panicked"
+    assert_eq!(failure_info.kind.as_ref().unwrap(), "unknown"); // see Fail::generic
+
+    assert_eq!(failure_info.message.as_ref().unwrap(), panic_message);
     assert!(failure_info.backtrace.is_none());
 }
 
