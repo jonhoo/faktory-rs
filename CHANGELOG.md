@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Support Faktory's `MUTATE` API ([#87])
+- Make `Failure` struct public ([#89])
 
 ### Changed
 
@@ -22,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 [#87]: https://github.com/jonhoo/faktory-rs/pull/87
+[#89]: https://github.com/jonhoo/faktory-rs/pull/89
 
 ## [0.13.0] - 2024-10-27
 

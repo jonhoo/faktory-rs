@@ -124,6 +124,8 @@ pub struct Job {
     /// Defaults to 25.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[builder(default = "Some(JOB_DEFAULT_RETRY_COUNT)")]
+    // TODO: this should probably be a usize, see Failure::retry_count
+    // TODO: and Failure::retry_remaining. This can go to 0.14 release
     pub retry: Option<isize>,
 
     /// The priority of this job from 1-9 (9 is highest).
@@ -206,19 +208,39 @@ impl JobBuilder {
     }
 }
 
+/// Details on a job's failure.
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[non_exhaustive]
 pub struct Failure {
-    retry_count: usize,
-    failed_at: String,
+    /// [`Number`](Job::retry) of times this job can be retried.
+    pub retry_count: usize,
+
+    /// Number of remaining retry attempts.
+    #[serde(rename = "remaining")]
+    pub retry_remaining: usize,
+
+    /// Last time this job failed.
+    pub failed_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    next_at: Option<String>,
+
+    /// When this job will be retried.
+    ///
+    /// This will be `None` if there are no retry
+    /// attempts (see [`Failure::retry_remaining`]) left.
+    pub next_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    message: Option<String>,
+
+    /// Error message, if any.
+    pub message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "errtype")]
-    kind: Option<String>,
+
+    /// Error kind, if known.
+    pub kind: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    backtrace: Option<Vec<String>>,
+
+    /// Stack trace from last failure, if any.
+    pub backtrace: Option<Vec<String>>,
 }
 
 impl Job {
