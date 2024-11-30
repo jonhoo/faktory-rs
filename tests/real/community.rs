@@ -797,17 +797,43 @@ async fn test_jobs_with_blocking_handlers() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_panic_in_handler() {
+async fn test_panic_and_errors_in_handler() {
     skip_check!();
 
-    let local = "test_panic_in_handler";
+    let local = "test_panic_and_errors_in_handler";
 
     let mut w = Worker::builder::<io::Error>()
-        .register_blocking_fn("panic_SYNC_handler", |_j| {
-            panic!("Panic inside sync the handler...");
+        //  sync handlers
+        .register_blocking_fn("panic_SYNC_handler_str", |_j| {
+            panic!("Panic inside sync handler...");
         })
-        .register_fn("panic_ASYNC_handler", |_j| async move {
+        .register_blocking_fn("panic_SYNC_handler_String", |_j| {
+            panic_any("Panic inside sync handler...".to_string());
+        })
+        .register_blocking_fn("panic_SYNC_handler_int", |_j| {
+            panic_any(0);
+        })
+        .register_blocking_fn("error_from_SYNC_handler", |_j| {
+            Err::<(), io::Error>(io::Error::new(
+                io::ErrorKind::Other,
+                "error returned from SYNC handler",
+            ))
+        })
+        // async handlers
+        .register_fn("panic_ASYNC_handler_str", |_j| async move {
             panic!("Panic inside async handler...");
+        })
+        .register_fn("panic_ASYNC_handler_String", |_j| async move {
+            panic_any("Panic inside async handler...".to_string());
+        })
+        .register_fn("panic_ASYNC_handler_int", |_j| async move {
+            panic_any(1);
+        })
+        .register_blocking_fn("error_from_ASYNC_handler", |_j| {
+            Err::<(), io::Error>(io::Error::new(
+                io::ErrorKind::Other,
+                "error returned from ASYNC handler",
+            ))
         })
         .connect()
         .await
@@ -815,23 +841,34 @@ async fn test_panic_in_handler() {
 
     let mut c = Client::connect().await.unwrap();
 
-    c.enqueue(Job::builder("panic_SYNC_handler").queue(local).build())
-        .await
-        .unwrap();
+    c.enqueue_many([
+        Job::builder("panic_SYNC_handler_str").queue(local).build(),
+        Job::builder("panic_SYNC_handler_String")
+            .queue(local)
+            .build(),
+        Job::builder("panic_SYNC_handler_int").queue(local).build(),
+        Job::builder("error_from_SYNC_handler").queue(local).build(),
+        Job::builder("panic_ASYNC_handler_str").queue(local).build(),
+        Job::builder("panic_ASYNC_handler_String")
+            .queue(local)
+            .build(),
+        Job::builder("panic_ASYNC_handler_int").queue(local).build(),
+        Job::builder("error_from_ASYNC_handler")
+            .queue(local)
+            .build(),
+    ])
+    .await
+    .unwrap();
 
-    // we _did_ consume and process the job, the processing result itself though
-    // was a failure; however, a panic in the handler was "intercepted" and communicated
-    // to the Faktory server via the FAIL command;
-    // note how the test run is not interrupted with a panic
-    assert!(w.run_one(0, &[local]).await.unwrap());
+    // let's consume all the jobs from the queue and fail them "in different ways"
+    for _ in 0..8 {
+        assert!(w.run_one(0, &[local]).await.unwrap());
+    }
+    assert!(!w.run_one(0, &[local]).await.unwrap()); // drained
 
-    c.enqueue(Job::builder("panic_ASYNC_handler").queue(local).build())
-        .await
-        .unwrap();
-
-    // same for async handler, note how the test run is not interrupted with a panic
-    assert!(!w.is_terminated());
-    assert!(w.run_one(0, &[local]).await.unwrap());
+    // TODO: 1)requeue all the jobs of this kind
+    // TODO: 2)create a new worker that will be sending a job via channel
+    // TODO: 3)inspect the Job::failure to see various error messages
 }
 
 #[tokio::test(flavor = "multi_thread")]
