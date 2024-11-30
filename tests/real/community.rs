@@ -800,7 +800,16 @@ async fn test_jobs_with_blocking_handlers() {
 async fn test_panic_and_errors_in_handler() {
     skip_check!();
 
+    // clean up
     let local = "test_panic_and_errors_in_handler";
+    let mut c = Client::connect().await.unwrap();
+    c.requeue(
+        MutationTarget::Retries,
+        MutationFilter::builder().kind(local).build(),
+    )
+    .await
+    .unwrap();
+    c.queue_remove(&[local]).await.unwrap();
 
     let mut w = Worker::builder::<io::Error>()
         //  sync handlers
@@ -838,8 +847,6 @@ async fn test_panic_and_errors_in_handler() {
         .connect()
         .await
         .unwrap();
-
-    let mut c = Client::connect().await.unwrap();
 
     c.enqueue_many([
         Job::builder("panic_SYNC_handler_str").queue(local).build(),
