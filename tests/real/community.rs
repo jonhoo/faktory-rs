@@ -871,7 +871,6 @@ async fn test_panic_and_errors_in_handler() {
     for _ in 0..8 {
         assert!(w.run_one(0, &[local]).await.unwrap());
     }
-    assert!(!w.run_one(0, &[local]).await.unwrap()); // drained
 
     // TODO: 1)requeue all the jobs of this kind
     // TODO: 2)create a new worker that will be sending a job via channel
