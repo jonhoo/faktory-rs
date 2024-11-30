@@ -954,7 +954,10 @@ async fn mutation_requeue_jobs() {
     assert!(w.run_one(0, &[local]).await.unwrap());
     let job = rx.recv().unwrap();
 
+    assert_eq!(job.id(), &job_id); // sanity check
+
     let failure_info = job.failure().as_ref().unwrap();
+    eprintln!("{:?}", &failure_info);
     assert_eq!(failure_info.retry_count, 0);
     assert_eq!(
         failure_info.retry_remaining,
