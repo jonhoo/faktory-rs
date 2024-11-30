@@ -759,3 +759,46 @@ async fn test_panic_in_handler() {
     assert!(!w.is_terminated());
     assert!(w.run_one(0, &[local]).await.unwrap());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_run_one_with_non_existent_worker() {
+    skip_check!();
+
+    let local = "test_run_one_with_non_existent_worker";
+    Client::connect()
+        .await
+        .unwrap()
+        .enqueue(Job::builder(local).queue(local).build())
+        .await
+        .unwrap();
+
+    // there is only one worker, and its index is 0
+    let mut w: Worker<io::Error> = Worker::builder().workers(1).connect().await.unwrap();
+    // we are going out of bounds:
+    // the len is 1 but the index is 1
+    // TODO: we should either be checking that a worker with this ID exists, and if
+    // TODOL not - return a dedicated error variant
+    // TODO: or disallow selecting a worker here, just `Worker::run_one(queues)`
+    w.run_one(1, &[local]).await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_run_one_with_no_workers() {
+    skip_check!();
+
+    let local = "test_run_one_with_no_workers";
+    Client::connect()
+        .await
+        .unwrap()
+        .enqueue(Job::builder(local).queue(local).build())
+        .await
+        .unwrap();
+
+    // there is no workers
+    // TODO: we may want to call it `extra_workers` (in release 0.14) so that we got 
+    // TODO: a default of one worker plus a usize of extra workers
+    let mut w: Worker<io::Error> = Worker::builder().workers(0).connect().await.unwrap();
+    // we are going out of bounds:
+    // the len is 0 but the index is 0
+    w.run_one(0, &[local]).await.unwrap();
+}
