@@ -297,9 +297,7 @@ impl Job {
     ///
     /// To access the entire failure, if any, use [`Job::failure`].
     pub fn failure_message(&self) -> Option<&str> {
-        self.failure()
-            .as_ref()
-            .and_then(|f| f.message.as_ref().map(|m| m.as_str()))
+        self.failure().as_ref().and_then(|f| f.message.as_deref())
     }
 }
 

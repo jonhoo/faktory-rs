@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Support Faktory's `MUTATE` API ([#87])
 - Make `Failure` struct public ([#89])
+- `Job::failure_message` convenience method ([#89])
 
 ### Changed
 
