@@ -1029,7 +1029,7 @@ async fn mutation_requeue_jobs() {
     // ... this time, instead of failing the job this time, let's
     // create a new woker that will just send the job
     // to the test thread so that we can inspect and
-    // assert on the failure
+    // assert on the failure from the first run
     let (tx, rx) = sync::mpsc::channel();
     let tx = sync::Arc::new(sync::Mutex::new(tx));
     let mut w = WorkerBuilder::default()
