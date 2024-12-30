@@ -291,17 +291,6 @@ impl Job {
     pub fn failure(&self) -> Option<&Failure> {
         self.failure.as_ref()
     }
-
-    /// Error message for this job, if any.
-    ///
-    /// A convenience method that, internally, will check if this
-    /// job has got a [`Failure`] and - if it does - will access
-    /// the failure's message (see [`Failure::message`]).
-    ///
-    /// To access the entire failure, if any, use [`Job::failure`].
-    pub fn failure_message(&self) -> Option<&str> {
-        self.failure().as_ref().and_then(|f| f.message.as_deref())
-    }
 }
 
 pub async fn write_command<W: AsyncWrite + Unpin + Send, C: FaktoryCommand>(

@@ -1,3 +1,5 @@
+use faktory::Job;
+
 #[macro_export]
 macro_rules! skip_check {
     () => {

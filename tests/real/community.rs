@@ -964,10 +964,9 @@ async fn test_panic_and_errors_in_handler() {
 
     // let's verify that errors messages in each job's `Failure` are as expected
     for job in jobs {
-        assert_eq!(
-            job.failure_message().as_ref(),
-            job_kind_vs_error_msg.get(job.kind())
-        );
+        let error_message_got = job.failure().as_ref().unwrap().message.as_ref().unwrap();
+        let error_message_expected = *job_kind_vs_error_msg.get(job.kind()).unwrap();
+        assert_eq!(error_message_got, error_message_expected);
     }
 }
 
@@ -1050,7 +1049,7 @@ async fn mutation_requeue_jobs() {
 
     assert_eq!(job.id(), &job_id); // sanity check
 
-    let failure_info = job.failure().as_ref().unwrap();
+    let failure_info = job.failure().unwrap();
     assert_eq!(failure_info.retry_count, 0);
     assert_eq!(
         failure_info.retry_remaining,
