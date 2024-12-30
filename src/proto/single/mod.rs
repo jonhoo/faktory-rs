@@ -212,7 +212,7 @@ impl JobBuilder {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[non_exhaustive]
 pub struct Failure {
-    /// [`Number`](Job::retry) of times this job can be retried.
+    /// [Number](Job::retry) of times this job can be retried.
     pub retry_count: usize,
 
     /// Number of remaining retry attempts.
