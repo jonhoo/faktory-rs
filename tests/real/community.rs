@@ -880,10 +880,16 @@ async fn test_panic_and_errors_in_handler() {
 
     // ... consume all the jobs from the queue and _fail_ them
     // "in different ways" (see our worker setup above);
+    //
     // we _did_ consume and process the job, the processing result itself though
     // was a failure; however, a panic in the handler was "intercepted" and communicated
-    // to the Faktory server via the FAIL command;
-    // note how the test run is not interrupted with a panic
+    // to the Faktory server via the FAIL command, the error message and the backtrace, if any,
+    // will then be available to a Web UI user or to the worker consumes the retried job
+    // (if `Job::retry` is Some and > 0 and there are `Failure::retry_remaining` attempts left)
+    // in this job's `failure` field; see how we are consuming the retried jobs later
+    // in this test and examin the failure details;
+    //
+    // also note how the test run is not interrupted here with a panic
     for _ in 0..njobs {
         assert!(w.run_one(0, &[local]).await.unwrap());
     }
@@ -897,7 +903,7 @@ async fn test_panic_and_errors_in_handler() {
     .unwrap();
 
     // now, let's create a worker who will only send jobs to the
-    // test's main thread to make some assertions
+    // test's main thread to make some assertions;
     struct JobHandler {
         chan: Arc<Sender<Job>>,
     }
@@ -941,7 +947,7 @@ async fn test_panic_and_errors_in_handler() {
 
     // Let's await till the worker sends the jobs to us.
     //
-    // Mote that if a tokio task inside `Worker::run_job` in cancelled(1), we may not receive a job
+    // Note that if a tokio task inside `Worker::run_job` in cancelled(1), we may not receive a job
     // via the channel and so `rx.recv_many` will just hang (and so the entire test run),
     // hence a timeout we are adding here.
     //
