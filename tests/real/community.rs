@@ -879,7 +879,11 @@ async fn test_panic_and_errors_in_handler() {
     .unwrap();
 
     // ... consume all the jobs from the queue and _fail_ them
-    // "in different ways" (see our worker setup above)
+    // "in different ways" (see our worker setup above);
+    // we _did_ consume and process the job, the processing result itself though
+    // was a failure; however, a panic in the handler was "intercepted" and communicated
+    // to the Faktory server via the FAIL command;
+    // note how the test run is not interrupted with a panic
     for _ in 0..njobs {
         assert!(w.run_one(0, &[local]).await.unwrap());
     }
