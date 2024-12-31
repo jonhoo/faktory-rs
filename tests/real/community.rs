@@ -819,7 +819,10 @@ async fn test_panic_and_errors_in_handler() {
     ]);
     let njobs = job_kind_vs_error_msg.keys().len();
 
-    // clean up
+    // clean up is needed when re-using the same Faktory container, since the
+    // Faktory server could have re-scheduled (or might be doing it right now)
+    // the failed jobs from the previous test run; to keep things clean, we are
+    // force-rescheduling and immediatey dropping any remainders
     let local = "test_panic_and_errors_in_handler";
     let mut c = Client::connect().await.unwrap();
     let pattern = format!(r#"*\"args\":\[\"{}\"\]*"#, local);
@@ -1068,8 +1071,6 @@ async fn mutation_requeue_jobs() {
     assert_lt!(failure_info.failed_at, Utc::now());
     assert_gt!(failure_info.failed_at, test_started_at);
     assert!(failure_info.next_at.is_some());
-    assert_eq!(failure_info.kind.as_ref().unwrap(), "unknown"); // see Fail::generic
-
     assert_eq!(failure_info.message.as_ref().unwrap(), panic_message);
     assert!(failure_info.backtrace.is_none());
 }

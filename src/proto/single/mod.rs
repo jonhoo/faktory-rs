@@ -237,9 +237,12 @@ pub struct Failure {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 
+    // This is Some("unknown") most of the time, and we are not making
+    // it public for now, see discussion:
+    // https://github.com/jonhoo/faktory-rs/pull/89#discussion_r1899423130
     /// Error kind, if known.
     #[serde(rename = "errtype")]
-    pub kind: Option<String>,
+    pub(crate) kind: Option<String>,
 
     /// Stack trace from last failure, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
