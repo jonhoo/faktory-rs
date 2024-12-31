@@ -3,12 +3,24 @@ use crate::proto::{Job, JobId, WorkerId};
 use std::error::Error as StdError;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
+use super::{MutationFilter, MutationTarget};
+
 #[async_trait::async_trait]
 pub trait FaktoryCommand {
     async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error>;
 }
 
 macro_rules! self_to_cmd {
+    ($struct:ident) => {
+        #[async_trait::async_trait]
+        impl FaktoryCommand for $struct {
+            async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+                let cmd = stringify!($struct).to_uppercase();
+                w.write_all(cmd.as_bytes()).await?;
+                Ok(w.write_all(b"\r\n").await?)
+            }
+        }
+    };
     ($struct:ident, $cmd:expr) => {
         #[async_trait::async_trait]
         impl FaktoryCommand for $struct {
@@ -16,6 +28,30 @@ macro_rules! self_to_cmd {
                 w.write_all($cmd.as_bytes()).await?;
                 w.write_all(b" ").await?;
                 let r = serde_json::to_vec(self).map_err(Error::Serialization)?;
+                w.write_all(&r).await?;
+                Ok(w.write_all(b"\r\n").await?)
+            }
+        }
+    };
+    ($struct:ident<$lt:lifetime>, $cmd:expr) => {
+        #[async_trait::async_trait]
+        impl FaktoryCommand for $struct<$lt> {
+            async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+                w.write_all($cmd.as_bytes()).await?;
+                w.write_all(b" ").await?;
+                let r = serde_json::to_vec(self).map_err(Error::Serialization)?;
+                w.write_all(&r).await?;
+                Ok(w.write_all(b"\r\n").await?)
+            }
+        }
+    };
+    ($struct:ident, $cmd:expr, $field:tt) => {
+        #[async_trait::async_trait]
+        impl FaktoryCommand for $struct {
+            async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+                w.write_all($cmd.as_bytes()).await?;
+                w.write_all(b" ").await?;
+                let r = serde_json::to_vec(&self.$field).map_err(Error::Serialization)?;
                 w.write_all(&r).await?;
                 Ok(w.write_all(b"\r\n").await?)
             }
@@ -42,12 +78,7 @@ where
 
 pub(crate) struct Info;
 
-#[async_trait::async_trait]
-impl FaktoryCommand for Info {
-    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
-        Ok(w.write_all(b"INFO\r\n").await?)
-    }
-}
+self_to_cmd!(Info);
 
 // -------------------- ACK ----------------------
 
@@ -138,12 +169,7 @@ self_to_cmd!(Fail, "FAIL");
 
 pub(crate) struct End;
 
-#[async_trait::async_trait]
-impl FaktoryCommand for End {
-    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
-        Ok(w.write_all(b"END\r\n").await?)
-    }
-}
+self_to_cmd!(End);
 
 // --------------------- FETCH --------------------
 
@@ -230,29 +256,13 @@ self_to_cmd!(Hello, "HELLO");
 
 pub(crate) struct Push(Job);
 
-use std::ops::Deref;
-impl Deref for Push {
-    type Target = Job;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 impl From<Job> for Push {
     fn from(j: Job) -> Self {
         Push(j)
     }
 }
 
-#[async_trait::async_trait]
-impl FaktoryCommand for Push {
-    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
-        w.write_all(b"PUSH ").await?;
-        let r = serde_json::to_vec(&**self).map_err(Error::Serialization)?;
-        w.write_all(&r).await?;
-        Ok(w.write_all(b"\r\n").await?)
-    }
-}
+self_to_cmd!(Push, "PUSH", 0);
 
 // ---------------------- PUSHB -------------------
 
@@ -264,15 +274,7 @@ impl From<Vec<Job>> for PushBulk {
     }
 }
 
-#[async_trait::async_trait]
-impl FaktoryCommand for PushBulk {
-    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
-        w.write_all(b"PUSHB ").await?;
-        let r = serde_json::to_vec(&self.0).map_err(Error::Serialization)?;
-        w.write_all(&r).await?;
-        Ok(w.write_all(b"\r\n").await?)
-    }
-}
+self_to_cmd!(PushBulk, "PUSHB", 0);
 
 // ---------------------- QUEUE -------------------
 
@@ -311,3 +313,39 @@ impl<'a, S: AsRef<str>> QueueControl<'a, S> {
         Self { action, queues }
     }
 }
+
+// ---------------------- MUTATE -------------------
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+#[non_exhaustive]
+pub(crate) enum MutationType {
+    #[default]
+    Kill,
+    Requeue,
+    Discard,
+    Clear,
+}
+
+fn filter_is_empty(f: &Option<&MutationFilter<'_>>) -> bool {
+    // Rust 1.82 has got the genious `Option::is_none_or`,
+    // and `Option::is_some_and` which will allow us to:
+    // ```rust
+    // f.is_none_or(|f| f.is_empty())
+    // ```
+    // As of crate version `0.13.1-rc0`, we've got `1.70` as MSRV.
+    match f {
+        None => true,
+        Some(f) => f.is_empty(),
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct MutationAction<'a> {
+    pub(crate) cmd: MutationType,
+    pub(crate) target: MutationTarget,
+    #[serde(skip_serializing_if = "filter_is_empty")]
+    pub(crate) filter: Option<&'a MutationFilter<'a>>,
+}
+
+self_to_cmd!(MutationAction<'_>, "MUTATE");
