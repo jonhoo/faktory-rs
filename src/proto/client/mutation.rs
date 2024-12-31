@@ -94,7 +94,7 @@ impl Client {
             .await
     }
 
-    /// Kil the jobs.
+    /// Kill a set of jobs.
     ///
     /// ***Warning!*** The `MUTATE` API is not supposed to be used as part of application logic,
     /// you will want to use it for administration purposes only.
