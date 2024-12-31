@@ -360,7 +360,22 @@ impl<E: StdError + 'static + Send> Worker<E> {
                 let fail = match e {
                     Failed::BadJobType(jt) => Fail::generic(jid, format!("No handler for {}", jt)),
                     Failed::Application(e) => Fail::generic_with_backtrace(jid, e),
-                    Failed::HandlerPanic(e) => Fail::generic_with_backtrace(jid, e),
+                    Failed::HandlerPanic(e) => {
+                        if e.is_cancelled() {
+                            Fail::generic(jid, "job processing was cancelled")
+                        } else if e.is_panic() {
+                            let panic_obj = e.into_panic();
+                            if panic_obj.is::<String>() {
+                                Fail::generic(jid, *panic_obj.downcast::<String>().unwrap())
+                            } else if panic_obj.is::<&'static str>() {
+                                Fail::generic(jid, *panic_obj.downcast::<&'static str>().unwrap())
+                            } else {
+                                Fail::generic(jid, "job processing panicked")
+                            }
+                        } else {
+                            Fail::generic_with_backtrace(jid, e)
+                        }
+                    }
                 };
                 self.worker_states.register_failure(worker, fail.clone());
                 self.c.issue(&fail).await?.read_ok().await?;

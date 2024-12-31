@@ -106,8 +106,8 @@ mod worker;
 pub use crate::error::Error;
 
 pub use crate::proto::{
-    Client, Connection, DataSnapshot, FaktoryState, Job, JobBuilder, JobId, MutationFilter,
-    MutationFilterBuilder, MutationTarget, Reconnect, ServerSnapshot, WorkerId,
+    Client, Connection, DataSnapshot, Failure, FaktoryState, Job, JobBuilder, JobId,
+    MutationFilter, MutationFilterBuilder, MutationTarget, Reconnect, ServerSnapshot, WorkerId,
 };
 
 pub use crate::worker::{JobRunner, StopDetails, StopReason, Worker, WorkerBuilder};

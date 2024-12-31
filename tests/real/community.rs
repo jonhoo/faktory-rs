@@ -1,12 +1,17 @@
-use crate::{assert_gte, skip_check};
+use crate::{assert_gt, assert_gte, assert_lt, skip_check};
 use chrono::Utc;
 use faktory::{
-    Client, Job, JobBuilder, JobId, MutationFilter, MutationTarget, StopReason, Worker,
+    Client, Job, JobBuilder, JobId, JobRunner, MutationFilter, MutationTarget, StopReason, Worker,
     WorkerBuilder, WorkerId,
 };
+use rand::Rng;
 use serde_json::Value;
+use std::collections::HashMap;
+use std::panic::panic_any;
+use std::sync::Arc;
 use std::time::Duration;
 use std::{io, sync};
+use tokio::sync::mpsc::error::SendError;
 use tokio::time::{self as tokio_time};
 use tokio_util::sync::CancellationToken;
 
@@ -678,7 +683,7 @@ async fn test_jobs_created_with_builder() {
 
 use std::future::Future;
 use std::pin::Pin;
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self, Sender};
 fn process_hard_task(
     sender: sync::Arc<mpsc::Sender<bool>>,
 ) -> Box<
@@ -795,46 +800,195 @@ async fn test_jobs_with_blocking_handlers() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_panic_in_handler() {
+async fn test_panic_and_errors_in_handler() {
     skip_check!();
 
-    let local = "test_panic_in_handler";
+    let job_kind_vs_error_msg = HashMap::from([
+        ("panic_SYNC_handler_str", "panic_SYNC_handler_str"),
+        ("panic_SYNC_handler_String", "panic_SYNC_handler_String"),
+        ("panic_SYNC_handler_int", "job processing panicked"),
+        ("error_from_SYNC_handler", "error_from_SYNC_handler"),
+        ("panic_ASYNC_handler_str", "panic_ASYNC_handler_str"),
+        ("panic_ASYNC_handler_String", "panic_ASYNC_handler_String"),
+        ("panic_ASYNC_handler_int", "job processing panicked"),
+        ("error_from_ASYNC_handler", "error_from_ASYNC_handler"),
+        (
+            "no_handler_registered_for_this_jobtype_initially",
+            "No handler for no_handler_registered_for_this_jobtype_initially",
+        ),
+    ]);
+    let njobs = job_kind_vs_error_msg.keys().len();
+
+    // clean up is needed when re-using the same Faktory container, since the
+    // Faktory server could have re-scheduled (or might be doing it right now)
+    // the failed jobs from the previous test run; to keep things clean, we are
+    // force-rescheduling and immediatey dropping any remainders
+    let local = "test_panic_and_errors_in_handler";
+    let mut c = Client::connect().await.unwrap();
+    let pattern = format!(r#"*\"args\":\[\"{}\"\]*"#, local);
+    c.requeue(
+        MutationTarget::Retries,
+        MutationFilter::builder().pattern(pattern.as_str()).build(),
+    )
+    .await
+    .unwrap();
+    c.queue_remove(&[local]).await.unwrap();
 
     let mut w = Worker::builder::<io::Error>()
-        .register_blocking_fn("panic_SYNC_handler", |_j| {
-            panic!("Panic inside sync the handler...");
+        //  sync handlers
+        .register_blocking_fn("panic_SYNC_handler_str", |_j| {
+            panic!("panic_SYNC_handler_str");
         })
-        .register_fn("panic_ASYNC_handler", |_j| async move {
-            panic!("Panic inside async handler...");
+        .register_blocking_fn("panic_SYNC_handler_String", |_j| {
+            panic_any("panic_SYNC_handler_String".to_string());
+        })
+        .register_blocking_fn("panic_SYNC_handler_int", |_j| {
+            panic_any(0);
+        })
+        .register_blocking_fn("error_from_SYNC_handler", |_j| {
+            Err::<(), io::Error>(io::Error::new(
+                io::ErrorKind::Other,
+                "error_from_SYNC_handler",
+            ))
+        })
+        // async handlers
+        .register_fn("panic_ASYNC_handler_str", |_j| async move {
+            panic!("panic_ASYNC_handler_str");
+        })
+        .register_fn("panic_ASYNC_handler_String", |_j| async move {
+            panic_any("panic_ASYNC_handler_String".to_string());
+        })
+        .register_fn("panic_ASYNC_handler_int", |_j| async move {
+            panic_any(0);
+        })
+        .register_fn("error_from_ASYNC_handler", |_j| async move {
+            Err::<(), io::Error>(io::Error::new(
+                io::ErrorKind::Other,
+                "error_from_ASYNC_handler",
+            ))
         })
         .connect()
         .await
         .unwrap();
 
-    let mut c = Client::connect().await.unwrap();
+    // let's enqueue jobs first time and ...
+    c.enqueue_many(
+        job_kind_vs_error_msg
+            .keys()
+            .map(|&jkind| Job::builder(jkind).queue(local).args([local]).build())
+            .collect::<Vec<_>>(),
+    )
+    .await
+    .unwrap();
 
-    c.enqueue(Job::builder("panic_SYNC_handler").queue(local).build())
-        .await
-        .unwrap();
-
+    // ... consume all the jobs from the queue and _fail_ them
+    // "in different ways" (see our worker setup above);
+    //
     // we _did_ consume and process the job, the processing result itself though
     // was a failure; however, a panic in the handler was "intercepted" and communicated
-    // to the Faktory server via the FAIL command;
-    // note how the test run is not interrupted with a panic
-    assert!(w.run_one(0, &[local]).await.unwrap());
+    // to the Faktory server via the FAIL command, the error message and the backtrace, if any,
+    // will then be available to a Web UI user or to the worker consumes the retried job
+    // (if `Job::retry` is Some and > 0 and there are `Failure::retry_remaining` attempts left)
+    // in this job's `failure` field; see how we are consuming the retried jobs later
+    // in this test and examin the failure details;
+    //
+    // also note how the test run is not interrupted here with a panic
+    for _ in 0..njobs {
+        assert!(w.run_one(0, &[local]).await.unwrap());
+    }
 
-    c.enqueue(Job::builder("panic_ASYNC_handler").queue(local).build())
+    // let's now make sure all the jobs are re-enqueued
+    c.requeue(
+        MutationTarget::Retries,
+        MutationFilter::builder().pattern(pattern.as_str()).build(),
+    )
+    .await
+    .unwrap();
+
+    // now, let's create a worker who will only send jobs to the
+    // test's main thread to make some assertions;
+    struct JobHandler {
+        chan: Arc<Sender<Job>>,
+    }
+    impl JobHandler {
+        pub fn new(chan: Arc<Sender<Job>>) -> Self {
+            Self { chan }
+        }
+    }
+    #[async_trait::async_trait]
+    impl JobRunner for JobHandler {
+        type Error = SendError<Job>;
+        async fn run(&self, job: Job) -> Result<(), Self::Error> {
+            self.chan.send(job).await
+        }
+    }
+    let (tx, mut rx) = tokio::sync::mpsc::channel(njobs);
+    let tx = sync::Arc::new(tx);
+
+    // unlike the previus worker, this one is not failing the jobs,
+    // it is rather helping us to inspect them
+    let mut w = Worker::builder()
+        .register("panic_SYNC_handler_str", JobHandler::new(tx.clone()))
+        .register("panic_SYNC_handler_String", JobHandler::new(tx.clone()))
+        .register("panic_SYNC_handler_int", JobHandler::new(tx.clone()))
+        .register("error_from_SYNC_handler", JobHandler::new(tx.clone()))
+        .register("panic_ASYNC_handler_str", JobHandler::new(tx.clone()))
+        .register("panic_ASYNC_handler_String", JobHandler::new(tx.clone()))
+        .register("panic_ASYNC_handler_int", JobHandler::new(tx.clone()))
+        .register("error_from_ASYNC_handler", JobHandler::new(tx.clone()))
+        .register(
+            "no_handler_registered_for_this_jobtype_initially",
+            JobHandler::new(tx.clone()),
+        )
+        .connect()
         .await
         .unwrap();
 
-    // same for async handler, note how the test run is not interrupted with a panic
-    assert!(!w.is_terminated());
-    assert!(w.run_one(0, &[local]).await.unwrap());
+    for _ in 0..njobs {
+        assert!(w.run_one(0, &[local]).await.unwrap()); // reminder: we've requeued the failed jobs
+    }
+
+    // Let's await till the worker sends the jobs to us.
+    //
+    // Note that if a tokio task inside `Worker::run_job` in cancelled(1), we may not receive a job
+    // via the channel and so `rx.recv_many` will just hang (and so the entire test run),
+    // hence a timeout we are adding here.
+    //
+    // (1)If you are curious, this can be easily reproduced inside the `Callback::Async(_)` arm
+    // of `Worker::run_job`, by swapping this line:
+    // ```rust
+    // spawn(processing_task).await
+    // ```
+    // for something like:
+    // ```rust
+    // let handle = spawn(processing_task);
+    // handle.abort();
+    // handle.await
+    // ```
+    // and then running this test.
+    let mut jobs: Vec<Job> = Vec::with_capacity(njobs);
+    let nreceived =
+        tokio::time::timeout(Duration::from_secs(5), rx.recv_many(jobs.as_mut(), njobs))
+            .await
+            .expect("all jobs to be recieved within the timeout period");
+
+    // all the jobs are now in the test's main thread
+    assert_eq!(nreceived, njobs);
+
+    // let's verify that errors messages in each job's `Failure` are as expected
+    for job in jobs {
+        let error_message_got = job.failure().as_ref().unwrap().message.as_ref().unwrap();
+        let error_message_expected = *job_kind_vs_error_msg.get(job.kind()).unwrap();
+        assert_eq!(error_message_got, error_message_expected);
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn mutation_requeue_jobs() {
     skip_check!();
+    let test_started_at = Utc::now();
+    let max_retries = rand::thread_rng().gen_range(2..25);
+    let panic_message = "Failure should be recorded";
 
     // prepare a client and clean up the queue
     // to ensure there are no left-overs
@@ -852,14 +1006,17 @@ async fn mutation_requeue_jobs() {
     // prepare a worker that will fail the job unconditionally
     let mut worker = Worker::builder::<io::Error>()
         .register_fn(local, move |_job| async move {
-            panic!("Failure should be recorded");
+            panic_any(panic_message);
         })
         .connect()
         .await
         .unwrap();
 
     // enqueue a job
-    let job = JobBuilder::new(local).queue(local).build();
+    let job = JobBuilder::new(local)
+        .queue(local)
+        .retry(max_retries)
+        .build();
     let job_id = job.id().clone();
     client.enqueue(job).await.unwrap();
 
@@ -872,7 +1029,7 @@ async fn mutation_requeue_jobs() {
     let had_one = worker.run_one(0, &[local]).await.unwrap();
     assert!(!had_one);
 
-    // ... we can force it
+    // ... we can force it, so let's requeue the job and ...
     client
         .requeue(
             MutationTarget::Retries,
@@ -881,11 +1038,41 @@ async fn mutation_requeue_jobs() {
         .await
         .unwrap();
 
-    // the job has been re-enqueued and we consumed it again
-    let had_one = worker.run_one(0, &[local]).await.unwrap();
-    assert!(had_one);
+    // ... this time, instead of failing the job this time, let's
+    // create a new woker that will just send the job
+    // to the test thread so that we can inspect and
+    // assert on the failure from the first run
+    let (tx, rx) = sync::mpsc::channel();
+    let tx = sync::Arc::new(sync::Mutex::new(tx));
+    let mut w = WorkerBuilder::default()
+        .hostname("tester".to_string())
+        .wid(WorkerId::new(local))
+        .register_fn(local, move |j| {
+            let tx = sync::Arc::clone(&tx);
+            Box::pin(async move {
+                tx.lock().unwrap().send(j).unwrap();
+                Ok::<(), io::Error>(())
+            })
+        })
+        .connect()
+        .await
+        .unwrap();
+    assert!(w.run_one(0, &[local]).await.unwrap());
+    let job = rx.recv().unwrap();
 
-    // TODO: Examine the job's failure (will need a dedicated PR)
+    assert_eq!(job.id(), &job_id); // sanity check
+
+    let failure_info = job.failure().unwrap();
+    assert_eq!(failure_info.retry_count, 0);
+    assert_eq!(
+        failure_info.retry_remaining,
+        max_retries as usize - failure_info.retry_count
+    );
+    assert_lt!(failure_info.failed_at, Utc::now());
+    assert_gt!(failure_info.failed_at, test_started_at);
+    assert!(failure_info.next_at.is_some());
+    assert_eq!(failure_info.message.as_ref().unwrap(), panic_message);
+    assert!(failure_info.backtrace.is_none());
 }
 
 #[tokio::test(flavor = "multi_thread")]
