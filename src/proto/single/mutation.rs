@@ -54,7 +54,7 @@ pub struct MutationFilter<'a> {
     #[builder(default)]
     pub kind: Option<&'a str>,
 
-    /// Ids of jobs to target.
+    /// [`JobId`]s to target.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[builder(setter(custom))]
     #[builder(default)]
