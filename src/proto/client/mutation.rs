@@ -16,7 +16,7 @@ impl Client {
     ///
     /// Internally, the Faktory server is keeping scheduled, failed, and dead jobs
     /// in dedicated sets (rather than queues). This method allows to immediately move
-    /// jobs from the targeted (see [`Target`]) set back to the queues those jobs
+    /// jobs from the targeted set (see [`JobSet`]) back to the queues those jobs
     /// are destined for. This will apply to the jobs satisfying the [`filter`](crate::mutate::Filter).
     ///
     /// Say, we got a job which we purposefully delayed with [`JobBuilder::at`].
@@ -37,12 +37,20 @@ impl Client {
     /// ```
     /// In the example above we used jobs' IDS to find the jobs we need in
     /// the targeted set, but there also other options - see [`Filter`].
-    pub async fn requeue<'a, F>(&mut self, target: JobSet, filter: F) -> Result<(), Error>
+    pub async fn requeue<'a, F>(
+        &mut self,
+        candidate_job_set: JobSet,
+        filter: F,
+    ) -> Result<(), Error>
     where
         F: Borrow<Filter<'a>>,
     {
-        self.mutate(MutationType::Requeue, target, Some(filter.borrow()))
-            .await
+        self.mutate(
+            MutationType::Requeue,
+            candidate_job_set,
+            Some(filter.borrow()),
+        )
+        .await
     }
 
     /// Re-enqueue the jobs with the given ids.
@@ -54,11 +62,11 @@ impl Client {
     /// with the given `jids` for you.
     pub async fn requeue_by_ids(
         &mut self,
-        target: JobSet,
+        candidate_job_set: JobSet,
         jids: &'_ [&'_ JobId],
     ) -> Result<(), Error> {
         let filter = Filter::builder().jids(jids).build();
-        self.mutate(MutationType::Requeue, target, Some(&filter))
+        self.mutate(MutationType::Requeue, candidate_job_set, Some(&filter))
             .await
     }
 
@@ -83,12 +91,20 @@ impl Client {
     /// client.discard(JobSet::Scheduled, &filter).await.unwrap();
     /// # });
     /// ```
-    pub async fn discard<'a, F>(&mut self, target: JobSet, filter: F) -> Result<(), Error>
+    pub async fn discard<'a, F>(
+        &mut self,
+        candidate_job_set: JobSet,
+        filter: F,
+    ) -> Result<(), Error>
     where
         F: Borrow<Filter<'a>>,
     {
-        self.mutate(MutationType::Discard, target, Some(filter.borrow()))
-            .await
+        self.mutate(
+            MutationType::Discard,
+            candidate_job_set,
+            Some(filter.borrow()),
+        )
+        .await
     }
 
     /// Discard the jobs with the given ids.
@@ -100,11 +116,11 @@ impl Client {
     /// with the given `jids` for you.
     pub async fn discard_by_ids(
         &mut self,
-        target: JobSet,
+        candidate_job_set: JobSet,
         jids: &'_ [&'_ JobId],
     ) -> Result<(), Error> {
         let filter = Filter::builder().jids(jids).build();
-        self.mutate(MutationType::Discard, target, Some(&filter))
+        self.mutate(MutationType::Discard, candidate_job_set, Some(&filter))
             .await
     }
 
@@ -130,11 +146,11 @@ impl Client {
     /// client.kill(JobSet::Scheduled, &filter).await.unwrap();
     /// # });
     /// ```
-    pub async fn kill<'a, F>(&mut self, target: JobSet, filter: F) -> Result<(), Error>
+    pub async fn kill<'a, F>(&mut self, candidate_job_set: JobSet, filter: F) -> Result<(), Error>
     where
         F: Borrow<Filter<'a>>,
     {
-        self.mutate(MutationType::Kill, target, Some(filter.borrow()))
+        self.mutate(MutationType::Kill, candidate_job_set, Some(filter.borrow()))
             .await
     }
 
@@ -147,11 +163,12 @@ impl Client {
     /// with the given `jids` for you.
     pub async fn kill_by_ids(
         &mut self,
-        target: JobSet,
+        candidate_job_set: JobSet,
         jids: &'_ [&'_ JobId],
     ) -> Result<(), Error> {
         let filter = Filter::builder().jids(jids).build();
-        self.mutate(MutationType::Kill, target, Some(&filter)).await
+        self.mutate(MutationType::Kill, candidate_job_set, Some(&filter))
+            .await
     }
 
     /// Purge the targeted structure.
@@ -172,8 +189,9 @@ impl Client {
     /// client.clear(JobSet::Retries).await.unwrap();
     /// # });
     /// ```
-    pub async fn clear(&mut self, target: JobSet) -> Result<(), Error> {
-        self.mutate(MutationType::Clear, target, None).await
+    pub async fn clear(&mut self, candidate_job_set: JobSet) -> Result<(), Error> {
+        self.mutate(MutationType::Clear, candidate_job_set, None)
+            .await
     }
 
     // For reference: https://github.com/contribsys/faktory/blob/10ccc2270dc2a1c95c3583f7c291a51b0292bb62/server/mutate.go#L35-L59
