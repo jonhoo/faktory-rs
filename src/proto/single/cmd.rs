@@ -3,7 +3,7 @@ use crate::proto::{Job, JobId, WorkerId};
 use std::error::Error as StdError;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
-use super::mutation::{Filter, Target};
+use super::mutation::{Filter, JobSet};
 
 #[async_trait::async_trait]
 pub trait FaktoryCommand {
@@ -343,7 +343,7 @@ fn filter_is_empty(f: &Option<&Filter<'_>>) -> bool {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub(crate) struct MutationAction<'a> {
     pub(crate) cmd: MutationType,
-    pub(crate) target: Target,
+    pub(crate) target: JobSet,
     // a nil filter (https://github.com/contribsys/faktory/blob/5e1a0d938e4b19b8eff4d20e815289d536a1ae8c/server/mutate.go#L80)
     // and an empty one (https://github.com/contribsys/faktory/blob/5e1a0d938e4b19b8eff4d20e815289d536a1ae8c/server/mutate.go#L110)
     // are treated in the common manner - as if we were matching _everything_

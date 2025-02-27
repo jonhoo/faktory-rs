@@ -8,7 +8,7 @@ use crate::{Client, Job};
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
-pub enum Target {
+pub enum JobSet {
     /// A set of currently enqueued jobs.
     #[default]
     Scheduled,
@@ -36,13 +36,13 @@ pub enum Target {
 /// ```no_run
 /// # tokio_test::block_on(async {
 /// # use faktory::Client;
-/// # use faktory::mutate::{Target, Filter};
+/// # use faktory::mutate::{JobSet, Filter};
 /// # let mut client = Client::connect().await.unwrap();
 /// let filter = Filter::builder()
 ///     .kind("jobtype_here")
 ///     .pattern(r#"*\"args\":\[\"fizz\"\]*"#)
 ///     .build();
-/// client.requeue(Target::Retries, &filter).await.unwrap();
+/// client.requeue(JobSet::Retries, &filter).await.unwrap();
 /// # })
 /// ```
 #[derive(Builder, Clone, Debug, PartialEq, Eq, Serialize)]
