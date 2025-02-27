@@ -16,7 +16,8 @@ impl Client {
     ///
     /// ```no_run
     /// # tokio_test::block_on(async {
-    /// # use faktory::{JobId, Client, Target, Filter};
+    /// # use faktory::{JobId, Client};
+    /// # use faktory::mutate::{Target, Filter};
     /// # let mut client = Client::connect().await.unwrap();
     /// let job_id1 = JobId::new("3sgE_qwtqw1501");
     /// let job_id2 = JobId::new("3sgE_qwtqw1502");
@@ -62,7 +63,8 @@ impl Client {
     /// E.g. to discard the currently enqueued jobs having "fizz" argument:
     /// ```no_run
     /// # tokio_test::block_on(async {
-    /// # use faktory::{Client, Target, Filter};
+    /// # use faktory::Client;
+    /// # use faktory::mutate::{Target, Filter};
     /// # let mut client = Client::connect().await.unwrap();
     /// let filter = Filter::builder()
     ///     .pattern(r#"*\"args\":\[\"fizz\"\]*"#)
@@ -108,7 +110,8 @@ impl Client {
     /// E.g. to kill the currently enqueued jobs with "bill" argument:
     /// ```no_run
     /// # tokio_test::block_on(async {
-    /// # use faktory::{Client, Target, Filter};
+    /// # use faktory::Client;
+    /// # use faktory::mutate::{Target, Filter};
     /// # let mut client = Client::connect().await.unwrap();
     /// let filter = Filter::builder()
     ///     .pattern(r#"*\"args\":\[\"bill\"\]*"#)
@@ -152,7 +155,8 @@ impl Client {
     /// E.g. to purge all the jobs that are pending in the `reties` set:
     /// ```no_run
     /// # tokio_test::block_on(async {
-    /// # use faktory::{Client, Target};
+    /// # use faktory::Client;
+    /// # use faktory::mutate::Target;
     /// # let mut client = Client::connect().await.unwrap();
     /// client.clear(Target::Retries).await.unwrap();
     /// # });

@@ -35,7 +35,8 @@ pub enum Target {
 /// Example usage:
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// # use faktory::{Client, Target, Filter};
+/// # use faktory::Client;
+/// # use faktory::mutate::{Target, Filter};
 /// # let mut client = Client::connect().await.unwrap();
 /// let filter = Filter::builder()
 ///     .kind("jobtype_here")
