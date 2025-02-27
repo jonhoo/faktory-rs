@@ -40,7 +40,7 @@ impl Client {
     ///
     /// Similar to [`Client::requeue`], but will create a filter (see [`Filter`])
     /// with the given `jids` for you.
-    pub async fn requeue_by_ids<'a>(
+    pub async fn requeue_by_ids(
         &mut self,
         target: Target,
         jids: &'_ [&'_ JobId],
@@ -85,7 +85,7 @@ impl Client {
     ///
     /// Similar to [`Client::discard`], but will create a filter (see [`Filter`])
     /// with the given `jids` for you.
-    pub async fn discard_by_ids<'a>(
+    pub async fn discard_by_ids(
         &mut self,
         target: Target,
         jids: &'_ [&'_ JobId],
@@ -131,7 +131,7 @@ impl Client {
     ///
     /// Similar to [`Client::kill`], but will create a filter (see [`Filter`])
     /// with the given `jids` for you.
-    pub async fn kill_by_ids<'a>(
+    pub async fn kill_by_ids(
         &mut self,
         target: Target,
         jids: &'_ [&'_ JobId],
@@ -165,7 +165,7 @@ impl Client {
     // The faktory will pull the targeted set from Redis to it's memory, iterate over each stringified job
     // looking for a substring "id":"..." or performing regexp search, then deserialize the matches into Jobs and
     // perform the action (e.g. requeue).
-    async fn mutate<'a>(
+    async fn mutate(
         &mut self,
         mtype: MutationType,
         mtarget: Target,
