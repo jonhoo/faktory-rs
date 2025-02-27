@@ -12,9 +12,10 @@ pub use client::{Client, Connection};
 mod single;
 
 pub use single::{
-    DataSnapshot, Failure, FaktoryState, Job, JobBuilder, JobId, MutationFilter,
-    MutationFilterBuilder, MutationTarget, ServerSnapshot, WorkerId,
+    DataSnapshot, Failure, FaktoryState, Job, JobBuilder, JobId, ServerSnapshot, WorkerId,
 };
+
+pub use single::mutation::{Filter, FilterBuilder, Target};
 
 pub(crate) use single::{Ack, Fail, Info, Push, PushBulk, QueueAction, QueueControl};
 

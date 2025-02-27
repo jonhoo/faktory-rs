@@ -7,14 +7,14 @@ use tokio::io::{AsyncBufRead, AsyncWrite, AsyncWriteExt};
 
 mod cmd;
 mod id;
-mod mutation;
 mod resp;
 mod utils;
 
 pub use cmd::*;
 pub use id::{JobId, WorkerId};
-pub use mutation::{MutationFilter, MutationFilterBuilder, MutationTarget};
 pub use resp::*;
+
+pub mod mutation;
 
 #[cfg(feature = "ent")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]

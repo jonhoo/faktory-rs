@@ -3,7 +3,7 @@ use crate::proto::{Job, JobId, WorkerId};
 use std::error::Error as StdError;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
-use super::{MutationFilter, MutationTarget};
+use super::mutation::{Filter, Target};
 
 #[async_trait::async_trait]
 pub trait FaktoryCommand {
@@ -327,7 +327,7 @@ pub(crate) enum MutationType {
     Clear,
 }
 
-fn filter_is_empty(f: &Option<&MutationFilter<'_>>) -> bool {
+fn filter_is_empty(f: &Option<&Filter<'_>>) -> bool {
     // Rust 1.82 has got the genious `Option::is_none_or`,
     // and `Option::is_some_and` which will allow us to:
     // ```rust
@@ -343,9 +343,9 @@ fn filter_is_empty(f: &Option<&MutationFilter<'_>>) -> bool {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub(crate) struct MutationAction<'a> {
     pub(crate) cmd: MutationType,
-    pub(crate) target: MutationTarget,
+    pub(crate) target: Target,
     #[serde(skip_serializing_if = "filter_is_empty")]
-    pub(crate) filter: Option<&'a MutationFilter<'a>>,
+    pub(crate) filter: Option<&'a Filter<'a>>,
 }
 
 self_to_cmd!(MutationAction<'_>, "MUTATE");

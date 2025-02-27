@@ -1,8 +1,8 @@
 use crate::{assert_gt, assert_gte, assert_lt, skip_check};
 use chrono::Utc;
+use faktory::mutate::{Filter, Target};
 use faktory::{
-    Client, Job, JobBuilder, JobId, JobRunner, MutationFilter, MutationTarget, StopReason, Worker,
-    WorkerBuilder, WorkerId,
+    Client, Job, JobBuilder, JobId, JobRunner, StopReason, Worker, WorkerBuilder, WorkerId,
 };
 use rand::Rng;
 use serde_json::Value;
@@ -394,17 +394,11 @@ async fn queue_control_actions_wildcard() {
     // from the previous test run
     let mut client = Client::connect().await.unwrap();
     client
-        .requeue(
-            MutationTarget::Retries,
-            MutationFilter::builder().kind(local_1).build(),
-        )
+        .requeue(Target::Retries, Filter::builder().kind(local_1).build())
         .await
         .unwrap();
     client
-        .requeue(
-            MutationTarget::Retries,
-            MutationFilter::builder().kind(local_2).build(),
-        )
+        .requeue(Target::Retries, Filter::builder().kind(local_2).build())
         .await
         .unwrap();
     client.queue_remove(&[local_1]).await.unwrap();
@@ -512,7 +506,7 @@ async fn queue_control_actions_wildcard() {
         .unwrap();
 
     // now, let's just clear all the scheduled jobs
-    client.clear(MutationTarget::Scheduled).await.unwrap();
+    client.clear(Target::Scheduled).await.unwrap();
 
     tokio_time::sleep(Duration::from_secs(2)).await;
 
@@ -521,7 +515,7 @@ async fn queue_control_actions_wildcard() {
 
     // even if we force-schedule those jobs
     client
-        .requeue(MutationTarget::Scheduled, MutationFilter::empty())
+        .requeue(Target::Scheduled, Filter::empty())
         .await
         .unwrap();
 
@@ -827,8 +821,8 @@ async fn test_panic_and_errors_in_handler() {
     let mut c = Client::connect().await.unwrap();
     let pattern = format!(r#"*\"args\":\[\"{}\"\]*"#, local);
     c.requeue(
-        MutationTarget::Retries,
-        MutationFilter::builder().pattern(pattern.as_str()).build(),
+        Target::Retries,
+        Filter::builder().pattern(pattern.as_str()).build(),
     )
     .await
     .unwrap();
@@ -899,8 +893,8 @@ async fn test_panic_and_errors_in_handler() {
 
     // let's now make sure all the jobs are re-enqueued
     c.requeue(
-        MutationTarget::Retries,
-        MutationFilter::builder().pattern(pattern.as_str()).build(),
+        Target::Retries,
+        Filter::builder().pattern(pattern.as_str()).build(),
     )
     .await
     .unwrap();
@@ -995,10 +989,7 @@ async fn mutation_requeue_jobs() {
     let local = "mutation_requeue_jobs";
     let mut client = Client::connect().await.unwrap();
     client
-        .requeue(
-            MutationTarget::Retries,
-            MutationFilter::builder().kind(local).build(),
-        )
+        .requeue(Target::Retries, Filter::builder().kind(local).build())
         .await
         .unwrap();
     client.queue_remove(&[local]).await.unwrap();
@@ -1031,10 +1022,7 @@ async fn mutation_requeue_jobs() {
 
     // ... we can force it, so let's requeue the job and ...
     client
-        .requeue(
-            MutationTarget::Retries,
-            MutationFilter::builder().jids(&[&job_id]).build(),
-        )
+        .requeue(Target::Retries, Filter::builder().jids(&[&job_id]).build())
         .await
         .unwrap();
 
@@ -1084,10 +1072,7 @@ async fn mutation_kill_and_requeue_and_discard() {
     let local = "mutation_kill_vs_discard";
     let mut client = Client::connect().await.unwrap();
     client
-        .requeue(
-            MutationTarget::Retries,
-            MutationFilter::builder().kind(local).build(),
-        )
+        .requeue(Target::Retries, Filter::builder().kind(local).build())
         .await
         .unwrap();
 
@@ -1112,10 +1097,7 @@ async fn mutation_kill_and_requeue_and_discard() {
 
     // kill them ...
     client
-        .kill(
-            MutationTarget::Scheduled,
-            MutationFilter::builder().kind(local).build(),
-        )
+        .kill(Target::Scheduled, Filter::builder().kind(local).build())
         .await
         .unwrap();
 
@@ -1134,10 +1116,7 @@ async fn mutation_kill_and_requeue_and_discard() {
 
     // let's now enqueue those jobs
     client
-        .requeue(
-            MutationTarget::Dead,
-            MutationFilter::builder().kind(local).build(),
-        )
+        .requeue(Target::Dead, Filter::builder().kind(local).build())
         .await
         .unwrap();
 
@@ -1181,33 +1160,21 @@ async fn mutation_kill_and_requeue_and_discard() {
     // so the jobs have transitioned from being enqueued
     // to the `retries` set, and we can now completely discard them
     client
-        .discard(
-            MutationTarget::Retries,
-            MutationFilter::builder().kind(local).build(),
-        )
+        .discard(Target::Retries, Filter::builder().kind(local).build())
         .await
         .unwrap();
 
     // Double-check
     client
-        .requeue(
-            MutationTarget::Retries,
-            MutationFilter::builder().kind(local).build(),
-        )
+        .requeue(Target::Retries, Filter::builder().kind(local).build())
         .await
         .unwrap();
     client
-        .requeue(
-            MutationTarget::Dead,
-            MutationFilter::builder().kind(local).build(),
-        )
+        .requeue(Target::Dead, Filter::builder().kind(local).build())
         .await
         .unwrap();
     client
-        .requeue(
-            MutationTarget::Scheduled,
-            MutationFilter::builder().kind(local).build(),
-        )
+        .requeue(Target::Scheduled, Filter::builder().kind(local).build())
         .await
         .unwrap();
 
@@ -1233,10 +1200,7 @@ async fn mutation_requeue_specific_jobs_only() {
     let local = "mutation_requeue_specific_jobs_only";
     let mut client = Client::connect().await.unwrap();
     client
-        .requeue(
-            MutationTarget::Retries,
-            MutationFilter::builder().kind(local).build(),
-        )
+        .requeue(Target::Retries, Filter::builder().kind(local).build())
         .await
         .unwrap();
     client.queue_remove(&[local]).await.unwrap();
@@ -1281,11 +1245,8 @@ async fn mutation_requeue_specific_jobs_only() {
     // NB! we only want one single job (with job_id1) to be immediately re-enqueued, but ...
     client
         .requeue(
-            MutationTarget::Retries,
-            MutationFilter::builder()
-                .jids(&[&job_id1])
-                .kind(local)
-                .build(),
+            Target::Retries,
+            Filter::builder().jids(&[&job_id1]).kind(local).build(),
         )
         .await
         .unwrap();
@@ -1303,10 +1264,7 @@ async fn mutation_requeue_specific_jobs_only() {
     // now, let's requeue a job _without_ specifying a jobkind, rather
     // only `jids` in the filter:
     client
-        .requeue(
-            MutationTarget::Retries,
-            MutationFilter::builder().jids(&[&job_id1]).build(),
-        )
+        .requeue(Target::Retries, Filter::builder().jids(&[&job_id1]).build())
         .await
         .unwrap();
 
@@ -1319,7 +1277,7 @@ async fn mutation_requeue_specific_jobs_only() {
     // the comination of `kind` + `pattern` (jobtype and regexp in Faktory's terms);
     // let's first make sure to force-reschedule the jobs:
     client
-        .requeue(MutationTarget::Retries, MutationFilter::empty())
+        .requeue(Target::Retries, Filter::empty())
         .await
         .unwrap();
     assert!(worker.run_one(0, &[local]).await.unwrap());
@@ -1331,8 +1289,8 @@ async fn mutation_requeue_specific_jobs_only() {
     // one with "buzz":
     client
         .requeue(
-            MutationTarget::Retries,
-            MutationFilter::builder()
+            Target::Retries,
+            Filter::builder()
                 .kind(local)
                 .pattern(r#"*\"args\":\[\"fizz\"\]*"#)
                 .build(),
@@ -1348,8 +1306,8 @@ async fn mutation_requeue_specific_jobs_only() {
     // just for sanity's sake, let's re-queue the "buzz" one:
     client
         .requeue(
-            MutationTarget::Retries,
-            MutationFilter::builder()
+            Target::Retries,
+            Filter::builder()
                 .pattern(r#"*\"args\":\[\"buzz\"\]*"#)
                 .build(),
         )

@@ -8,7 +8,7 @@ use crate::{Client, Job};
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
-pub enum MutationTarget {
+pub enum Target {
     /// A set of currently enqueued jobs.
     #[default]
     Scheduled,
@@ -27,27 +27,27 @@ pub enum MutationTarget {
 //
 /// A filter to help narrow down the mutation target.
 ///
-/// As of Faktory version 1.9.2, if [`MutationFilter::pattern`] and/or [`MutationFilter::kind`]
-/// is specified, the values in [`MutationFilter::jids`] will not be taken into account by the
+/// As of Faktory version 1.9.2, if [`Filter::pattern`] and/or [`Filter::kind`]
+/// is specified, the values in [`Filter::jids`] will not be taken into account by the
 /// server. If you want to filter by `jids`, make sure to leave other fields of the filter empty
 /// or use dedicated methods like [`Client::requeue_by_ids`].
 ///
 /// Example usage:
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// # use faktory::{Client, MutationTarget, MutationFilter};
+/// # use faktory::{Client, Target, Filter};
 /// # let mut client = Client::connect().await.unwrap();
-/// let filter = MutationFilter::builder()
+/// let filter = Filter::builder()
 ///     .kind("jobtype_here")
 ///     .pattern(r#"*\"args\":\[\"fizz\"\]*"#)
 ///     .build();
-/// client.requeue(MutationTarget::Retries, &filter).await.unwrap();
+/// client.requeue(Target::Retries, &filter).await.unwrap();
 /// # })
 /// ```
 #[derive(Builder, Clone, Debug, PartialEq, Eq, Serialize)]
 #[builder(setter(into), build_fn(name = "try_build", private), pattern = "owned")]
 #[non_exhaustive]
-pub struct MutationFilter<'a> {
+pub struct Filter<'a> {
     /// A job's [`kind`](crate::Job::kind).
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "jobtype")]
@@ -71,13 +71,13 @@ pub struct MutationFilter<'a> {
     pub pattern: Option<&'a str>,
 }
 
-impl MutationFilter<'_> {
+impl Filter<'_> {
     pub(crate) fn is_empty(&self) -> bool {
         self.jids.is_none() && self.kind.is_none() && self.pattern.is_none()
     }
 }
 
-impl<'a> MutationFilter<'_> {
+impl<'a> Filter<'_> {
     /// Creates an empty filter.
     ///
     /// Sending a mutation command (e.g. [`Client::discard`]) with an empty
@@ -90,13 +90,13 @@ impl<'a> MutationFilter<'_> {
         }
     }
 
-    /// Creates a new builder for a [`MutationFilter`].
-    pub fn builder() -> MutationFilterBuilder<'a> {
-        MutationFilterBuilder::default()
+    /// Creates a new builder for a [`Filter`].
+    pub fn builder() -> FilterBuilder<'a> {
+        FilterBuilder::default()
     }
 }
 
-impl<'a> MutationFilterBuilder<'a> {
+impl<'a> FilterBuilder<'a> {
     /// Ids of jobs to target.
     pub fn jids(mut self, value: &'a [&JobId]) -> Self {
         self.jids = Some(value).into();
@@ -104,9 +104,9 @@ impl<'a> MutationFilterBuilder<'a> {
     }
 }
 
-impl<'a> MutationFilterBuilder<'a> {
-    /// Builds a new [`MutationFilter`] from the parameters of this builder.
-    pub fn build(self) -> MutationFilter<'a> {
+impl<'a> FilterBuilder<'a> {
+    /// Builds a new [`Filter`] from the parameters of this builder.
+    pub fn build(self) -> Filter<'a> {
         self.try_build().expect("infallible")
     }
 }
