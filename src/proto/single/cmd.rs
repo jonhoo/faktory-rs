@@ -344,6 +344,10 @@ fn filter_is_empty(f: &Option<&Filter<'_>>) -> bool {
 pub(crate) struct MutationAction<'a> {
     pub(crate) cmd: MutationType,
     pub(crate) target: Target,
+    // a nil filter (https://github.com/contribsys/faktory/blob/5e1a0d938e4b19b8eff4d20e815289d536a1ae8c/server/mutate.go#L80)
+    // and an empty one (https://github.com/contribsys/faktory/blob/5e1a0d938e4b19b8eff4d20e815289d536a1ae8c/server/mutate.go#L110)
+    // are treated in the common manner - as if we were matching _everything_
+    // in the targeted queue (they are wildcards effectively).
     #[serde(skip_serializing_if = "filter_is_empty")]
     pub(crate) filter: Option<&'a Filter<'a>>,
 }
