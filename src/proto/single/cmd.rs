@@ -1,9 +1,9 @@
+use super::mutation::{Filter, JobSet};
+use super::utils::Empty;
 use crate::error::Error;
 use crate::proto::{Job, JobId, WorkerId};
 use std::error::Error as StdError;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
-
-use super::mutation::{Filter, JobSet};
 
 #[async_trait::async_trait]
 pub trait FaktoryCommand {
@@ -327,19 +327,6 @@ pub(crate) enum MutationType {
     Clear,
 }
 
-fn filter_is_empty(f: &Option<&Filter<'_>>) -> bool {
-    // Rust 1.82 has got the genious `Option::is_none_or`,
-    // and `Option::is_some_and` which will allow us to:
-    // ```rust
-    // f.is_none_or(|f| f.is_empty())
-    // ```
-    // As of crate version `0.13.1-rc0`, we've got `1.70` as MSRV.
-    match f {
-        None => true,
-        Some(f) => f.is_empty(),
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub(crate) struct MutationAction<'a> {
     pub(crate) cmd: MutationType,
@@ -348,8 +335,49 @@ pub(crate) struct MutationAction<'a> {
     // and an empty one (https://github.com/contribsys/faktory/blob/5e1a0d938e4b19b8eff4d20e815289d536a1ae8c/server/mutate.go#L110)
     // are treated in the common manner - as if we were matching _everything_
     // in the targeted queue (they are wildcards effectively).
-    #[serde(skip_serializing_if = "filter_is_empty")]
+    #[serde(skip_serializing_if = "Empty::is_empty")]
     pub(crate) filter: Option<&'a Filter<'a>>,
 }
 
 self_to_cmd!(MutationAction<'_>, "MUTATE");
+
+#[cfg(test)]
+mod test {
+    use super::{MutationAction, MutationType};
+    use crate::proto::{Filter, JobSet};
+
+    #[test]
+    fn mutation_action_is_serialized_correctly() {
+        // filter is None
+        let action = MutationAction {
+            cmd: MutationType::Requeue,
+            target: JobSet::Scheduled,
+            filter: None,
+        };
+        let ser = serde_json::to_string(&action).unwrap();
+        assert_eq!(ser, r#"{"cmd":"requeue","target":"scheduled"}"#);
+
+        // filter is some but empty
+        let empty_filter = Filter::builder().build();
+        let action = MutationAction {
+            cmd: MutationType::Requeue,
+            target: JobSet::Scheduled,
+            filter: Some(&empty_filter),
+        };
+        let ser = serde_json::to_string(&action).unwrap();
+        assert_eq!(ser, r#"{"cmd":"requeue","target":"scheduled"}"#);
+
+        // filter with jobtype
+        let jobtype_filter = Filter::builder().kind("any").build();
+        let action = MutationAction {
+            cmd: MutationType::Requeue,
+            target: JobSet::Scheduled,
+            filter: Some(&jobtype_filter),
+        };
+        let ser = serde_json::to_string(&action).unwrap();
+        assert_eq!(
+            ser,
+            r#"{"cmd":"requeue","target":"scheduled","filter":{"jobtype":"any"}}"#
+        );
+    }
+}

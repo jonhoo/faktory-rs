@@ -152,3 +152,22 @@ mod test {
         assert_eq!(server, deserialized);
     }
 }
+
+pub(crate) trait Empty {
+    fn is_empty(&self) -> bool;
+}
+
+impl<T> Empty for &[T] {
+    fn is_empty(&self) -> bool {
+        (self as &[T]).is_empty()
+    }
+}
+
+impl<T> Empty for Option<T>
+where
+    T: Empty,
+{
+    fn is_empty(&self) -> bool {
+        self.as_ref().map(|v| v.is_empty()).unwrap_or(true)
+    }
+}

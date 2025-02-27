@@ -4,6 +4,8 @@ use derive_builder::Builder;
 #[cfg(doc)]
 use crate::{Client, Job};
 
+use super::utils::Empty;
+
 /// Mutation target set.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -56,7 +58,7 @@ pub struct Filter<'a> {
     pub kind: Option<&'a str>,
 
     /// [`JobId`]s to target.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Empty::is_empty")]
     #[builder(setter(custom))]
     #[builder(default)]
     pub jids: Option<&'a [&'a JobId]>,
@@ -72,9 +74,9 @@ pub struct Filter<'a> {
     pub pattern: Option<&'a str>,
 }
 
-impl Filter<'_> {
-    pub(crate) fn is_empty(&self) -> bool {
-        self.jids.is_none() && self.kind.is_none() && self.pattern.is_none()
+impl Empty for &Filter<'_> {
+    fn is_empty(&self) -> bool {
+        self.jids.is_empty() && self.kind.is_none() && self.pattern.is_none()
     }
 }
 
@@ -109,5 +111,23 @@ impl<'a> FilterBuilder<'a> {
     /// Builds a new [`Filter`] from the parameters of this builder.
     pub fn build(self) -> Filter<'a> {
         self.try_build().expect("infallible")
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::Filter;
+
+    #[test]
+    fn filter_is_serialized_correctly() {
+        // every field None
+        let filter = Filter::builder().build();
+        let ser = serde_json::to_string(&filter).unwrap();
+        assert_eq!(ser, r#"{}"#);
+
+        // some but empty jids
+        let filter = Filter::builder().jids(&[]).kind("welcome_email").build();
+        let ser = serde_json::to_string(&filter).unwrap();
+        assert_eq!(ser, r#"{"jobtype":"welcome_email"}"#)
     }
 }
