@@ -5,15 +5,24 @@ use crate::{
 };
 use std::borrow::Borrow;
 
+#[cfg(doc)]
+use crate::JobBuilder;
+
 impl Client {
     /// Re-enqueue the jobs.
     ///
     /// ***Warning!*** The `MUTATE` API is not supposed to be used as part of application logic,
     /// you will want to use it for administration purposes only.
     ///
-    /// This method will immediately move the jobs from the targeted set (see [`Target`])
-    /// to their queues. This will apply to the jobs satisfying the [`filter`](crate::mutate::Filter).
+    /// Internally, the Faktory server is keeping scheduled, failed, and dead jobs
+    /// in dedicated sets (rather than queues). This method allows to immediately move
+    /// jobs from the targeted (see [`Target`]) set back to the queues those jobs
+    /// are destined for. This will apply to the jobs satisfying the [`filter`](crate::mutate::Filter).
     ///
+    /// Say, we got a job which we purposefully delayed with [`JobBuilder::at`].
+    /// Internally, the Faktory server will be keeping this job in a special set
+    /// of `scheduled` jobs. If we now need to force-schedule this job, we can
+    /// achieve this like so:
     /// ```no_run
     /// # tokio_test::block_on(async {
     /// # use faktory::{JobId, Client};
@@ -21,11 +30,13 @@ impl Client {
     /// # let mut client = Client::connect().await.unwrap();
     /// let job_id1 = JobId::new("3sgE_qwtqw1501");
     /// let job_id2 = JobId::new("3sgE_qwtqw1502");
-    /// let failed_ids = [&job_id1, &job_id2];
-    /// let filter = Filter::builder().jids(failed_ids.as_slice()).build();
-    /// client.requeue(Target::Retries, &filter).await.unwrap();
+    /// let scheduled = [&job_id1, &job_id2];
+    /// let filter = Filter::builder().jids(scheduled.as_slice()).build();
+    /// client.requeue(Target::Scheduled, &filter).await.unwrap();
     /// # });
     /// ```
+    /// In the example above we used jobs' IDS to find the jobs we need in
+    /// the targeted set, but there also other options - see [`Filter`].
     pub async fn requeue<'a, F>(&mut self, target: Target, filter: F) -> Result<(), Error>
     where
         F: Borrow<Filter<'a>>,
