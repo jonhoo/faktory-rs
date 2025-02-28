@@ -112,7 +112,7 @@ pub use crate::proto::{
 
 /// Constructs used to mutate queues on the Faktory server.
 pub mod mutate {
-    pub use crate::proto::{Filter, FilterBuilder, JobSet};
+    pub use crate::proto::{Filter, JobSet};
 }
 
 pub use crate::worker::{JobRunner, StopDetails, StopReason, Worker, WorkerBuilder};

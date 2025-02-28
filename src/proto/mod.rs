@@ -15,7 +15,7 @@ pub use single::{
     DataSnapshot, Failure, FaktoryState, Job, JobBuilder, JobId, ServerSnapshot, WorkerId,
 };
 
-pub use single::mutation::{Filter, FilterBuilder, JobSet};
+pub use single::mutation::{Filter, JobSet};
 
 pub(crate) use single::{Ack, Fail, Info, Push, PushBulk, QueueAction, QueueControl};
 

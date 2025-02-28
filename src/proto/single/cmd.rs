@@ -358,7 +358,7 @@ mod test {
         assert_eq!(ser, r#"{"cmd":"requeue","target":"scheduled"}"#);
 
         // filter is some but empty
-        let empty_filter = Filter::builder().build();
+        let empty_filter = Filter::empty();
         let action = MutationAction {
             cmd: MutationType::Requeue,
             target: JobSet::Scheduled,
@@ -368,7 +368,7 @@ mod test {
         assert_eq!(ser, r#"{"cmd":"requeue","target":"scheduled"}"#);
 
         // filter with jobtype
-        let jobtype_filter = Filter::builder().kind("any").build();
+        let jobtype_filter = Filter::from_kind("any");
         let action = MutationAction {
             cmd: MutationType::Requeue,
             target: JobSet::Scheduled,

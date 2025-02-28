@@ -394,11 +394,11 @@ async fn queue_control_actions_wildcard() {
     // from the previous test run
     let mut client = Client::connect().await.unwrap();
     client
-        .requeue(JobSet::Retries, Filter::builder().kind(local_1).build())
+        .requeue(JobSet::Retries, Filter::from_kind(local_1))
         .await
         .unwrap();
     client
-        .requeue(JobSet::Retries, Filter::builder().kind(local_2).build())
+        .requeue(JobSet::Retries, Filter::from_kind(local_2))
         .await
         .unwrap();
     client.queue_remove(&[local_1]).await.unwrap();
@@ -820,12 +820,9 @@ async fn test_panic_and_errors_in_handler() {
     let local = "test_panic_and_errors_in_handler";
     let mut c = Client::connect().await.unwrap();
     let pattern = format!(r#"*\"args\":\[\"{}\"\]*"#, local);
-    c.requeue(
-        JobSet::Retries,
-        Filter::builder().pattern(pattern.as_str()).build(),
-    )
-    .await
-    .unwrap();
+    c.requeue(JobSet::Retries, Filter::from_pattern(pattern.as_str()))
+        .await
+        .unwrap();
     c.queue_remove(&[local]).await.unwrap();
 
     let mut w = Worker::builder::<io::Error>()
@@ -892,12 +889,9 @@ async fn test_panic_and_errors_in_handler() {
     }
 
     // let's now make sure all the jobs are re-enqueued
-    c.requeue(
-        JobSet::Retries,
-        Filter::builder().pattern(pattern.as_str()).build(),
-    )
-    .await
-    .unwrap();
+    c.requeue(JobSet::Retries, Filter::from_pattern(pattern.as_str()))
+        .await
+        .unwrap();
 
     // now, let's create a worker who will only send jobs to the
     // test's main thread to make some assertions;
@@ -989,7 +983,7 @@ async fn mutation_requeue_jobs() {
     let local = "mutation_requeue_jobs";
     let mut client = Client::connect().await.unwrap();
     client
-        .requeue(JobSet::Retries, Filter::builder().kind(local).build())
+        .requeue(JobSet::Retries, Filter::from_kind(local))
         .await
         .unwrap();
     client.queue_remove(&[local]).await.unwrap();
@@ -1022,11 +1016,11 @@ async fn mutation_requeue_jobs() {
 
     // ... we can force it, so let's requeue the job and ...
     client
-        .requeue(JobSet::Retries, Filter::builder().jids(&[&job_id]).build())
+        .requeue(JobSet::Retries, Filter::from_ids(&[&job_id]))
         .await
         .unwrap();
 
-    // ... this time, instead of failing the job this time, let's
+    // ... this time, instead of failing the job, let's
     // create a new woker that will just send the job
     // to the test thread so that we can inspect and
     // assert on the failure from the first run
@@ -1072,7 +1066,7 @@ async fn mutation_kill_and_requeue_and_discard() {
     let local = "mutation_kill_vs_discard";
     let mut client = Client::connect().await.unwrap();
     client
-        .requeue(JobSet::Retries, Filter::builder().kind(local).build())
+        .requeue(JobSet::Retries, Filter::from_kind(local))
         .await
         .unwrap();
 
@@ -1097,7 +1091,7 @@ async fn mutation_kill_and_requeue_and_discard() {
 
     // kill them ...
     client
-        .kill(JobSet::Scheduled, Filter::builder().kind(local).build())
+        .kill(JobSet::Scheduled, Filter::from_kind(local))
         .await
         .unwrap();
 
@@ -1116,7 +1110,7 @@ async fn mutation_kill_and_requeue_and_discard() {
 
     // let's now enqueue those jobs
     client
-        .requeue(JobSet::Dead, Filter::builder().kind(local).build())
+        .requeue(JobSet::Dead, Filter::from_kind(local))
         .await
         .unwrap();
 
@@ -1160,21 +1154,21 @@ async fn mutation_kill_and_requeue_and_discard() {
     // so the jobs have transitioned from being enqueued
     // to the `retries` set, and we can now completely discard them
     client
-        .discard(JobSet::Retries, Filter::builder().kind(local).build())
+        .discard(JobSet::Retries, Filter::from_kind(local))
         .await
         .unwrap();
 
     // Double-check
     client
-        .requeue(JobSet::Retries, Filter::builder().kind(local).build())
+        .requeue(JobSet::Retries, Filter::from_kind(local))
         .await
         .unwrap();
     client
-        .requeue(JobSet::Dead, Filter::builder().kind(local).build())
+        .requeue(JobSet::Dead, Filter::from_kind(local))
         .await
         .unwrap();
     client
-        .requeue(JobSet::Scheduled, Filter::builder().kind(local).build())
+        .requeue(JobSet::Scheduled, Filter::from_kind(local))
         .await
         .unwrap();
 
@@ -1200,7 +1194,7 @@ async fn mutation_requeue_specific_jobs_only() {
     let local = "mutation_requeue_specific_jobs_only";
     let mut client = Client::connect().await.unwrap();
     client
-        .requeue(JobSet::Retries, Filter::builder().kind(local).build())
+        .requeue(JobSet::Retries, Filter::from_kind(local))
         .await
         .unwrap();
     client.queue_remove(&[local]).await.unwrap();
@@ -1236,35 +1230,9 @@ async fn mutation_requeue_specific_jobs_only() {
     assert!(worker.run_one(0, &[local]).await.unwrap());
     assert!(!worker.run_one(0, &[local]).await.unwrap());
 
-    // now let's only requeue one job of kind 'mutation_requeue_specific_jobs_only'
-    // following this example from the Faktory docs:
-    //
-    // MUTATE {"cmd":"kill","target":"retries","filter":{"jobtype":"QuickbooksSyncJob", "jids":["123456789", "abcdefgh"]}}
-    // (see: https://github.com/contribsys/faktory/wiki/Mutate-API#examples)
-    //
-    // NB! we only want one single job (with job_id1) to be immediately re-enqueued, but ...
+    // now, let's requeue a job by id:
     client
-        .requeue(
-            JobSet::Retries,
-            Filter::builder().jids(&[&job_id1]).kind(local).build(),
-        )
-        .await
-        .unwrap();
-
-    // ... looks like _all_ the jobs of that jobtype are re-queued
-    // see: https://github.com/contribsys/faktory/blob/10ccc2270dc2a1c95c3583f7c291a51b0292bb62/server/mutate.go#L96-L98
-    assert!(worker.run_one(0, &[local]).await.unwrap());
-    assert!(worker.run_one(0, &[local]).await.unwrap());
-
-    // let's prove that there _is_ still a way to only requeue one
-    // specific jobs, and to do so let's verify the queue is drained
-    // again (since we've just failed the two jobs again):
-    assert!(!worker.run_one(0, &[local]).await.unwrap());
-
-    // now, let's requeue a job _without_ specifying a jobkind, rather
-    // only `jids` in the filter:
-    client
-        .requeue(JobSet::Retries, Filter::builder().jids(&[&job_id1]).build())
+        .requeue(JobSet::Retries, Filter::from_ids(&[&job_id1]))
         .await
         .unwrap();
 
@@ -1290,10 +1258,7 @@ async fn mutation_requeue_specific_jobs_only() {
     client
         .requeue(
             JobSet::Retries,
-            Filter::builder()
-                .kind(local)
-                .pattern(r#"*\"args\":\[\"fizz\"\]*"#)
-                .build(),
+            Filter::from_kind_and_pattern(local, r#"*\"args\":\[\"fizz\"\]*"#),
         )
         .await
         .unwrap();
@@ -1307,9 +1272,7 @@ async fn mutation_requeue_specific_jobs_only() {
     client
         .requeue(
             JobSet::Retries,
-            Filter::builder()
-                .pattern(r#"*\"args\":\[\"buzz\"\]*"#)
-                .build(),
+            Filter::from_pattern(r#"*\"args\":\[\"buzz\"\]*"#),
         )
         .await
         .unwrap();

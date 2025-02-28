@@ -31,7 +31,7 @@ impl Client {
     /// let job_id1 = JobId::new("3sgE_qwtqw1501");
     /// let job_id2 = JobId::new("3sgE_qwtqw1502");
     /// let scheduled = [&job_id1, &job_id2];
-    /// let filter = Filter::builder().jids(scheduled.as_slice()).build();
+    /// let filter = Filter::from_ids(scheduled.as_slice());
     /// client.requeue(JobSet::Scheduled, &filter).await.unwrap();
     /// # });
     /// ```
@@ -65,7 +65,7 @@ impl Client {
         candidate_job_set: JobSet,
         jids: &'_ [&'_ JobId],
     ) -> Result<(), Error> {
-        let filter = Filter::builder().jids(jids).build();
+        let filter = Filter::from_ids(jids);
         self.mutate(MutationType::Requeue, candidate_job_set, Some(&filter))
             .await
     }
@@ -85,9 +85,7 @@ impl Client {
     /// # use faktory::Client;
     /// # use faktory::mutate::{JobSet, Filter};
     /// # let mut client = Client::connect().await.unwrap();
-    /// let filter = Filter::builder()
-    ///     .pattern(r#"*\"args\":\[\"fizz\"\]*"#)
-    ///     .build();
+    /// let filter = Filter::from_pattern(r#"*\"args\":\[\"fizz\"\]*"#);
     /// client.discard(JobSet::Scheduled, &filter).await.unwrap();
     /// # });
     /// ```
@@ -119,7 +117,7 @@ impl Client {
         candidate_job_set: JobSet,
         jids: &'_ [&'_ JobId],
     ) -> Result<(), Error> {
-        let filter = Filter::builder().jids(jids).build();
+        let filter = Filter::from_ids(jids);
         self.mutate(MutationType::Discard, candidate_job_set, Some(&filter))
             .await
     }
@@ -140,9 +138,7 @@ impl Client {
     /// # use faktory::Client;
     /// # use faktory::mutate::{JobSet, Filter};
     /// # let mut client = Client::connect().await.unwrap();
-    /// let filter = Filter::builder()
-    ///     .pattern(r#"*\"args\":\[\"bill\"\]*"#)
-    ///     .build();
+    /// let filter = Filter::from_pattern(r#"*\"args\":\[\"bill\"\]*"#);
     /// client.kill(JobSet::Scheduled, &filter).await.unwrap();
     /// # });
     /// ```
@@ -166,7 +162,7 @@ impl Client {
         candidate_job_set: JobSet,
         jids: &'_ [&'_ JobId],
     ) -> Result<(), Error> {
-        let filter = Filter::builder().jids(jids).build();
+        let filter = Filter::from_ids(jids);
         self.mutate(MutationType::Kill, candidate_job_set, Some(&filter))
             .await
     }

@@ -1,5 +1,4 @@
 use crate::JobId;
-use derive_builder::Builder;
 
 #[cfg(doc)]
 use crate::{Client, Job};
@@ -29,39 +28,27 @@ pub enum JobSet {
 //
 /// A filter to help narrow down the mutation target.
 ///
-/// As of Faktory version 1.9.2, if [`Filter::pattern`] and/or [`Filter::kind`]
-/// is specified, the values in [`Filter::jids`] will not be taken into account by the
-/// server. If you want to filter by `jids`, make sure to leave other fields of the filter empty
-/// or use dedicated methods like [`Client::requeue_by_ids`].
-///
 /// Example usage:
 /// ```no_run
 /// # tokio_test::block_on(async {
 /// # use faktory::Client;
 /// # use faktory::mutate::{JobSet, Filter};
 /// # let mut client = Client::connect().await.unwrap();
-/// let filter = Filter::builder()
-///     .kind("jobtype_here")
-///     .pattern(r#"*\"args\":\[\"fizz\"\]*"#)
-///     .build();
+/// let filter = Filter::from_kind_and_pattern("jobtype_here", r#"*\"args\":\[\"fizz\"\]*"#);
 /// client.requeue(JobSet::Retries, &filter).await.unwrap();
 /// # })
 /// ```
-#[derive(Builder, Clone, Debug, PartialEq, Eq, Serialize)]
-#[builder(setter(into), build_fn(name = "try_build", private), pattern = "owned")]
+#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize)]
 #[non_exhaustive]
 pub struct Filter<'a> {
     /// A job's [`kind`](crate::Job::kind).
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "jobtype")]
-    #[builder(default)]
-    pub kind: Option<&'a str>,
+    pub(crate) kind: Option<&'a str>,
 
     /// [`JobId`]s to target.
     #[serde(skip_serializing_if = "Empty::is_empty")]
-    #[builder(setter(custom))]
-    #[builder(default)]
-    pub jids: Option<&'a [&'a JobId]>,
+    pub(crate) jids: Option<&'a [&'a JobId]>,
 
     /// Match pattern to use for filtering.
     ///
@@ -70,8 +57,7 @@ pub struct Filter<'a> {
     /// for further details.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "regexp")]
-    #[builder(default)]
-    pub pattern: Option<&'a str>,
+    pub(crate) pattern: Option<&'a str>,
 }
 
 impl Empty for &Filter<'_> {
@@ -80,37 +66,51 @@ impl Empty for &Filter<'_> {
     }
 }
 
-impl<'a> Filter<'_> {
+impl<'a> Filter<'a> {
     /// Creates an empty filter.
     ///
     /// Sending a mutation command (e.g. [`Client::discard`]) with an empty
-    /// filter effectively means performing no filtering at all.
+    /// filter effectively means using a wildcard.
     pub fn empty() -> Self {
+        Self::default()
+    }
+
+    /// Creates a filter from the provided [`JobId`]s.
+    pub fn from_ids(ids: &'a [&JobId]) -> Self {
         Self {
-            kind: None,
-            jids: None,
-            pattern: None,
+            jids: Some(ids),
+            ..Default::default()
         }
     }
 
-    /// Creates a new builder for a [`Filter`].
-    pub fn builder() -> FilterBuilder<'a> {
-        FilterBuilder::default()
+    /// Creates a filter with the provided job's [`kind`](crate::Job::kind).
+    pub fn from_kind(job_kind: &'a str) -> Self {
+        Self {
+            kind: Some(job_kind),
+            ..Default::default()
+        }
     }
-}
 
-impl<'a> FilterBuilder<'a> {
-    /// Ids of jobs to target.
-    pub fn jids(mut self, value: &'a [&JobId]) -> Self {
-        self.jids = Some(value).into();
-        self
+    /// Creates a filter with the provided search pattern.
+    ///
+    /// Faktory will pass this directly to Redis's `SCAN` command,
+    /// so please see the [`SCAN` documentation](https://redis.io/docs/latest/commands/scan/)
+    /// for further details.// Creates a filter with provided job kind.
+    pub fn from_pattern(pattern: &'a str) -> Self {
+        Self {
+            pattern: Some(pattern),
+            ..Default::default()
+        }
     }
-}
-
-impl<'a> FilterBuilder<'a> {
-    /// Builds a new [`Filter`] from the parameters of this builder.
-    pub fn build(self) -> Filter<'a> {
-        self.try_build().expect("infallible")
+    /// Creates a filter with the provided job's [`kind`](crate::Job::kind) and search pattern.
+    ///
+    /// This is essentially [`Filter::from_kind`] and [`Filter::from_pattern`] merged together.
+    pub fn from_kind_and_pattern(job_kind: &'a str, pattern: &'a str) -> Self {
+        Self {
+            kind: Some(job_kind),
+            pattern: Some(pattern),
+            jids: None,
+        }
     }
 }
 
@@ -121,13 +121,13 @@ mod test {
     #[test]
     fn filter_is_serialized_correctly() {
         // every field None
-        let filter = Filter::builder().build();
+        let filter = Filter::empty();
         let ser = serde_json::to_string(&filter).unwrap();
-        assert_eq!(ser, r#"{}"#);
+        assert_eq!(ser, "{}");
 
         // some but empty jids
-        let filter = Filter::builder().jids(&[]).kind("welcome_email").build();
+        let filter = Filter::from_ids(&[]);
         let ser = serde_json::to_string(&filter).unwrap();
-        assert_eq!(ser, r#"{"jobtype":"welcome_email"}"#)
+        assert_eq!(ser, "{}")
     }
 }
