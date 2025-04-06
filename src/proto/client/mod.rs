@@ -21,6 +21,8 @@ mod conn;
 pub(crate) use conn::BoxedConnection;
 pub use conn::Connection;
 
+mod mutation;
+
 pub(crate) const EXPECTED_PROTOCOL_VERSION: usize = 2;
 
 fn check_protocols_match(ver: usize) -> Result<(), Error> {

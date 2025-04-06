@@ -35,6 +35,7 @@ faktory:
 .PHONY: faktory/kill
 faktory/kill:
 	docker stop faktory
+	docker volume rm faktory-data
 
 .PHONY: faktory/tls
 faktory/tls:
@@ -54,17 +55,26 @@ test/doc:
 
 .PHONY: test/e2e
 test/e2e:
-	FAKTORY_URL=tcp://${FAKTORY_HOST}:${FAKTORY_PORT} cargo test --locked --all-features --all-targets
+	FAKTORY_URL=tcp://${FAKTORY_HOST}:${FAKTORY_PORT} \
+	cargo test --locked --all-features --all-targets -- \
+	--nocapture $(pattern)
+
+.PHONY: test/e2e/ignored
+test/e2e/ignored:
+	FAKTORY_URL=tcp://${FAKTORY_HOST}:${FAKTORY_PORT} \
+	cargo test --locked --all-features --all-targets -- \
+	--nocapture --include-ignored queue_control_actions_wildcard
 
 .PHONY: test/e2e/tls
 test/e2e/tls:
 	FAKTORY_URL_SECURE=tcp://:${FAKTORY_PASSWORD}@${FAKTORY_HOST}:${FAKTORY_PORT_SECURE} \
 	FAKTORY_URL=tcp://:${FAKTORY_PASSWORD}@${FAKTORY_HOST}:${FAKTORY_PORT} \
-	cargo test --locked --features native_tls,rustls --test tls -- --nocapture
+	cargo test --locked --features native_tls,rustls --test tls -- \
+	--nocapture $(pattern)
 
 .PHONY: test/load
 test/load:
-	cargo run --release --features binaries
+	cargo run --release --features binaries $(jobs) $(threads)
 
 .PHONY: test/perf
 test/perf:

@@ -14,6 +14,8 @@ pub use cmd::*;
 pub use id::{JobId, WorkerId};
 pub use resp::*;
 
+pub mod mutation;
+
 #[cfg(feature = "ent")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]
 pub mod ent;
@@ -122,6 +124,8 @@ pub struct Job {
     /// Defaults to 25.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[builder(default = "Some(JOB_DEFAULT_RETRY_COUNT)")]
+    // TODO: this should probably be a usize, see Failure::retry_count
+    // TODO: and Failure::retry_remaining. This can go to 0.14 release
     pub retry: Option<isize>,
 
     /// The priority of this job from 1-9 (9 is highest).
@@ -204,19 +208,45 @@ impl JobBuilder {
     }
 }
 
+/// Details on a job's failure.
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[non_exhaustive]
 pub struct Failure {
-    retry_count: usize,
-    failed_at: String,
+    /// Number of times this job has been retried.
+    pub retry_count: usize,
+
+    /// Number of remaining retry attempts.
+    ///
+    /// This is the difference between how many times this job
+    /// _can_ be retried (see [`Job::retry`]) and the number of retry
+    /// attempts that have already been made (see [`Failure::retry_count`]).
+    #[serde(rename = "remaining")]
+    pub retry_remaining: usize,
+
+    /// Last time this job failed.
+    pub failed_at: DateTime<Utc>,
+
+    /// When this job will be retried.
+    ///
+    /// This will be `None` if there are no retry
+    /// attempts (see [`Failure::retry_remaining`]) left.
     #[serde(skip_serializing_if = "Option::is_none")]
-    next_at: Option<String>,
+    pub next_at: Option<DateTime<Utc>>,
+
+    /// Error message, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
-    message: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+
+    // This is Some("unknown") most of the time, and we are not making
+    // it public for now, see discussion:
+    // https://github.com/jonhoo/faktory-rs/pull/89#discussion_r1899423130
+    /// Error kind, if known.
     #[serde(rename = "errtype")]
-    kind: Option<String>,
+    pub(crate) kind: Option<String>,
+
+    /// Stack trace from last failure, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
-    backtrace: Option<Vec<String>>,
+    pub backtrace: Option<Vec<String>>,
 }
 
 impl Job {
@@ -261,8 +291,8 @@ impl Job {
     }
 
     /// Data about this job's most recent failure.
-    pub fn failure(&self) -> &Option<Failure> {
-        &self.failure
+    pub fn failure(&self) -> Option<&Failure> {
+        self.failure.as_ref()
     }
 }
 

@@ -106,9 +106,14 @@ mod worker;
 pub use crate::error::Error;
 
 pub use crate::proto::{
-    Client, Connection, DataSnapshot, FaktoryState, Job, JobBuilder, JobId, Reconnect,
+    Client, Connection, DataSnapshot, Failure, FaktoryState, Job, JobBuilder, JobId, Reconnect,
     ServerSnapshot, WorkerId,
 };
+
+/// Constructs used to mutate queues on the Faktory server.
+pub mod mutate {
+    pub use crate::proto::{Filter, JobSet};
+}
 
 pub use crate::worker::{JobRunner, StopDetails, StopReason, Worker, WorkerBuilder};
 
