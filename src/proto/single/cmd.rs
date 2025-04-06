@@ -316,11 +316,10 @@ impl<'a, S: AsRef<str>> QueueControl<'a, S> {
 
 // ---------------------- MUTATE -------------------
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub(crate) enum MutationType {
-    #[default]
     Kill,
     Requeue,
     Discard,

@@ -35,6 +35,7 @@ faktory:
 .PHONY: faktory/kill
 faktory/kill:
 	docker stop faktory
+	docker volume rm faktory-data
 
 .PHONY: faktory/tls
 faktory/tls:
