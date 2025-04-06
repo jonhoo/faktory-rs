@@ -95,7 +95,7 @@ impl<'a> Filter<'a> {
     ///
     /// Faktory will pass this directly to Redis's `SCAN` command,
     /// so please see the [`SCAN` documentation](https://redis.io/docs/latest/commands/scan/)
-    /// for further details.// Creates a filter with provided job kind.
+    /// for further details.
     pub fn from_pattern(pattern: &'a str) -> Self {
         Self {
             pattern: Some(pattern),
