@@ -1,3 +1,4 @@
+use crate::utils::setup;
 use crate::{assert_gt, assert_gte, assert_lt, skip_check};
 use chrono::Utc;
 use faktory::mutate::{Filter, JobSet};
@@ -12,7 +13,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{io, sync};
 use tokio::sync::mpsc::error::SendError;
-use tokio::time::{self as tokio_time};
+use tokio::time::{self as tokio_time, sleep};
 use tokio_util::sync::CancellationToken;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -974,26 +975,30 @@ async fn test_panic_and_errors_in_handler() {
 #[tokio::test(flavor = "multi_thread")]
 async fn mutation_requeue_jobs() {
     skip_check!();
+    // at this point we know that FAKTORY_URL has been provided for the entire
+    // e2e test suite; for this test, though, we are launching a dedicated instance
+    // of the "Faktory" server in docker container - this is to guarantee isolation
+    if std::env::var_os("TESTCONTAINERS_ENABLED").is_none() {
+        // but we do not want to aggressively enforce docker engine installations,
+        // even though we already rely on docker when running e2e tests (see utility
+        // commands in Makefile), especially when testing TLS feature, where we are
+        // just putting a Faktory container behind an NGINX container
+        return;
+    }
+    let local = "mutation_requeue_jobs";
+    let ctx = setup(None).await;
     let test_started_at = Utc::now();
     let max_retries = rand::thread_rng().gen_range(2..25);
     let panic_message = "Failure should be recorded";
 
-    // prepare a client and clean up the queue
-    // to ensure there are no left-overs
-    let local = "mutation_requeue_jobs";
-    let mut client = Client::connect().await.unwrap();
-    client
-        .requeue(JobSet::Retries, Filter::from_kind(local))
-        .await
-        .unwrap();
-    client.queue_remove(&[local]).await.unwrap();
-
-    // prepare a worker that will fail the job unconditionally
+    // prepare a client ...
+    let mut client = Client::connect_to(&ctx.faktory_url).await.unwrap();
+    // ... and a worker that will fail the job unconditionally
     let mut worker = Worker::builder::<io::Error>()
         .register_fn(local, move |_job| async move {
             panic_any(panic_message);
         })
-        .connect()
+        .connect_to(&ctx.faktory_url)
         .await
         .unwrap();
 
@@ -1003,9 +1008,11 @@ async fn mutation_requeue_jobs() {
         .retry(max_retries)
         .build();
     let job_id = job.id().clone();
+
     client.enqueue(job).await.unwrap();
 
     // consume and fail it
+    sleep(Duration::from_millis(1000)).await;
     let had_one = worker.run_one(0, &[local]).await.unwrap();
     assert!(had_one);
 
@@ -1036,7 +1043,7 @@ async fn mutation_requeue_jobs() {
                 Ok::<(), io::Error>(())
             })
         })
-        .connect()
+        .connect_to(&ctx.faktory_url)
         .await
         .unwrap();
     assert!(w.run_one(0, &[local]).await.unwrap());

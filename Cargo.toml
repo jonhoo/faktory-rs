@@ -16,11 +16,7 @@ exclude = [".github", "docker", ".gitignore", "Makefile"]
 [features]
 default = []
 native_tls = ["dep:pin-project", "dep:tokio-native-tls"]
-rustls = [
-    "dep:pin-project",
-    "dep:tokio-rustls",
-    "dep:rustls-native-certs",
-]
+rustls = ["dep:pin-project", "dep:tokio-rustls", "dep:rustls-native-certs"]
 binaries = ["dep:clap", "tokio/macros"]
 ent = []
 
@@ -58,6 +54,7 @@ semver = { version = "1.0.23", features = ["serde"] }
 
 [dev-dependencies]
 rustls-pki-types = "1.0.1"
+testcontainers = { version = "0.24.0", features = ["reusable-containers"] }
 tokio = { version = "1.35.1", features = ["rt", "macros"] }
 tokio-test = "0.4.3"
 tokio-util = "0.7.11"

@@ -24,7 +24,7 @@ doc:
 
 .PHONY: faktory
 faktory:
-	docker run --rm -d \
+	docker run --rm \
 	-v faktory-data:/var/lib/faktory \
 	-p ${FAKTORY_IP}:${FAKTORY_PORT}:7419 \
 	-p ${FAKTORY_IP}:${FAKTORY_PORT_UI}:7420 \
@@ -55,6 +55,7 @@ test/doc:
 
 .PHONY: test/e2e
 test/e2e:
+	TESTCONTAINERS_ENABLED=1 \
 	FAKTORY_URL=tcp://${FAKTORY_HOST}:${FAKTORY_PORT} \
 	cargo test --locked --all-features --all-targets -- \
 	--nocapture $(pattern)
