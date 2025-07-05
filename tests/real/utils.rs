@@ -60,6 +60,7 @@ pub fn learn_faktory_url() -> String {
     url.to_str().expect("Is a utf-8 string").to_owned()
 }
 
+#[non_exhaustive]
 pub struct TestContext {
     // just keep the handle so that when the TestContext
     // goes out of scope the container is stopped and removed
