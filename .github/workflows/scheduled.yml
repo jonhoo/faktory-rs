@@ -65,6 +65,7 @@ jobs:
         env:
           # set this explicitly so integration tests will run
           FAKTORY_URL: tcp://127.0.0.1:7419
+          TESTCONTAINERS_ENABLED: 1
           RUSTFLAGS: -D deprecated
     services:
       faktory:

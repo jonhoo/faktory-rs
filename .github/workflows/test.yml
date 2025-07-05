@@ -53,6 +53,7 @@ jobs:
         run: cargo test --locked --all-features --doc
         env: # set this explicitly so integration tests will run
           FAKTORY_URL: tcp://127.0.0.1:7419
+          TESTCONTAINERS_ENABLED: 1
     services:
       faktory:
         image: contribsys/faktory:latest
@@ -100,6 +101,7 @@ jobs:
         run: cargo test --locked --all-features --all-targets
         env: # set this explicitly so integration tests will run
           FAKTORY_URL: tcp://127.0.0.1:7419
+          TESTCONTAINERS_ENABLED: 1
     services:
       faktory:
         image: contribsys/faktory:latest
