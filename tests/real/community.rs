@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{io, sync};
 use tokio::sync::mpsc::error::SendError;
-use tokio::time::{self as tokio_time, sleep};
+use tokio::time::{self as tokio_time};
 use tokio_util::sync::CancellationToken;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1012,7 +1012,6 @@ async fn mutation_requeue_jobs() {
     client.enqueue(job).await.unwrap();
 
     // consume and fail it
-    sleep(Duration::from_millis(1000)).await;
     let had_one = worker.run_one(0, &[local]).await.unwrap();
     assert!(had_one);
 
