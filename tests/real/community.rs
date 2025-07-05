@@ -1008,7 +1008,6 @@ async fn mutation_requeue_jobs() {
         .retry(max_retries)
         .build();
     let job_id = job.id().clone();
-
     client.enqueue(job).await.unwrap();
 
     // consume and fail it
