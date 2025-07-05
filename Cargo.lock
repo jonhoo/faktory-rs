@@ -611,6 +611,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
+ "serde_repr",
  "sha2",
  "testcontainers",
  "thiserror 1.0.63",

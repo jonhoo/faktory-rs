@@ -67,6 +67,7 @@ native-tls = { version = "0.2.4", optional = true }
 num-bigint = "0.4.2"
 oid-registry = "0.6.1"
 openssl = { version = "0.10.60", optional = true }
+serde_repr = { version = "0.1.5", optional = true }
 
 # TryFrom<String> for ServerName<'static> has been implemented:
 # https://github.com/rustls/pki-types/compare/rustls:3793627...rustls:1303efa#
