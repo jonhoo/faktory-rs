@@ -24,7 +24,7 @@ doc:
 
 .PHONY: faktory
 faktory:
-	docker run --rm \
+	docker run --rm -d \
 	-v faktory-data:/var/lib/faktory \
 	-p ${FAKTORY_IP}:${FAKTORY_PORT}:7419 \
 	-p ${FAKTORY_IP}:${FAKTORY_PORT_UI}:7420 \
