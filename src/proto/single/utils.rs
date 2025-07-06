@@ -1,5 +1,5 @@
 use chrono::naive::NaiveTime;
-use rand::{thread_rng, Rng};
+use rand::{distr::Alphanumeric, rng, Rng};
 use serde::{de::Deserializer, Deserialize, Serializer};
 use std::time::Duration;
 
@@ -7,8 +7,8 @@ const JOB_ID_LENGTH: usize = 16;
 const WORKER_ID_LENGTH: usize = 32;
 
 fn gen_random_id(length: usize) -> String {
-    thread_rng()
-        .sample_iter(&rand::distributions::Alphanumeric)
+    rng()
+        .sample_iter(&Alphanumeric)
         .map(char::from)
         .take(length)
         .collect()

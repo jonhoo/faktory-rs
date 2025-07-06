@@ -981,7 +981,7 @@ async fn mutation_requeue_jobs() {
     let local = "mutation_requeue_jobs";
     let ctx = launch_isolated_faktory(None).await;
     let test_started_at = Utc::now();
-    let max_retries = rand::thread_rng().gen_range(2..25);
+    let max_retries: u32 = rand::rng().random_range(2..25);
     let panic_message = "Failure should be recorded";
 
     // prepare a client ...
@@ -998,7 +998,7 @@ async fn mutation_requeue_jobs() {
     // enqueue a job
     let job = JobBuilder::new(local)
         .queue(local)
-        .retry(max_retries)
+        .retry(max_retries as isize)
         .build();
     let job_id = job.id().clone();
     client.enqueue(job).await.unwrap();
