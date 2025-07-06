@@ -55,6 +55,7 @@ test/doc:
 
 .PHONY: test/e2e
 test/e2e:
+	TESTCONTAINERS_ENABLED=1 \
 	FAKTORY_URL=tcp://${FAKTORY_HOST}:${FAKTORY_PORT} \
 	cargo test --locked --all-features --all-targets -- \
 	--nocapture $(pattern)

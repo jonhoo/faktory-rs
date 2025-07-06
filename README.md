@@ -111,9 +111,11 @@ For instance, to run a `run_to_completion` example in release mode, hit:
 ```bash
 cargo run --example run_to_completion --release
 ```
+
 Make sure you've got Faktory server up-and-running. See [instructions](#run-test-suite-locally) on how to spin up Faktory locally.
 
 ## Run test suite locally
+
 First ensure the "Factory" service is running and accepting connections on your machine.
 To launch it a [Factory](https://hub.docker.com/r/contribsys/faktory/) container with [docker](https://docs.docker.com/engine/install/), run:
 
@@ -128,6 +130,9 @@ FAKTORY_URL=tcp://127.0.0.1:7419 cargo test --all-features --locked --all-target
 ```
 
 Please note that setting "FAKTORY_URL" environment variable is required for e2e tests to not be skipped.
+Also, to enable some of the tests (e.g. testing Faktory MUTATE API), "TESTCONTAINERS_ENABLED" should be
+present in the environment (e.g "TESTCONTAINERS_ENABLED=1"). This will enabled launching a dedicated [test
+container](https://testcontainers.com/) for a test which needs better isolation.
 
 Provided you have [make](https://www.gnu.org/software/make/#download) installed and `docker` daemon running,
 you can launch a `Faktory` container with `make faktory` command. After that, hit `make test/e2e` to run the end-to-end test suite.

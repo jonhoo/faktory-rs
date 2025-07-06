@@ -1,4 +1,5 @@
-use crate::{assert_gt, assert_gte, assert_lt, skip_check};
+use crate::utils::launch_isolated_faktory;
+use crate::{assert_gt, assert_gte, assert_lt, skip_check, skip_if_containers_not_enabled};
 use chrono::Utc;
 use faktory::mutate::{Filter, JobSet};
 use faktory::{
@@ -973,27 +974,24 @@ async fn test_panic_and_errors_in_handler() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn mutation_requeue_jobs() {
-    skip_check!();
+    // for this test we need to launch a dedicated instance of the "Faktory" server
+    // in docker container - this is to guarantee isolation
+    skip_if_containers_not_enabled!();
+
+    let local = "mutation_requeue_jobs";
+    let ctx = launch_isolated_faktory(None).await;
     let test_started_at = Utc::now();
     let max_retries = rand::thread_rng().gen_range(2..25);
     let panic_message = "Failure should be recorded";
 
-    // prepare a client and clean up the queue
-    // to ensure there are no left-overs
-    let local = "mutation_requeue_jobs";
-    let mut client = Client::connect().await.unwrap();
-    client
-        .requeue(JobSet::Retries, Filter::from_kind(local))
-        .await
-        .unwrap();
-    client.queue_remove(&[local]).await.unwrap();
-
-    // prepare a worker that will fail the job unconditionally
+    // prepare a client ...
+    let mut client = Client::connect_to(&ctx.faktory_url).await.unwrap();
+    // ... and a worker that will fail the job unconditionally
     let mut worker = Worker::builder::<io::Error>()
         .register_fn(local, move |_job| async move {
             panic_any(panic_message);
         })
-        .connect()
+        .connect_to(&ctx.faktory_url)
         .await
         .unwrap();
 
@@ -1036,7 +1034,7 @@ async fn mutation_requeue_jobs() {
                 Ok::<(), io::Error>(())
             })
         })
-        .connect()
+        .connect_to(&ctx.faktory_url)
         .await
         .unwrap();
     assert!(w.run_one(0, &[local]).await.unwrap());
