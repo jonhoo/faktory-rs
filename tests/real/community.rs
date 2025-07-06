@@ -1,5 +1,5 @@
 use crate::utils::launch_isolated_faktory;
-use crate::{assert_gt, assert_gte, assert_lt, skip_check};
+use crate::{assert_gt, assert_gte, assert_lt, skip_check, skip_if_containers_not_enabled};
 use chrono::Utc;
 use faktory::mutate::{Filter, JobSet};
 use faktory::{
@@ -974,17 +974,10 @@ async fn test_panic_and_errors_in_handler() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn mutation_requeue_jobs() {
-    skip_check!();
-    // at this point we know that FAKTORY_URL has been provided for the entire
-    // e2e test suite; for this test, though, we are launching a dedicated instance
-    // of the "Faktory" server in docker container - this is to guarantee isolation
-    if std::env::var_os("TESTCONTAINERS_ENABLED").is_none() {
-        // but we do not want to aggressively enforce docker engine installations,
-        // even though we already rely on docker when running e2e tests (see utility
-        // commands in Makefile), especially when testing TLS feature, where we are
-        // just putting a Faktory container behind an NGINX container
-        return;
-    }
+    // for this test we need to launch a dedicated instance of the "Faktory" server
+    // in docker container - this is to guarantee isolation
+    skip_if_containers_not_enabled!();
+
     let local = "mutation_requeue_jobs";
     let ctx = launch_isolated_faktory(None).await;
     let test_started_at = Utc::now();

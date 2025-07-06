@@ -29,6 +29,19 @@ macro_rules! skip_if_not_enterprise {
     };
 }
 
+// we do not want to aggressively enforce docker engine installations,
+// even though we already rely on docker when running e2e tests (see utility
+// commands in Makefile), especially when testing TLS feature, where we are
+// just putting a Faktory container behind an NGINX container
+#[macro_export]
+macro_rules! skip_if_containers_not_enabled {
+    () => {
+        if std::env::var_os("TESTCONTAINERS_ENABLED").is_none() {
+            return;
+        }
+    };
+}
+
 #[macro_export]
 macro_rules! assert_gt {
     ($a:expr, $b:expr $(, $rest:expr) *) => {
