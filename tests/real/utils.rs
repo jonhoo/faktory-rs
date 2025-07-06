@@ -73,7 +73,7 @@ pub struct TestContext {
     pub faktory_url: String,
 }
 
-/// Set up a dedicated Faktory server.
+/// Launch a dedicated Faktory server.
 ///
 /// This will launch a dedicated Faktory instance in case you need one
 /// for proper isolation. The Faktory address for client connections will be
@@ -91,7 +91,7 @@ pub struct TestContext {
 /// available after the test has finished. Just provide the container name (the test
 /// name seems to be the most) and the container will not be automatically dropped.
 /// You can the check its address with `docker ps` and visit the Faktory Web app.
-pub async fn setup(container_name: Option<String>) -> TestContext {
+pub async fn launch_isolated_faktory(container_name: Option<String>) -> TestContext {
     let container_request = GenericImage::new("contribsys/faktory", TARGETED_FAKTORY_VERSION)
         .with_exposed_port(7419.tcp())
         .with_exposed_port(7420.tcp())

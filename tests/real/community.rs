@@ -1,4 +1,4 @@
-use crate::utils::setup;
+use crate::utils::launch_isolated_faktory;
 use crate::{assert_gt, assert_gte, assert_lt, skip_check};
 use chrono::Utc;
 use faktory::mutate::{Filter, JobSet};
@@ -986,7 +986,7 @@ async fn mutation_requeue_jobs() {
         return;
     }
     let local = "mutation_requeue_jobs";
-    let ctx = setup(None).await;
+    let ctx = launch_isolated_faktory(None).await;
     let test_started_at = Utc::now();
     let max_retries = rand::thread_rng().gen_range(2..25);
     let panic_message = "Failure should be recorded";
