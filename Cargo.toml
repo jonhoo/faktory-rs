@@ -1,6 +1,6 @@
 [package]
 name = "faktory"
-version = "0.13.1-rc0"
+version = "0.13.1"
 authors = ["Jon Gjengset <jon@thesquareplanet.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
