@@ -1,3 +1,5 @@
+use super::mutation::{Filter, JobSet};
+use super::utils::Empty;
 use crate::error::Error;
 use crate::proto::{Job, JobId, WorkerId};
 use std::error::Error as StdError;
@@ -9,6 +11,16 @@ pub trait FaktoryCommand {
 }
 
 macro_rules! self_to_cmd {
+    ($struct:ident) => {
+        #[async_trait::async_trait]
+        impl FaktoryCommand for $struct {
+            async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+                let cmd = stringify!($struct).to_uppercase();
+                w.write_all(cmd.as_bytes()).await?;
+                Ok(w.write_all(b"\r\n").await?)
+            }
+        }
+    };
     ($struct:ident, $cmd:expr) => {
         #[async_trait::async_trait]
         impl FaktoryCommand for $struct {
@@ -16,6 +28,30 @@ macro_rules! self_to_cmd {
                 w.write_all($cmd.as_bytes()).await?;
                 w.write_all(b" ").await?;
                 let r = serde_json::to_vec(self).map_err(Error::Serialization)?;
+                w.write_all(&r).await?;
+                Ok(w.write_all(b"\r\n").await?)
+            }
+        }
+    };
+    ($struct:ident<$lt:lifetime>, $cmd:expr) => {
+        #[async_trait::async_trait]
+        impl FaktoryCommand for $struct<$lt> {
+            async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+                w.write_all($cmd.as_bytes()).await?;
+                w.write_all(b" ").await?;
+                let r = serde_json::to_vec(self).map_err(Error::Serialization)?;
+                w.write_all(&r).await?;
+                Ok(w.write_all(b"\r\n").await?)
+            }
+        }
+    };
+    ($struct:ident, $cmd:expr, $field:tt) => {
+        #[async_trait::async_trait]
+        impl FaktoryCommand for $struct {
+            async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
+                w.write_all($cmd.as_bytes()).await?;
+                w.write_all(b" ").await?;
+                let r = serde_json::to_vec(&self.$field).map_err(Error::Serialization)?;
                 w.write_all(&r).await?;
                 Ok(w.write_all(b"\r\n").await?)
             }
@@ -42,12 +78,7 @@ where
 
 pub(crate) struct Info;
 
-#[async_trait::async_trait]
-impl FaktoryCommand for Info {
-    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
-        Ok(w.write_all(b"INFO\r\n").await?)
-    }
-}
+self_to_cmd!(Info);
 
 // -------------------- ACK ----------------------
 
@@ -138,12 +169,7 @@ self_to_cmd!(Fail, "FAIL");
 
 pub(crate) struct End;
 
-#[async_trait::async_trait]
-impl FaktoryCommand for End {
-    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
-        Ok(w.write_all(b"END\r\n").await?)
-    }
-}
+self_to_cmd!(End);
 
 // --------------------- FETCH --------------------
 
@@ -230,29 +256,13 @@ self_to_cmd!(Hello, "HELLO");
 
 pub(crate) struct Push(Job);
 
-use std::ops::Deref;
-impl Deref for Push {
-    type Target = Job;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 impl From<Job> for Push {
     fn from(j: Job) -> Self {
         Push(j)
     }
 }
 
-#[async_trait::async_trait]
-impl FaktoryCommand for Push {
-    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
-        w.write_all(b"PUSH ").await?;
-        let r = serde_json::to_vec(&**self).map_err(Error::Serialization)?;
-        w.write_all(&r).await?;
-        Ok(w.write_all(b"\r\n").await?)
-    }
-}
+self_to_cmd!(Push, "PUSH", 0);
 
 // ---------------------- PUSHB -------------------
 
@@ -264,15 +274,7 @@ impl From<Vec<Job>> for PushBulk {
     }
 }
 
-#[async_trait::async_trait]
-impl FaktoryCommand for PushBulk {
-    async fn issue<W: AsyncWrite + Unpin + Send>(&self, w: &mut W) -> Result<(), Error> {
-        w.write_all(b"PUSHB ").await?;
-        let r = serde_json::to_vec(&self.0).map_err(Error::Serialization)?;
-        w.write_all(&r).await?;
-        Ok(w.write_all(b"\r\n").await?)
-    }
-}
+self_to_cmd!(PushBulk, "PUSHB", 0);
 
 // ---------------------- QUEUE -------------------
 
@@ -309,5 +311,72 @@ where
 impl<'a, S: AsRef<str>> QueueControl<'a, S> {
     pub fn new(action: QueueAction, queues: &'a [S]) -> Self {
         Self { action, queues }
+    }
+}
+
+// ---------------------- MUTATE -------------------
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+#[non_exhaustive]
+pub(crate) enum MutationType {
+    Kill,
+    Requeue,
+    Discard,
+    Clear,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct MutationAction<'a> {
+    pub(crate) cmd: MutationType,
+    pub(crate) target: JobSet,
+    // a nil filter (https://github.com/contribsys/faktory/blob/5e1a0d938e4b19b8eff4d20e815289d536a1ae8c/server/mutate.go#L80)
+    // and an empty one (https://github.com/contribsys/faktory/blob/5e1a0d938e4b19b8eff4d20e815289d536a1ae8c/server/mutate.go#L110)
+    // are treated in the common manner - as if we were matching _everything_
+    // in the targeted queue (they are wildcards effectively).
+    #[serde(skip_serializing_if = "Empty::is_empty")]
+    pub(crate) filter: Option<&'a Filter<'a>>,
+}
+
+self_to_cmd!(MutationAction<'_>, "MUTATE");
+
+#[cfg(test)]
+mod test {
+    use super::{MutationAction, MutationType};
+    use crate::proto::{Filter, JobSet};
+
+    #[test]
+    fn mutation_action_is_serialized_correctly() {
+        // filter is None
+        let action = MutationAction {
+            cmd: MutationType::Requeue,
+            target: JobSet::Scheduled,
+            filter: None,
+        };
+        let ser = serde_json::to_string(&action).unwrap();
+        assert_eq!(ser, r#"{"cmd":"requeue","target":"scheduled"}"#);
+
+        // filter is some but empty
+        let empty_filter = Filter::empty();
+        let action = MutationAction {
+            cmd: MutationType::Requeue,
+            target: JobSet::Scheduled,
+            filter: Some(&empty_filter),
+        };
+        let ser = serde_json::to_string(&action).unwrap();
+        assert_eq!(ser, r#"{"cmd":"requeue","target":"scheduled"}"#);
+
+        // filter with jobtype
+        let jobtype_filter = Filter::from_kind("any");
+        let action = MutationAction {
+            cmd: MutationType::Requeue,
+            target: JobSet::Scheduled,
+            filter: Some(&jobtype_filter),
+        };
+        let ser = serde_json::to_string(&action).unwrap();
+        assert_eq!(
+            ser,
+            r#"{"cmd":"requeue","target":"scheduled","filter":{"jobtype":"any"}}"#
+        );
     }
 }

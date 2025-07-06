@@ -35,6 +35,7 @@ faktory:
 .PHONY: faktory/kill
 faktory/kill:
 	docker stop faktory
+	docker volume rm faktory-data
 
 .PHONY: faktory/tls
 faktory/tls:
@@ -54,9 +55,16 @@ test/doc:
 
 .PHONY: test/e2e
 test/e2e:
+	TESTCONTAINERS_ENABLED=1 \
 	FAKTORY_URL=tcp://${FAKTORY_HOST}:${FAKTORY_PORT} \
 	cargo test --locked --all-features --all-targets -- \
 	--nocapture $(pattern)
+
+.PHONY: test/e2e/ignored
+test/e2e/ignored:
+	FAKTORY_URL=tcp://${FAKTORY_HOST}:${FAKTORY_PORT} \
+	cargo test --locked --all-features --all-targets -- \
+	--nocapture --include-ignored queue_control_actions_wildcard
 
 .PHONY: test/e2e/tls
 test/e2e/tls:

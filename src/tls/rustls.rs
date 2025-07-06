@@ -1,3 +1,4 @@
+use crate::error::Stream;
 #[cfg(doc)]
 use crate::{Client, WorkerBuilder};
 
@@ -86,7 +87,7 @@ impl TlsStream<TokioTcpStream> {
     ///
     /// Similarly to [`TlsStream::connect`], no client authentication will be used.
     pub async fn connect_with_native_certs_to(addr: &str) -> Result<Self, Error> {
-        let config = ClientConfig::with_platform_verifier();
+        let config = ClientConfig::with_platform_verifier().map_err(Stream::RustTls)?;
         TlsStream::with_connector(TlsConnector::from(Arc::new(config)), Some(addr)).await
     }
 

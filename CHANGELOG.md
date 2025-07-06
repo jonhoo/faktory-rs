@@ -26,6 +26,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [#82]: https://github.com/jonhoo/faktory-rs/pull/82
 
+## [0.13.1] - 2025-07-06
+
+### Added
+
+- Support Faktory's `MUTATE` API ([#87])
+- Make `Failure` struct public ([#89])
+
+### Security
+
+[#87]: https://github.com/jonhoo/faktory-rs/pull/87
+[#89]: https://github.com/jonhoo/faktory-rs/pull/89
+
 ## [0.13.0] - 2024-10-27
 
 ### Added
@@ -70,7 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#48]: https://github.com/jonhoo/faktory-rs/pull/48
 [#51]: https://github.com/jonhoo/faktory-rs/pull/51
 [#54]: https://github.com/jonhoo/faktory-rs/pull/54
-
-[unreleased]: https://github.com/jonhoo/faktory-rs/compare/v0.13.0...HEAD
+[unreleased]: https://github.com/jonhoo/faktory-rs/compare/v0.13.1...HEAD
+[0.13.1]: https://github.com/jonhoo/faktory-rs/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/jonhoo/faktory-rs/compare/v0.12.5...v0.13.0
 [0.12.5]: https://github.com/jonhoo/faktory-rs/compare/v0.12.4...v0.12.5

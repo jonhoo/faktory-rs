@@ -1,6 +1,6 @@
 [package]
 name = "faktory"
-version = "0.13.1-rc0"
+version = "0.14.0-rc.0"
 authors = ["Jon Gjengset <jon@thesquareplanet.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -46,14 +46,15 @@ tokio = { version = "1.35.1", features = [
     "time",            # anables `tokio::time` namespace holding the `sleep` utility and `Duraction` struct
 ] }
 tokio-native-tls = { version = "0.3.1", optional = true }
-tokio-rustls = { version = "0.26", optional = true }
-rustls-platform-verifier = { version = "0.4", optional = true }
+tokio-rustls = { version = "0.26", default-features = false, optional = true }
+rustls-platform-verifier = { version = "0.6", optional = true }
 tracing = "0.1"
 url = "2"
 semver = { version = "1.0.23", features = ["serde"] }
 
 [dev-dependencies]
 rustls-pki-types = "1.0.1"
+testcontainers = { version = "0.24.0", features = ["reusable-containers"] }
 tokio = { version = "1.35.1", features = ["rt", "macros"] }
 tokio-test = "0.4.3"
 tokio-util = "0.7.11"
@@ -66,7 +67,7 @@ native-tls = { version = "0.2.4", optional = true }
 num-bigint = "0.4.2"
 oid-registry = "0.6.1"
 openssl = { version = "0.10.60", optional = true }
-aws-lc-sys = { version = "0.22", optional = true }
+serde_repr = { version = "0.1.5", optional = true }
 
 # inference error on crate `time` caused by an API change in Rust 1.80.0
 # https://github.com/time-rs/time/pull/671
