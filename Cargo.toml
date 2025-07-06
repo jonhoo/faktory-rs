@@ -59,7 +59,7 @@ tokio = { version = "1.35.1", features = ["rt", "macros"] }
 tokio-test = "0.4.3"
 tokio-util = "0.7.11"
 tracing-subscriber = "0.3.18"
-x509-parser = "0.16"
+x509-parser = "0.17"
 
 # to make -Zminimal-versions work
 [target.'cfg(any())'.dependencies]
