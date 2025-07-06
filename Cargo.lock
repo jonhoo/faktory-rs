@@ -643,7 +643,7 @@ dependencies = [
 
 [[package]]
 name = "faktory"
-version = "0.14.0-rc.0"
+version = "0.14.0-rc.1"
 dependencies = [
  "async-trait",
  "chrono",
