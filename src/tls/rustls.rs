@@ -61,7 +61,7 @@ impl TlsStream<TokioTcpStream> {
     /// with an _empty_ root certificates store and _no client authentication_.
     ///
     /// Use [`with_client_config`](TlsStream::with_client_config) or [`with_connector`](TlsStream::with_connector)
-    /// for customized `ClientConfig` and [`TlsConnector`](https://docs.rs/tokio-rustls/latest/tokio_rustls/struct.TlsConnector.html)
+    /// for customized `ClientConfig` and [`TlsConnector`]
     /// accordingly.
     pub async fn connect() -> Result<Self, Error> {
         let config = ClientConfig::builder()
