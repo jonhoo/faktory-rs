@@ -57,7 +57,7 @@ impl TlsStream<TokioTcpStream> {
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
     ///
-    /// Internally, creates a [`ClientConfig`](https://docs.rs/rustls/latest/rustls/client/struct.ClientConfig.html)
+    /// Internally, creates a [`ClientConfig`]
     /// with an _empty_ root certificates store and _no client authentication_.
     ///
     /// Use [`with_client_config`](TlsStream::with_client_config) or [`with_connector`](TlsStream::with_connector)
