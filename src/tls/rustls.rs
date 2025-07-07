@@ -123,7 +123,7 @@ where
     /// Internally, creates a [`ClientConfig`](https://docs.rs/tokio-native-tls/latest/tokio_native_tls/native_tls/struct.TlsConnector.html)
     /// with an empty root certificates store and no client authentication.
     ///
-    /// Use [`new`](TlsStream::new) for a customized [`TlsConnector`](https://docs.rs/tokio-rustls/latest/tokio_rustls/struct.TlsConnector.html).
+    /// Use [`new`](TlsStream::new) for a customized [`TlsConnector`].
     pub async fn default(stream: S, hostname: String) -> io::Result<Self> {
         let conf = ClientConfig::builder()
             .with_root_certificates(RootCertStore::empty())
