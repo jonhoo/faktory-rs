@@ -1,8 +1,10 @@
 #[cfg(doc)]
 use crate::{Client, WorkerBuilder};
 
+use crate::error::Stream;
 use crate::proto::{self, utils};
 use crate::{Error, Reconnect};
+use rustls_platform_verifier::ConfigVerifierExt;
 use std::io;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
@@ -55,10 +57,12 @@ impl TlsStream<TokioTcpStream> {
     ///
     /// If `url` is given, but does not specify a port, it defaults to 7419.
     ///
-    /// Internally creates a `ClientConfig` with an _empty_ root certificates store and _no client
-    /// authentication_. Use [`with_client_config`](TlsStream::with_client_config)
-    /// or [`with_connector`](TlsStream::with_connector) for customized
-    /// `ClientConfig` and `TlsConnector` accordingly.
+    /// Internally, creates a [`ClientConfig`]
+    /// with an _empty_ root certificates store and _no client authentication_.
+    ///
+    /// Use [`with_client_config`](TlsStream::with_client_config) or [`with_connector`](TlsStream::with_connector)
+    /// for customized `ClientConfig` and [`TlsConnector`]
+    /// accordingly.
     pub async fn connect() -> Result<Self, Error> {
         let config = ClientConfig::builder()
             .with_root_certificates(RootCertStore::empty())
@@ -76,18 +80,14 @@ impl TlsStream<TokioTcpStream> {
         TlsStream::with_connector(connector, Some(addr)).await
     }
 
-    /// Create a new TLS connection over TCP using native certificates.
+    /// Create a new TLS connection over TCP using platform certificates.
     ///
     /// Unlike [`TlsStream::connect`], creates a root certificates store populated
     /// with the certificates loaded from a platform-native certificate store.
+    ///
+    /// Similarly to [`TlsStream::connect`], no client authentication will be used.
     pub async fn connect_with_native_certs_to(addr: &str) -> Result<Self, Error> {
-        let mut store = RootCertStore::empty();
-        for cert in rustls_native_certs::load_native_certs()? {
-            store.add(cert).map_err(io::Error::other)?;
-        }
-        let config = ClientConfig::builder()
-            .with_root_certificates(store)
-            .with_no_client_auth();
+        let config = ClientConfig::with_platform_verifier().map_err(Stream::RustTls)?;
         TlsStream::with_connector(TlsConnector::from(Arc::new(config)), Some(addr)).await
     }
 
@@ -120,10 +120,10 @@ where
 {
     /// Create a new TLS connection on an existing stream.
     ///
-    /// Internally creates a `ClientConfig` with an empty root certificates store and no client
-    /// authentication.
+    /// Internally, creates a [`ClientConfig`]
+    /// with an empty root certificates store and no client authentication.
     ///
-    /// Use [`new`](TlsStream::new) for a customized `TlsConnector`.
+    /// Use [`new`](TlsStream::new) for a customized [`TlsConnector`].
     pub async fn default(stream: S, hostname: String) -> io::Result<Self> {
         let conf = ClientConfig::builder()
             .with_root_certificates(RootCertStore::empty())

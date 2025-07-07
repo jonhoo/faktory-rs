@@ -11,13 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Update dependencies: `hostname`, `tokio-rustls`, `thiserror`, `rand`, `derive_builder` ([#82])
+- rustls: use `rustls-platform-verifier` to load certificates ([#82])
+
 ### Deprecated
 
 ### Removed
 
+- rustls: dependency on `rustls-native-certs` ([#82])
+
 ### Fixed
 
 ### Security
+
+[#82]: https://github.com/jonhoo/faktory-rs/pull/82
 
 ## [0.13.1] - 2025-07-06
 

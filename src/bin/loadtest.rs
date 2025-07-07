@@ -55,14 +55,15 @@ async fn main() {
     for _ in 0..threads {
         let pushed = sync::Arc::clone(&pushed);
         let popped = sync::Arc::clone(&popped);
+
         set.spawn(async move {
             // make producer and consumer
             let mut p = Client::connect().await.unwrap();
             let mut worker = WorkerBuilder::default()
                 .register_fn("SomeJob", |_| {
                     Box::pin(async move {
-                        let mut rng = rand::thread_rng();
-                        if rng.gen_bool(0.01) {
+                        let mut rng = rand::rng();
+                        if rng.random_bool(0.01) {
                             Err(io::Error::new(io::ErrorKind::Other, "worker closed"))
                         } else {
                             Ok(())
@@ -72,7 +73,8 @@ async fn main() {
                 .connect()
                 .await
                 .unwrap();
-            let mut rng = rand::rngs::OsRng;
+
+            let mut rng = rand::rngs::StdRng::from_os_rng();
             let mut random_queues = Vec::from(QUEUES);
             random_queues.shuffle(&mut rng);
             for idx in 0..jobs {
@@ -82,7 +84,7 @@ async fn main() {
                         "SomeJob",
                         vec![serde_json::Value::from(1), "string".into(), 3.into()],
                     );
-                    job.priority = Some(rng.gen_range(1..10));
+                    job.priority = Some(rng.random_range(1..10));
                     job.queue = QUEUES.choose(&mut rng).unwrap().to_string();
                     p.enqueue(job).await?;
                     if pushed.fetch_add(1, atomic::Ordering::SeqCst) >= jobs {
