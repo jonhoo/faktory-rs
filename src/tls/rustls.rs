@@ -120,7 +120,7 @@ where
 {
     /// Create a new TLS connection on an existing stream.
     ///
-    /// Internally, creates a [`ClientConfig`](https://docs.rs/tokio-native-tls/latest/tokio_native_tls/native_tls/struct.TlsConnector.html)
+    /// Internally, creates a [`ClientConfig`]
     /// with an empty root certificates store and no client authentication.
     ///
     /// Use [`new`](TlsStream::new) for a customized [`TlsConnector`].
