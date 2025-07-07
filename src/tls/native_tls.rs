@@ -94,7 +94,7 @@ where
 {
     /// Create a new TLS connection on an existing stream.
     ///
-    /// Internally, creates a [`TlsConnector`](https://docs.rs/tokio-native-tls/latest/tokio_native_tls/native_tls/struct.TlsConnector.html)
+    /// Internally, creates a [`TlsConnector`]
     /// with default settings.
     ///
     /// Use [`new`](TlsStream::new) for a customized connector.
