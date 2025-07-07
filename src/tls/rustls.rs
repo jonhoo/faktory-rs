@@ -1,7 +1,7 @@
-use crate::error::Stream;
 #[cfg(doc)]
 use crate::{Client, WorkerBuilder};
 
+use crate::error::Stream;
 use crate::proto::{self, utils};
 use crate::{Error, Reconnect};
 use rustls_platform_verifier::ConfigVerifierExt;
