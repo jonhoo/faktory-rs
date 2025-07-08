@@ -38,7 +38,9 @@ jobs:
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
       - name: Launch Faktory server
-        run: make faktory
+        run: |
+          v=$(awk '/FROM contribsys\/faktory/ {print $2}' docker/faktory.Dockerfile | awk -F ':' 'NR==1{print $2}')
+          docker run -d -p 127.0.0.1:7419:7419 contribsys/faktory:${v} /faktory -b :7419
       # https://twitter.com/jonhoo/status/1571290371124260865
       - name: cargo test --locked
         run: cargo test --locked --all-features --all-targets
@@ -92,7 +94,9 @@ jobs:
       - name: cargo update -Zminimal-versions
         run: cargo +nightly update -Zminimal-versions
       - name: Launch Faktory server
-        run: make faktory
+        run: |
+          v=$(awk '/FROM contribsys\/faktory/ {print $2}' docker/faktory.Dockerfile | awk -F ':' 'NR==1{print $2}')
+          docker run -d -p 127.0.0.1:7419:7419 contribsys/faktory:${v} /faktory -b :7419
       - name: cargo test
         run: cargo test --locked --all-features --all-targets
         env: # set this explicitly so integration tests will run
@@ -160,7 +164,9 @@ jobs:
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
       - name: Launch Faktory server
-        run: make faktory
+        run: |
+          v=$(awk '/FROM contribsys\/faktory/ {print $2}' docker/faktory.Dockerfile | awk -F ':' 'NR==1{print $2}')
+          docker run -d -p 127.0.0.1:7419:7419 contribsys/faktory:${v} /faktory -b :7419
       - name: cargo llvm-cov
         run: cargo llvm-cov --locked --all-features --lcov --output-path lcov.info
         env: # set this explicitly so integration tests will run
