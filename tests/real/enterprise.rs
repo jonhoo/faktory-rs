@@ -1016,7 +1016,7 @@ async fn test_batch_can_be_reopened_add_extra_jobs_and_batches_added() {
         .unwrap();
     // The server will error back on this, with "No such batch <provided batch id>", but
     // we are handling this case for the end-user and returning `Ok(None)` instead, indicating
-    // this way that there is not such batch.
+    // this way that there is no such batch.
     assert!(b.is_none());
     // ########################## END OF SUBTEST 0 #######################################
 
