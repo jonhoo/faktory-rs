@@ -8,7 +8,7 @@ FAKTORY_PASSWORD=uredinales
 # parse Faktory version out of the Dockerfile; we are having that "no-op"
 # Dockerfile so that we can receive dependabot notifications and automated RPs
 # when new versions of the image are available
-FAKTORY_VERSION=$(shell awk '/FROM contribsys\/faktory/ {print $$2}' docker/faktory.Dockerfile | awk -F ':' 'NR==1{print $$2}')
+FAKTORY_VERSION=$(shell awk '/FROM contribsys\/faktory/ {print $$2}' docker/faktory.Dockerfile | awk -F ':' '{print $$2}' | head -n1)
 
 .PHONY: precommit
 precommit: fmt check test/doc test/e2e test/e2e/tls

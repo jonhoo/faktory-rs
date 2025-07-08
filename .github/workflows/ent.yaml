@@ -20,7 +20,7 @@ jobs:
         run: brew install redis
       - name: Download Faktory binary
         run: |
-          v=$(awk '/FROM contribsys\/faktory/ {print $2}' docker/faktory.Dockerfile | awk -F ':' 'NR==1{print $2}')
+          v=$(awk '/FROM contribsys\/faktory/ {print $2}' docker/faktory.Dockerfile | awk -F ':' '{print $2}' | head -n1)
           wget -O faktory.tbz https://github.com/contribsys/faktory/releases/download/v${v}/faktory-ent_${v}.macos.amd64.tbz
           tar xfv faktory.tbz
           cp ./faktory /usr/local/bin

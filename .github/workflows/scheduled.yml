@@ -29,7 +29,7 @@ jobs:
         run: cargo generate-lockfile
       - name: Launch Faktory server
         run: |
-          v=$(awk '/FROM contribsys\/faktory/ {print $2}' docker/faktory.Dockerfile | awk -F ':' 'NR==1{print $2}')
+          v=$(awk '/FROM contribsys\/faktory/ {print $2}' docker/faktory.Dockerfile | awk -F ':' '{print $2}' | head -n1)
           docker run -d -p 127.0.0.1:7419:7419 contribsys/faktory:${v} /faktory -b :7419
       - name: cargo test --locked
         run: cargo test --locked --all-features --all-targets
@@ -60,7 +60,7 @@ jobs:
       - name: Launch Faktory server
         if: hashFiles('Cargo.lock') != ''
         run: |
-          v=$(awk '/FROM contribsys\/faktory/ {print $2}' docker/faktory.Dockerfile | awk -F ':' 'NR==1{print $2}')
+          v=$(awk '/FROM contribsys\/faktory/ {print $2}' docker/faktory.Dockerfile | awk -F ':' '{print $2}' | head -n1)
           docker run -d -p 127.0.0.1:7419:7419 contribsys/faktory:${v} /faktory -b :7419
       - name: cargo test
         if: hashFiles('Cargo.lock') != ''
