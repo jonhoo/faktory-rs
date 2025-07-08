@@ -67,12 +67,32 @@ impl ReadToken<'_> {
         match single::read_bid(&mut self.0.stream).await {
             Ok(bid) => Ok(Some(bid)),
             Err(Error::Protocol(error::Protocol::Internal { msg })) => {
-                if msg[..14].eq_ignore_ascii_case("no such batch") {
+                if msg[..13].eq_ignore_ascii_case("no such batch") {
                     return Ok(None);
                 }
                 Err(error::Protocol::Internal { msg }.into())
             }
             Err(another) => Err(another),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    #[test]
+    fn batch_does_not_exist_message_identified_correctly() {
+        // 'non-existent-batch-id' - is ID of a batch we are
+        // using in one of our end-to-end tests
+        let msg = "no such batch non-existent-batch-id";
+        // in Ent Faktory 1.9.1 this message started with an upper-cased
+        // "N", and in 1.9.2 it was changed to be a lowercase one; in order
+        // to identify this message correctly, we are comparing case-insensitively
+        // with the "well-known" prefix (observed rather, since the source code
+        // of Ent Faktory is currently not available, and this message is not mentioned
+        // in the docs, neither in the official Go bindings)
+        assert!(msg[..13].eq_ignore_ascii_case("No such batch"));
+        assert!(msg[..13].eq_ignore_ascii_case("no such batch"));
+        assert!(msg[..13].eq_ignore_ascii_case("NO SUCH BATCH"));
     }
 }

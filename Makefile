@@ -52,7 +52,7 @@ faktory/tls/kill:
 
 .PHONY: test
 test:
-	cargo t --locked --all-features --all-targets
+	cargo t --locked --all-features --all-targets -- $(pattern)
 
 .PHONY: test/doc
 test/doc:
