@@ -67,7 +67,7 @@ impl ReadToken<'_> {
         match single::read_bid(&mut self.0.stream).await {
             Ok(bid) => Ok(Some(bid)),
             Err(Error::Protocol(error::Protocol::Internal { msg })) => {
-                if msg.to_lowercase().starts_with("no such batch") {
+                if msg[..14].eq_ignore_ascii_case("no such batch") {
                     return Ok(None);
                 }
                 Err(error::Protocol::Internal { msg }.into())
