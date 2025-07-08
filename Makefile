@@ -5,6 +5,11 @@ FAKTORY_PORT_SECURE=17419
 FAKTORY_PORT_UI=7420
 FAKTORY_PASSWORD=uredinales
 
+# parse Faktory version out of the Dockerfile; we are having that "no-op"
+# Dockerfile so that we can receive dependabot notifications and automated RPs
+# when new versions of the image are available
+FAKTORY_VERSION=$(shell awk '/FROM contribsys\/faktory/ {print $$2}' docker/faktory.Dockerfile | awk -F ':' 'NR==1{print $$2}')
+
 .PHONY: precommit
 precommit: fmt check test/doc test/e2e test/e2e/tls
 
@@ -29,7 +34,7 @@ faktory:
 	-p ${FAKTORY_IP}:${FAKTORY_PORT}:7419 \
 	-p ${FAKTORY_IP}:${FAKTORY_PORT_UI}:7420 \
 	--name faktory \
-	contribsys/faktory:1.9.1 \
+	contribsys/faktory:${FAKTORY_VERSION} \
 	/faktory -b :7419 -w :7420
 
 .PHONY: faktory/kill
