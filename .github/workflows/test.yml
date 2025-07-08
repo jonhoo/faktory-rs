@@ -37,11 +37,14 @@ jobs:
         # enable this ci template to run regardless of whether the lockfile is checked in or not
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
+      - name: Launch Faktory server
+        run: make faktory
       # https://twitter.com/jonhoo/status/1571290371124260865
       - name: cargo test --locked
         run: cargo test --locked --all-features --all-targets
         env: # set this explicitly so integration tests will run
           FAKTORY_URL: tcp://127.0.0.1:7419
+          TESTCONTAINERS_ENABLED: 1
       # commands executed during the following test affect all the queues on the Faktory server,
       # so we perform this test in a dedicated - isolated - step, re-using the the Faktory container
       - name: cargo test --locked (queue control actions)
@@ -51,15 +54,6 @@ jobs:
       # https://github.com/rust-lang/cargo/issues/6669
       - name: cargo test --doc
         run: cargo test --locked --all-features --doc
-        env: # set this explicitly so integration tests will run
-          FAKTORY_URL: tcp://127.0.0.1:7419
-          TESTCONTAINERS_ENABLED: 1
-    services:
-      faktory:
-        image: contribsys/faktory:latest
-        ports:
-          - 7419:7419
-          - 7420:7420
   minimal:
     # This action chooses the oldest version of the dependencies permitted by Cargo.toml to ensure
     # that this crate is compatible with the minimal version that this crate and its dependencies
@@ -97,17 +91,13 @@ jobs:
         run: rustup default stable
       - name: cargo update -Zminimal-versions
         run: cargo +nightly update -Zminimal-versions
+      - name: Launch Faktory server
+        run: make faktory
       - name: cargo test
         run: cargo test --locked --all-features --all-targets
         env: # set this explicitly so integration tests will run
           FAKTORY_URL: tcp://127.0.0.1:7419
           TESTCONTAINERS_ENABLED: 1
-    services:
-      faktory:
-        image: contribsys/faktory:latest
-        ports:
-          - 7419:7419
-          - 7420:7420
   os-check:
     # run cargo test on mac and windows
     runs-on: ${{ matrix.os }}
@@ -169,10 +159,13 @@ jobs:
       - name: cargo generate-lockfile
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
+      - name: Launch Faktory server
+        run: make faktory
       - name: cargo llvm-cov
         run: cargo llvm-cov --locked --all-features --lcov --output-path lcov.info
         env: # set this explicitly so integration tests will run
           FAKTORY_URL: tcp://127.0.0.1:7419
+          TESTCONTAINERS_ENABLED: 1
       - name: Record Rust version
         run: echo "RUST=$(rustc --version)" >> "$GITHUB_ENV"
       - name: Upload to codecov.io
@@ -181,9 +174,3 @@ jobs:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
           env_vars: OS,RUST
-    services:
-      faktory:
-        image: contribsys/faktory:latest
-        ports:
-          - 7419:7419
-          - 7420:7420
