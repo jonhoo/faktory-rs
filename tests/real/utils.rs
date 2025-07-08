@@ -10,6 +10,7 @@ use testcontainers::runners::AsyncRunner;
 use testcontainers::ContainerAsync;
 use testcontainers::GenericImage;
 
+const FAKTORY_DOCKER_IMAGE_NAME: &str = "contribsys/faktory";
 const FAKTORY_DOCKERFILE_PATH: &str = "docker/faktory.Dockerfile";
 
 const TARGETED_FAKTORY_VERSION: LazyLock<String> = LazyLock::new(|| {
@@ -18,10 +19,12 @@ const TARGETED_FAKTORY_VERSION: LazyLock<String> = LazyLock::new(|| {
     for instruction in instructions {
         match instruction {
             Instruction::From(from) => {
-                return from
-                    .image_parsed
-                    .tag
-                    .expect("FROM instruction to contain image and tag");
+                if from.image_parsed.image == FAKTORY_DOCKER_IMAGE_NAME {
+                    return from
+                        .image_parsed
+                        .tag
+                        .expect("FROM instruction to contain image and tag");
+                }
             }
             _ => continue,
         }
