@@ -14,15 +14,14 @@ name: enterprise
 jobs:
   test:
     runs-on: macos-latest
-    env:
-      FAKTORY_VERSION: 1.9.1
     steps:
       - uses: actions/checkout@v4
       - name: Install redis
         run: brew install redis
       - name: Download Faktory binary
         run: |
-          wget -O faktory.tbz https://github.com/contribsys/faktory/releases/download/v${{ env.FAKTORY_VERSION }}/faktory-ent_${{ env.FAKTORY_VERSION }}.macos.amd64.tbz
+          v=$(awk '/FROM contribsys\/faktory/ {print $2}' docker/faktory.Dockerfile | awk -F ':' 'NR==1{print $2}')
+          wget -O faktory.tbz https://github.com/contribsys/faktory/releases/download/v${v}/faktory-ent_${v}.macos.amd64.tbz
           tar xfv faktory.tbz
           cp ./faktory /usr/local/bin
       - name: Launch Faktory in background
