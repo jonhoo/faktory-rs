@@ -27,16 +27,12 @@ jobs:
       - name: cargo generate-lockfile
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
+      - name: Launch Faktory server
+        run: make faktory
       - name: cargo test --locked
         run: cargo test --locked --all-features --all-targets
         env: # set this explicitly so integration tests will run
           FAKTORY_URL: tcp://127.0.0.1:7419
-    services:
-      faktory:
-        image: contribsys/faktory:latest
-        ports:
-          - 7419:7419
-          - 7420:7420
   # https://twitter.com/alcuadrado/status/1571291687837732873
   update:
     # This action checks that updating the dependencies of this crate to the latest available that
@@ -59,6 +55,9 @@ jobs:
       - name: cargo update
         if: hashFiles('Cargo.lock') != ''
         run: cargo update
+      - name: Launch Faktory server
+        if: hashFiles('Cargo.lock') != ''
+        run: make faktory
       - name: cargo test
         if: hashFiles('Cargo.lock') != ''
         run: cargo test --locked --all-features --all-targets
@@ -67,9 +66,3 @@ jobs:
           FAKTORY_URL: tcp://127.0.0.1:7419
           TESTCONTAINERS_ENABLED: 1
           RUSTFLAGS: -D deprecated
-    services:
-      faktory:
-        image: contribsys/faktory:latest
-        ports:
-          - 7419:7419
-          - 7420:7420
