@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Update dependencies: `hostname`, `tokio-rustls`, `thiserror`, `rand`, `derive_builder` ([#82])
 - rustls: use `rustls-platform-verifier` to load certificates ([#82])
+- `Job::retry` is now `Option<usize>` and `JobBuilder::retry` is `usize` ([#97])
 
 ### Deprecated
 
@@ -25,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 [#82]: https://github.com/jonhoo/faktory-rs/pull/82
+[#97]: https://github.com/jonhoo/faktory-rs/pull/97
 
 ## [0.13.1] - 2025-07-06
 
