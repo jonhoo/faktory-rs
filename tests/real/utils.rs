@@ -1,3 +1,7 @@
+use dockerfile_parser::Dockerfile;
+use dockerfile_parser::Instruction;
+use std::fs::File;
+use std::sync::LazyLock;
 use std::time::Duration;
 use testcontainers::core::ImageExt as _;
 use testcontainers::core::IntoContainerPort as _;
@@ -6,10 +10,27 @@ use testcontainers::runners::AsyncRunner;
 use testcontainers::ContainerAsync;
 use testcontainers::GenericImage;
 
-// This is the Faktory version we are testing against locally (see Makefile's
-// `make faktory` phony target) and on CI (see `FAKTORY_VERSION` variable in `ent.yaml`
-// workflow). Changes to the version of the Faktory server are tracked in CHANGELOG.md.
-const TARGETED_FAKTORY_VERSION: &str = "1.9.1";
+const FAKTORY_DOCKER_IMAGE_NAME: &str = "contribsys/faktory";
+const FAKTORY_DOCKERFILE_PATH: &str = "docker/faktory.Dockerfile";
+
+const TARGETED_FAKTORY_VERSION: LazyLock<String> = LazyLock::new(|| {
+    let f = File::open(FAKTORY_DOCKERFILE_PATH).expect("file exists");
+    let Dockerfile { instructions, .. } = Dockerfile::from_reader(f).expect("valid Dockerfile");
+    for instruction in instructions {
+        match instruction {
+            Instruction::From(from) => {
+                if from.image_parsed.image == FAKTORY_DOCKER_IMAGE_NAME {
+                    return from
+                        .image_parsed
+                        .tag
+                        .expect("FROM instruction to contain image and tag");
+                }
+            }
+            _ => continue,
+        }
+    }
+    unreachable!("Faktory Dockerfile contains FROM instruction");
+});
 
 #[macro_export]
 macro_rules! skip_check {
@@ -106,7 +127,7 @@ pub struct TestContext {
 /// automatically dropped. You can the check its address with `docker ps` and visit
 /// the Faktory Web app to inspect queues and jobs.
 pub async fn launch_isolated_faktory(container_name: Option<String>) -> TestContext {
-    let container_request = GenericImage::new("contribsys/faktory", TARGETED_FAKTORY_VERSION)
+    let container_request = GenericImage::new("contribsys/faktory", &*TARGETED_FAKTORY_VERSION)
         .with_exposed_port(7419.tcp())
         .with_exposed_port(7420.tcp())
         .with_entrypoint("/faktory")

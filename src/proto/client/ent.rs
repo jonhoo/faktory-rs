@@ -67,12 +67,45 @@ impl ReadToken<'_> {
         match single::read_bid(&mut self.0.stream).await {
             Ok(bid) => Ok(Some(bid)),
             Err(Error::Protocol(error::Protocol::Internal { msg })) => {
-                if msg.starts_with("No such batch") {
+                if is_batch_not_found_error(&msg) {
                     return Ok(None);
                 }
                 Err(error::Protocol::Internal { msg }.into())
             }
             Err(another) => Err(another),
         }
+    }
+}
+
+pub(crate) fn is_batch_not_found_error(msg: &str) -> bool {
+    msg.get(..13)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("no such batch"))
+}
+
+#[cfg(test)]
+mod test {
+    use super::is_batch_not_found_error;
+
+    #[test]
+    fn batch_does_not_exist_message_identified_correctly() {
+        // in Ent Faktory 1.9.1 the error signalling that batch does not exist
+        // started with an upper-cased "N": "No such batch <batch_id>", and in
+        // 1.9.2 it was changed to be a lowercase one; in order to identify this
+        // message correctly, we are comparing case-insensitively with the
+        // "well-known" prefix (observed rather, since the source code of Ent
+        // Faktory is currently not available, and this message is not mentioned
+        // in the docs, neither in the official Go bindings)
+
+        // 'non-existent-batch-id' - is ID of a batch we are
+        // using in one of our end-to-end tests
+        assert!(is_batch_not_found_error(
+            "No such batch non-existent-batch-id"
+        ));
+        assert!(is_batch_not_found_error("no such batch"));
+        assert!(is_batch_not_found_error("NO SUCH BATCH"));
+
+        assert!(!is_batch_not_found_error("not found"));
+        assert!(!is_batch_not_found_error("invalid"));
+        assert!(!is_batch_not_found_error("any other error"));
     }
 }
