@@ -122,14 +122,10 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.msrv }}
-      # For library crates - run cargo check targeting the library itself and possible binaries
-      # and examples. For binary crates and workspace setups - check binaries and examples only.
-      # If you use a workspace, you might want to tailor this job to your needs.
-      - name: cargo +${{ matrix.msrv }} check
-        run: |
-          if (cargo read-manifest | jq .targets[].kind[0] | grep \"lib\") > /dev/null
-          then
-            cargo check --all-features --bins --examples --lib
-          else
-            cargo check --all-features --bins --examples --workspace
-          fi
+      # Note how we are not passing `--all-targets` here unlike many other places
+      # in the linting and testing workflows. This is because the whole point of
+      # the MSRV checking is to ensure that the crate "can be built" with a Rust
+      # version equal to the specified MSRV. There is no obligation to ensure this
+      # for such targets as tests and examples.
+      - name: cargo +${{ matrix.msrv }} check --all-features
+        run: cargo check --all-features
