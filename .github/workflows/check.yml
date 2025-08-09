@@ -122,5 +122,10 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.msrv }}
-      - name: cargo +${{ matrix.msrv }} check
-        run: cargo check
+      # Note how we are not passing `--all-targets` here unlike many other places
+      # in the linting and testing workflows. This is because the whole point of
+      # the MSRV checking is to ensure that the crate "can be built" with a Rust
+      # version equal to the specified MSRV. There is no obligation to ensure this
+      # for such targets as tests and examples.
+      - name: cargo +${{ matrix.msrv }} check --all-features
+        run: cargo check --all-features
