@@ -70,7 +70,7 @@ where
 
 // Additional Blanket Implementations
 #[async_trait::async_trait]
-impl<'a, E, F, Fut> JobRunner for &'a F
+impl<E, F, Fut> JobRunner for &F
 where
     F: Send + Sync + Fn(Job) -> Fut,
     Fut: Future<Output = Result<(), E>> + Send,
@@ -82,7 +82,7 @@ where
 }
 
 #[async_trait::async_trait]
-impl<'a, E, F, Fut> JobRunner for &'a mut F
+impl<E, F, Fut> JobRunner for &mut F
 where
     F: Send + Sync + Fn(Job) -> Fut,
     Fut: Future<Output = Result<(), E>> + Send,
