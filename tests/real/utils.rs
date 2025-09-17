@@ -13,7 +13,7 @@ use testcontainers::GenericImage;
 const FAKTORY_DOCKER_IMAGE_NAME: &str = "contribsys/faktory";
 const FAKTORY_DOCKERFILE_PATH: &str = "docker/faktory.Dockerfile";
 
-const TARGETED_FAKTORY_VERSION: LazyLock<String> = LazyLock::new(|| {
+static TARGETED_FAKTORY_VERSION: LazyLock<String> = LazyLock::new(|| {
     let f = File::open(FAKTORY_DOCKERFILE_PATH).expect("file exists");
     let Dockerfile { instructions, .. } = Dockerfile::from_reader(f).expect("valid Dockerfile");
     for instruction in instructions {

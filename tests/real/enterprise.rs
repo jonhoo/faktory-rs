@@ -28,9 +28,7 @@ fn some_jobs<S>(kind: S, q: S, count: usize) -> impl Iterator<Item = Job>
 where
     S: Into<String> + Clone + 'static,
 {
-    (0..count)
-        .into_iter()
-        .map(move |_| Job::builder(kind.clone()).queue(q.clone()).build())
+    (0..count).map(move |_| Job::builder(kind.clone()).queue(q.clone()).build())
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -398,10 +396,8 @@ async fn ent_unique_job_bypass_unique_lock() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
-    use std::{
-        sync::{Arc, Mutex},
-        thread, time,
-    };
+    use std::{sync::Arc, thread, time};
+    use tokio::sync::Mutex;
 
     skip_if_not_enterprise!();
 
@@ -489,7 +485,7 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
 
     let progress = t
         .lock()
-        .expect("lock acquired successfully")
+        .await
         .get_progress(&job_id)
         .await
         .expect("Retrieved progress update over the wire once again")
@@ -510,11 +506,11 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
         .desc("Final stage.".to_string())
         .percent(99)
         .build();
-    assert!(t.lock().unwrap().set_progress(&upd).await.is_ok());
+    assert!(t.lock().await.set_progress(&upd).await.is_ok());
 
     let progress = t
         .lock()
-        .unwrap()
+        .await
         .get_progress(&job_id)
         .await
         .expect("Retrieved progress update over the wire once again")
@@ -523,7 +519,7 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
     if progress.percent != Some(100) {
         let upd = progress.update_percent(100);
         assert_eq!(upd.desc, progress.desc);
-        assert!(t.lock().unwrap().set_progress(&upd).await.is_ok())
+        assert!(t.lock().await.set_progress(&upd).await.is_ok())
     }
 
     // What about 'ordinary' job ?
@@ -537,7 +533,7 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
     // ... and asking for its progress
     let progress = t
         .lock()
-        .expect("lock acquired")
+        .await
         .get_progress(&job_id)
         .await
         .expect("Retrieved progress update over the wire once again")

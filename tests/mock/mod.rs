@@ -129,6 +129,7 @@ impl Stream {
     /// coordinator will spawn another worker, and this can in theory repeat however many times as long as we have
     /// allocated enough streams in [`Stream::all`]. So, in this scenario, we do not want to run our usual check whenever
     /// a processing worker is being dropped.
+    #[allow(unused)]
     pub fn new_unchecked(stream: usize) -> Self {
         Self::make(None, stream, false)
     }

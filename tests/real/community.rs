@@ -105,7 +105,7 @@ async fn server_state() {
     // against is at least "1.8.0"
     assert_eq!(server_state.server.version.major, 1);
     assert_gte!(server_state.server.version.minor, 8);
-    assert!(server_state.data.queues.get(local).is_none());
+    assert!(!server_state.data.queues.contains_key(local));
     // the following two assertions are not super-helpful but
     // there is not much info we can make meaningful assetions on anyhow
     // (like memusage, server description string, version, etc.)
@@ -184,14 +184,13 @@ async fn server_state() {
     );
 
     client.queue_remove(&[local]).await.unwrap();
-    assert!(client
+    assert!(!client
         .current_info()
         .await
         .unwrap()
         .data
         .queues
-        .get(local)
-        .is_none());
+        .contains_key(local));
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -347,7 +346,7 @@ async fn queue_control_actions() {
     // try to consume from them
     assert!(!worker.run_one(0, &[local_1]).await.unwrap());
     assert!(!worker.run_one(0, &[local_2]).await.unwrap());
-    assert!(!rx.try_recv().is_ok());
+    assert!(rx.try_recv().is_err());
 
     // now, resume the queues and ...
     client.queue_resume(&[local_1, local_2]).await.unwrap();
@@ -371,7 +370,7 @@ async fn queue_control_actions() {
     // the removed queues will not yield anything
     assert!(!worker.run_one(0, &[local_1]).await.unwrap());
     assert!(!worker.run_one(0, &[local_2]).await.unwrap());
-    assert!(!rx.try_recv().is_ok());
+    assert!(rx.try_recv().is_err());
 
     // let's inspect the sever state again
     let server_state = client.current_info().await.unwrap();
@@ -441,7 +440,7 @@ async fn queue_control_actions_wildcard() {
     // try to consume from queues
     assert!(!worker.run_one(0, &[local_1]).await.unwrap());
     assert!(!worker.run_one(0, &[local_2]).await.unwrap());
-    assert!(!rx.try_recv().is_ok());
+    assert!(rx.try_recv().is_err());
 
     // now, resume all the queues and ...
     client.queue_resume_all().await.unwrap();
@@ -465,7 +464,7 @@ async fn queue_control_actions_wildcard() {
     // the removed queues will not yield anything
     assert!(!worker.run_one(0, &[local_1]).await.unwrap());
     assert!(!worker.run_one(0, &[local_2]).await.unwrap());
-    assert!(!rx.try_recv().is_ok());
+    assert!(rx.try_recv().is_err());
 
     // let's inspect the sever state again
     let server_state = client.current_info().await.unwrap();
@@ -621,7 +620,7 @@ async fn assert_args_empty(j: Job) -> io::Result<()> {
 }
 
 async fn assert_args_not_empty(j: Job) -> io::Result<()> {
-    assert!(j.args().len() != 0);
+    assert!(!j.args().is_empty());
     Ok(eprintln!("{:?}", j))
 }
 
@@ -679,14 +678,9 @@ async fn test_jobs_created_with_builder() {
 use std::future::Future;
 use std::pin::Pin;
 use tokio::sync::mpsc::{self, Sender};
-fn process_hard_task(
-    sender: sync::Arc<mpsc::Sender<bool>>,
-) -> Box<
-    dyn Fn(Job) -> Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send>>
-        + Send
-        + Sync
-        + 'static,
-> {
+type PinnedFut = Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send>>;
+type BoxedHandler = Box<dyn Fn(Job) -> PinnedFut + Send + Sync + 'static>;
+fn process_hard_task(sender: sync::Arc<mpsc::Sender<bool>>) -> BoxedHandler {
     return Box::new(move |j: Job| {
         let sender = sync::Arc::clone(&sender);
         Box::pin(async move {
@@ -1102,7 +1096,7 @@ async fn mutation_kill_and_requeue_and_discard() {
         .data
         .queues
         .get(local)
-        .map(|v| *v)
+        .copied()
         .unwrap_or_default();
     assert_eq!(njobs, 0);
 
@@ -1120,7 +1114,7 @@ async fn mutation_kill_and_requeue_and_discard() {
         .data
         .queues
         .get(local)
-        .map(|v| *v)
+        .copied()
         .unwrap_or_default();
     assert_eq!(njobs, 2);
 
@@ -1145,7 +1139,7 @@ async fn mutation_kill_and_requeue_and_discard() {
         .data
         .queues
         .get(local)
-        .map(|v| *v)
+        .copied()
         .unwrap_or_default();
     assert_eq!(njobs, 0); // sanity check
 
@@ -1178,7 +1172,7 @@ async fn mutation_kill_and_requeue_and_discard() {
         .data
         .queues
         .get(local)
-        .map(|v| *v)
+        .copied()
         .unwrap_or_default();
     assert_eq!(njobs, 0);
 }

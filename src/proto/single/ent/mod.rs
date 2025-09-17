@@ -107,7 +107,7 @@ mod test {
         assert_eq!(stored, &serde_json::Value::from(to_iso_string(exp_at)));
 
         let job1 = half_stuff().expires_in(five_min).build();
-        assert!(job1.custom.get("expires_at").is_some());
+        assert!(job1.custom.contains_key("expires_at"));
     }
 
     #[test]

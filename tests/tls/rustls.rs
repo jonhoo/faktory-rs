@@ -147,7 +147,7 @@ mod fixtures {
             pub fn new(scheme: SignatureScheme, cert_path: PathBuf) -> Self {
                 let cert = fs::read(&cert_path).unwrap();
                 let (_, pem) = parse_x509_pem(&cert).unwrap();
-                let cert_der = CertificateDer::try_from(pem.contents).unwrap();
+                let cert_der = CertificateDer::from(pem.contents);
                 Self { scheme, cert_der }
             }
         }
