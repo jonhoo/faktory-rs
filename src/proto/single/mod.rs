@@ -26,7 +26,7 @@ pub use id::BatchId;
 
 const JOB_DEFAULT_QUEUE: &str = "default";
 const JOB_DEFAULT_RESERVED_FOR_SECS: u64 = 600;
-const JOB_DEFAULT_RETRY_COUNT: isize = 25;
+const JOB_DEFAULT_RETRY_COUNT: usize = 25;
 const JOB_DEFAULT_PRIORITY: u8 = 5;
 const JOB_DEFAULT_BACKTRACE: usize = 0;
 
@@ -124,9 +124,7 @@ pub struct Job {
     /// Defaults to 25.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[builder(default = "Some(JOB_DEFAULT_RETRY_COUNT)")]
-    // TODO: this should probably be a usize, see Failure::retry_count
-    // TODO: and Failure::retry_remaining. This can go to 0.14 release
-    pub retry: Option<isize>,
+    pub retry: Option<usize>,
 
     /// The priority of this job from 1-9 (9 is highest).
     ///
