@@ -11,13 +11,7 @@ use crate::ent::BatchId;
 pub fn bad(expected: &'static str, got: &RawResponse) -> error::Protocol {
     let stringy = match *got {
         RawResponse::String(ref s) => Some(&**s),
-        RawResponse::Blob(ref b) => {
-            if let Ok(s) = std::str::from_utf8(b) {
-                Some(s)
-            } else {
-                None
-            }
-        }
+        RawResponse::Blob(ref b) => std::str::from_utf8(b).ok(),
         _ => None,
     };
 

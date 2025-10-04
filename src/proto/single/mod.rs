@@ -326,7 +326,7 @@ mod test {
         let job = JobBuilder::new(job_kind).args(job_args.clone()).build();
 
         assert_ne!(&job.jid, "");
-        assert!(job.queue == JOB_DEFAULT_QUEUE.to_string());
+        assert_eq!(job.queue, JOB_DEFAULT_QUEUE);
         assert_eq!(job.kind, job_kind);
         assert_eq!(job.args, job_args);
 
