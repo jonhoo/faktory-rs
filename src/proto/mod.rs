@@ -35,6 +35,9 @@ mod batch;
 #[cfg(feature = "ent")]
 pub use batch::{Batch, BatchBuilder, BatchHandle, BatchStatus, CallbackState};
 
+#[cfg(feature = "bb8")]
+pub use client::bb8;
+
 /// A stream that can be re-established after failing.
 #[async_trait::async_trait]
 pub trait Reconnect {

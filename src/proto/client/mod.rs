@@ -23,8 +23,9 @@ pub use conn::Connection;
 
 mod mutation;
 
+/// A pool implementation for Faktory clients using `bb8`.
 #[cfg(feature = "bb8")]
-mod bb8;
+pub mod bb8;
 
 pub(crate) const EXPECTED_PROTOCOL_VERSION: usize = 2;
 
