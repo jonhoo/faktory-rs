@@ -23,6 +23,9 @@ pub use conn::Connection;
 
 mod mutation;
 
+#[cfg(feature = "bb8")]
+mod bb8;
+
 pub(crate) const EXPECTED_PROTOCOL_VERSION: usize = 2;
 
 fn check_protocols_match(ver: usize) -> Result<(), Error> {
