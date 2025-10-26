@@ -1,6 +1,6 @@
 use bb8::ManageConnection;
-use super::{Client, HeartbeatStatus, utils::get_env_url};
-use crate::{error::Protocol, Error};
+use super::{Client, utils::get_env_url};
+use crate::Error;
 
 /// A BB8 connection pool for Faktory clients.
 pub type PooledClient = bb8::Pool<ClientConnectionManager>;
@@ -35,14 +35,8 @@ impl ManageConnection for ClientConnectionManager {
     }
 
     async fn is_valid(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
-        match conn.heartbeat().await? {
-            HeartbeatStatus::Ok | HeartbeatStatus::Quiet => Ok(()),
-            HeartbeatStatus::Terminate => Err(Error::Protocol(
-                Protocol::Internal {
-                    msg: "Connection terminated by server heartbeat".to_string(),
-                }
-            ))
-        }
+        conn.current_info().await?;
+        Ok(())
     }
 
     fn has_broken(&self, _conn: &mut Self::Connection) -> bool {
