@@ -9,36 +9,36 @@ use tokio::io::BufStream;
 use {
     std::sync::Arc,
     crate::tls::rustls::TlsStream,
-    tokio_rustls::{rustls::{ClientConfig, RootCertStore}, TlsConnector}
+    tokio_rustls::rustls::{ClientConfig, RootCertStore}
 };
 
 #[cfg(feature = "native_tls")]
-use tokio_native_tls::{native_tls::TlsConnector};
+use tokio_native_tls::native_tls;
 
 /// A BB8 connection pool for Faktory clients.
 pub type PooledClient = bb8::Pool<ClientConnectionManager>;
 
 /// TLS configuration for Faktory clients.
-pub enum Tls {
+pub enum TlsConnector {
     /// No TLS.
     NoTls,
     /// TLS using Rustls.
     #[cfg(feature = "rustls")]
-    Rustls(TlsConnector),
+    Rustls(tokio_rustls::TlsConnector),
     /// TLS using Native TLS.
     #[cfg(feature = "native_tls")]
-    NativeTls(TlsConnector),
+    NativeTls(native_tls::TlsConnector),
 }
 
 /// A connection manager for Faktory clients to be used with BB8.
 pub struct ClientConnectionManager {
     url: String,
-    tls: Tls
+    tls: TlsConnector
 }
 
 impl ClientConnectionManager {
     /// Create a new connection manager for the given URL.
-    pub fn new(url: &str, tls: Tls) -> Self {
+    pub fn new(url: &str, tls: TlsConnector) -> Self {
         Self {
             url: url.to_string(),
             tls
@@ -47,10 +47,10 @@ impl ClientConnectionManager {
 
     /// Create a new connection manager using the URL from the `FAKTORY_PROVIDER`
     pub fn from_env() -> Result<Self, Error> {
-        let tls = Tls::NoTls;
+        let tls = TlsConnector::NoTls;
 
         #[cfg(feature = "rustls")]
-        let tls = Tls::Rustls({
+        let tls = TlsConnector::Rustls({
             let config = ClientConfig::builder()
                 .with_root_certificates(RootCertStore::empty())
                 .with_no_client_auth();
@@ -59,8 +59,8 @@ impl ClientConnectionManager {
         });
 
         #[cfg(feature = "native_tls")]
-        let tls = Tls::NativeTls({
-            TlsConnector::builder()
+        let tls = TlsConnector::NativeTls({
+            native_tls::TlsConnector::builder()
                 .build()
                 .expect("Failed to build native TLS connector")
         });
@@ -78,11 +78,11 @@ impl ManageConnection for ClientConnectionManager {
 
     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
         match self.tls {
-            Tls::NoTls => {
+            TlsConnector::NoTls => {
                 Client::connect_to(self.url.as_str()).await
             },
             #[cfg(feature = "rustls")]
-            Tls::Rustls(ref connector) => {
+            TlsConnector::Rustls(ref connector) => {
                 let stream = TlsStream::with_connector(
                     connector.clone(),
                     Some(self.url.as_str())
@@ -92,7 +92,7 @@ impl ManageConnection for ClientConnectionManager {
                 Client::connect_with(buffered, None).await
             }
             #[cfg(feature = "native_tls")]
-            Tls::NativeTls(ref connector) => {
+            TlsConnector::NativeTls(ref connector) => {
                 let stream = crate::tls::native_tls::TlsStream::with_connector(
                     connector.clone(),
                     Some(self.url.as_str())
@@ -103,7 +103,7 @@ impl ManageConnection for ClientConnectionManager {
             }
         }
     }
-    
+
     async fn is_valid(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
         conn.current_info().await?;
         Ok(())
