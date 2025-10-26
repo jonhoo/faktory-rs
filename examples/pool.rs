@@ -29,7 +29,7 @@ impl JobRunner for JobHandler {
 
 #[tokio::main]
 async fn main() {
-    let manager = ClientConnectionManager::from_env();
+    let manager = ClientConnectionManager::from_env().expect("from_env succeeded");
 
     let pool = PooledClient::builder()
         .max_size(10)
