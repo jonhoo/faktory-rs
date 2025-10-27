@@ -8,12 +8,15 @@ use tokio::io::BufStream;
 #[cfg(feature = "rustls")]
 use {
     std::sync::Arc,
-    crate::tls::rustls::TlsStream,
+    crate::tls::rustls::TlsStream as RustlsStream,
     tokio_rustls::rustls::{ClientConfig, RootCertStore}
 };
 
 #[cfg(feature = "native_tls")]
-use tokio_native_tls::native_tls;
+use {
+    crate::tls::native_tls::TlsStream as NativeTlsStream,
+    tokio_native_tls::native_tls
+};
 
 /// A BB8 connection pool for Faktory clients.
 pub type PooledClient = bb8::Pool<ClientConnectionManager>;
@@ -49,6 +52,13 @@ impl ClientConnectionManager {
     pub fn from_env() -> Result<Self, Error> {
         let tls = TlsConnector::NoTls;
 
+        #[cfg(feature = "native_tls")]
+        let tls = TlsConnector::NativeTls({
+            native_tls::TlsConnector::builder()
+                .build()
+                .expect("Failed to build native TLS connector")
+        });
+
         #[cfg(feature = "rustls")]
         let tls = TlsConnector::Rustls({
             let config = ClientConfig::builder()
@@ -56,13 +66,6 @@ impl ClientConnectionManager {
                 .with_no_client_auth();
 
             tokio_rustls::TlsConnector::from(Arc::new(config))
-        });
-
-        #[cfg(feature = "native_tls")]
-        let tls = TlsConnector::NativeTls({
-            native_tls::TlsConnector::builder()
-                .build()
-                .expect("Failed to build native TLS connector")
         });
 
         Ok(Self {
@@ -83,7 +86,7 @@ impl ManageConnection for ClientConnectionManager {
             },
             #[cfg(feature = "rustls")]
             TlsConnector::Rustls(ref connector) => {
-                let stream = TlsStream::with_connector(
+                let stream = RustlsStream::with_connector(
                     connector.clone(),
                     Some(self.url.as_str())
                 ).await?;
@@ -93,7 +96,7 @@ impl ManageConnection for ClientConnectionManager {
             }
             #[cfg(feature = "native_tls")]
             TlsConnector::NativeTls(ref connector) => {
-                let stream = crate::tls::native_tls::TlsStream::with_connector(
+                let stream = NativeTlsStream::with_connector(
                     connector.clone(),
                     Some(self.url.as_str())
                 ).await?;
