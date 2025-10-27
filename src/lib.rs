@@ -132,3 +132,6 @@ mod tls;
 
 #[cfg(any(feature = "native_tls", feature = "rustls"))]
 pub use tls::*;
+
+#[cfg(feature = "bb8")]
+pub use crate::proto::bb8;
