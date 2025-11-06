@@ -318,13 +318,6 @@ mod tests {
     }
 
     #[test]
-    fn test_pooled_client_type_alias() {
-        // Test that the type alias is correctly defined
-        // This is more of a compilation test
-        let _: Option<PooledClient> = None;
-    }
-
-    #[test]
     fn test_manager_url_storage() {
         let test_url = "tcp://test-server:1234";
         let manager = ClientConnectionManager::new(test_url, TlsConnector::NoTls);
