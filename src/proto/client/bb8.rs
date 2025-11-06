@@ -318,22 +318,6 @@ mod tests {
     }
 
     #[test]
-    fn test_has_broken_always_returns_false() {
-        let manager = ClientConnectionManager::new(
-            "tcp://localhost:7419",
-            TlsConnector::NoTls
-        );
-
-        // Create a mock client (this would need to be adjusted based on your Client implementation)
-        // For now, we'll test the method exists and returns false
-        // This test demonstrates the method but may need adjustment based on Client's actual structure
-
-        // Note: This test is conceptual since we can't easily create a Client instance
-        // without a real connection. In practice, you might want to mock the Client
-        // or use dependency injection for better testability.
-    }
-
-    #[test]
     fn test_pooled_client_type_alias() {
         // Test that the type alias is correctly defined
         // This is more of a compilation test
