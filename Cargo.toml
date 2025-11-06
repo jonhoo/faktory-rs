@@ -91,6 +91,19 @@ name = "loadtest"
 path = "src/bin/loadtest.rs"
 required-features = ["binaries"]
 
+[[example]]
+name = "pool"
+path = "examples/pool.rs"
+required-features = ["bb8"]
+
+[[example]]
+name = "basic"
+path = "examples/run.rs"
+
+[[example]]
+name = "run_to_completion"
+path = "examples/run_to_completion.rs"
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
