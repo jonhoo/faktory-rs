@@ -100,11 +100,18 @@ self_to_cmd!(Ack, "ACK");
 #[derive(Serialize)]
 pub(crate) struct Heartbeat {
     wid: WorkerId,
+
+    // https://github.com/contribsys/faktory/blob/a06554f89c0a0baf19a75fa2e16720ece614d1fb/server/commands.go#L328
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rss_kb: Option<u32>,
 }
 
 impl Heartbeat {
-    pub fn new<S: Into<WorkerId>>(wid: S) -> Heartbeat {
-        Heartbeat { wid: wid.into() }
+    pub fn new<S: Into<WorkerId>>(wid: S, rss_kb: Option<u32>) -> Heartbeat {
+        Heartbeat {
+            wid: wid.into(),
+            rss_kb,
+        }
     }
 }
 
@@ -342,8 +349,24 @@ self_to_cmd!(MutationAction<'_>, "MUTATE");
 
 #[cfg(test)]
 mod test {
-    use super::{MutationAction, MutationType};
-    use crate::proto::{Filter, JobSet};
+    use super::{Heartbeat, MutationAction, MutationType};
+    use crate::proto::{Filter, JobSet, WorkerId};
+
+    #[test]
+    fn heartbeat_is_serialized_correctly() {
+        let wid = WorkerId::random();
+        let rss = None;
+
+        let action = Heartbeat::new(wid.clone(), rss);
+        let ser = serde_json::to_string(&action).unwrap();
+        assert_eq!(ser, format!(r#"{{"wid":"{}"}}"#, *wid));
+
+        let wid = WorkerId::random();
+        let rss_kb = rand::random::<u32>();
+        let action = Heartbeat::new(wid.clone(), Some(rss_kb));
+        let ser = serde_json::to_string(&action).unwrap();
+        assert_eq!(ser, format!(r#"{{"wid":"{}","rss_kb":{}}}"#, *wid, rss_kb));
+    }
 
     #[test]
     fn mutation_action_is_serialized_correctly() {

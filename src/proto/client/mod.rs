@@ -300,7 +300,30 @@ impl Client {
     pub(crate) async fn heartbeat(&mut self) -> Result<HeartbeatStatus, Error> {
         single::write_command(
             &mut self.stream,
-            &single::Heartbeat::new(self.opts.wid.as_ref().unwrap().clone()),
+            &single::Heartbeat::new(
+                self.opts
+                    .wid
+                    .as_ref()
+                    .expect("every worker to have an ID")
+                    .clone(),
+                // TODO: consider using `sysinfo` which _requires 1.88_ rustc though.
+                // The crate is well-maintained and modular so we can do:
+                // ```
+                // if sysinfo::IS_SUPPORTED_SYSTEM {
+                //  use sysinfo::{System, ProcessesToUpdate, Pid};
+                //  let mut sys = System::new();
+                //  let pid = Pid::from(std::process::id());
+                //  sys.refresh_processes(ProcessesToUpdate::Some(&[pid.clone()]), true);
+                //  if let Some(p) = sys.process(pid) {
+                //    let _rss_bytes = p.memory();
+                //  }
+                // }
+                // ```
+                // We can keep `System` on the worker to not re-create every
+                // every heartbeat cycle, but we will still need to call
+                // `System::refresh_processes` and send fresh data to Faktory
+                None,
+            ),
         )
         .await?;
 
