@@ -292,13 +292,15 @@ impl<E: 'static> WorkerBuilder<E> {
     /// method on the builder in order to opt into collecting and sending stats
     /// to the server.
     ///
-    /// ```rust
+    /// ```no_run
+    /// # tokio_test::block_on(async {
     /// let _w = faktory::Worker::builder()
     ///     .register_fn("jobtype", move |_| async { Ok::<(), std::io::Error>(()) })
     ///     .with_sysinfo()
     ///     .connect()
     ///     .await
     ///     .unwrap();
+    /// # });
     /// ```
     ///
     /// Note that enabling this behavior might imply that the running program
