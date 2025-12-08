@@ -133,6 +133,7 @@ impl Stream {
         Self::make(None, stream, false)
     }
 
+    #[allow(unused)]
     pub fn with_salt(iters: usize, salt: &str) -> Self {
         Self::make(Some((iters, salt)), 1, true)
     }
