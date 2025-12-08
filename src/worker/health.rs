@@ -97,14 +97,7 @@ where
 
     async fn heartbeat(&mut self) -> Result<HeartbeatStatus, Error> {
         let rss_kb = if cfg!(feature = "sysinfo") {
-            use sysinfo::{Pid, ProcessesToUpdate};
-            self.sys.as_mut().map(|sys| {
-                let pid = Pid::from(self.c.opts.pid.expect("every worker to have pid"));
-                sys.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
-                let process_stats = sys.process(pid).expect("current process to exist");
-                let rss_bytes = process_stats.memory();
-                rss_bytes >> 10
-            })
+            self.sys.as_mut().map(|sys| sys.rss_kb())
         } else {
             None
         };

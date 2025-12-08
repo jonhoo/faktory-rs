@@ -16,6 +16,8 @@ mod health;
 mod runner;
 mod state;
 mod stop;
+#[cfg(feature = "sysinfo")]
+mod system;
 
 pub use builder::WorkerBuilder;
 pub use runner::JobRunner;
@@ -180,7 +182,7 @@ pub struct Worker<E> {
     // 2) we need it mutable and so we would need a Mutex
     // 3) it's actually only coordinator who should have access to it anyways
     #[cfg(feature = "sysinfo")]
-    sys: Option<sysinfo::System>,
+    sys: Option<system::System>,
 }
 
 impl Worker<()> {
@@ -205,7 +207,7 @@ impl<E> Worker<E> {
         callbacks: CallbacksRegistry<E>,
         shutdown_timeout: Option<Duration>,
         shutdown_signal: Option<ShutdownSignal>,
-        #[cfg(feature = "sysinfo")] sys: Option<sysinfo::System>,
+        #[cfg(feature = "sysinfo")] sys: Option<system::System>,
     ) -> Self {
         Worker {
             c,
