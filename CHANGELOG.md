@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Support (behind `sysinfo` feature) for memory stats collection and sending over to Faktory (#106)
+
 ### Changed
 
 - Update dependencies: `hostname`, `tokio-rustls`, `thiserror`, `rand`, `derive_builder` ([#82])

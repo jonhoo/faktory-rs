@@ -424,6 +424,7 @@ impl<E: StdError + 'static + Send> Worker<E> {
             forever: self.forever,
             shutdown_timeout: self.shutdown_timeout,
             shutdown_signal: Some(Box::pin(std::future::pending())),
+            #[cfg(feature = "sysinfo")]
             sys: None,
         })
     }

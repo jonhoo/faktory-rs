@@ -96,11 +96,11 @@ where
     }
 
     async fn heartbeat(&mut self) -> Result<HeartbeatStatus, Error> {
-        let rss_kb = if cfg!(feature = "sysinfo") {
-            self.sys.as_mut().map(|sys| sys.rss_kb())
-        } else {
-            None
-        };
+        #[cfg(feature = "sysinfo")]
+        let rss_kb = self.sys.as_mut().map(|sys| sys.rss_kb());
+        #[cfg(not(feature = "sysinfo"))]
+        let rss_kb = None;
+
         self.c.heartbeat(rss_kb).await
     }
 }
