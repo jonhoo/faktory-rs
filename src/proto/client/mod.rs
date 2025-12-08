@@ -305,28 +305,19 @@ impl Client {
             .expect("every worker to have wid")
             .clone();
 
-        #[cfg(feature = "sysinfo")]
-        let rss_kb = {
-            use sysinfo::{Pid, ProcessesToUpdate, System};
-            // we are running tests on latest ubuntu, macos, and windows runners (see
-            // "test.yml" workflow) which account for the majority of use-cases;
-            // Linux, macOS, and Windows _are_ in the sysinfo's list of suported OSes:
-            // https://docs.rs/sysinfo/0.37.2/sysinfo/index.html#supported-oses
-            if sysinfo::IS_SUPPORTED_SYSTEM {
-                let mut sys = System::new();
+        let rss_kb = if cfg!(feature = "sysinfo") {
+            use sysinfo::{Pid, ProcessesToUpdate};
+            self.opts.system.as_ref().map(|sys| {
                 let pid = Pid::from(self.opts.pid.expect("every worker to have pid"));
+                let mut sys = sys.lock().expect("TODO: we do not neede on every client!");
                 sys.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
                 let process_stats = sys.process(pid).expect("current process to exist");
                 let rss_bytes = process_stats.memory();
-                let rss_kb = rss_bytes >> 10;
-                Some(rss_kb)
-            } else {
-                tracing::warn!(r#"feature "sysinfo" is enabled, but this OS is not supported."#);
-                None
-            }
+                rss_bytes >> 10
+            })
+        } else {
+            None
         };
-        #[cfg(not(feature = "sysinfo"))]
-        let rss_kb = None;
 
         single::write_command(&mut self.stream, &single::Heartbeat::new(wid, rss_kb)).await?;
 

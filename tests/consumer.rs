@@ -267,13 +267,11 @@ async fn well_behaved() {
 
     // heartbeat should have seen two beats (quiet + terminate)
     let written = s.pop_bytes_written(0);
-    let written: Vec<_> = std::str::from_utf8(&written[..])
-        .unwrap()
-        .splitn(3, "\r\n")
-        .collect();
-    assert!(written[0].starts_with("BEAT"));
-    assert!(written[1].starts_with("BEAT"));
-    assert_eq!(written[2], "END\r\n");
+    let msgs = "\
+                BEAT {\"wid\":\"wid\"}\r\n\
+                BEAT {\"wid\":\"wid\"}\r\n\
+                END\r\n";
+    assert_eq!(std::str::from_utf8(&written[..]).unwrap(), msgs);
 
     // worker should have fetched once, and acked once
     let written = s.pop_bytes_written(1);
@@ -338,36 +336,11 @@ async fn no_first_job() {
 
     // heartbeat should have seen two beats (quiet + terminate)
     let written = s.pop_bytes_written(0);
-    let written = std::str::from_utf8(&written[..]).unwrap();
-    if cfg!(feature = "sysinfo") {
-        // the "written" output will be of the folowing shape (example from one of testruns):
-        //
-        // "BEAT {\"wid\":\"wid\",\"rss_kb\":7320}\r\nBEAT {\"wid\":\"wid\",\"rss_kb\":7576}\r\nEND\r\n"
-        //
-        // we cannot assert on the exact value of "rss_kb" without extra test tricks (mocking,
-        // intercepting or maybe spying on the worker), but we should be good to go if we just
-        // check that the number of commands and their types are the same (two BEATs and one END)
-        // as in the non-sysinfo branch and that the BEATs contain those hard-coded wids and an
-        // extra "rss_kb" field (note that this field is not there for non-sysinfo, cause it's
-        // value is None and it gets skipped during the hearbeat's serialization)
-        let cmds: Vec<_> = written.splitn(3, "\r\n").collect();
-        let first_beat: serde_json::Value =
-            serde_json::from_str(cmds[0].strip_prefix("BEAT ").unwrap()).unwrap();
-        assert_eq!(first_beat["wid"], "wid");
-        assert!(first_beat["rss_kb"].is_number());
-        let second_beat: serde_json::Value =
-            serde_json::from_str(cmds[1].strip_prefix("BEAT ").unwrap()).unwrap();
-        assert_eq!(second_beat["wid"], "wid");
-        assert!(first_beat["rss_kb"].is_number());
-        assert_eq!(cmds[2], "END\r\n");
-    } else {
-        let msgs = "\
+    let msgs = "\
                 BEAT {\"wid\":\"wid\"}\r\n\
                 BEAT {\"wid\":\"wid\"}\r\n\
                 END\r\n";
-
-        assert_eq!(written, msgs);
-    }
+    assert_eq!(std::str::from_utf8(&written[..]).unwrap(), msgs);
 
     // worker should have fetched twice, and acked once
     let written = s.pop_bytes_written(1);
@@ -442,13 +415,11 @@ async fn well_behaved_many() {
 
     // heartbeat should have seen two beats (quiet + terminate)
     let written = s.pop_bytes_written(0);
-    let written: Vec<_> = std::str::from_utf8(&written[..])
-        .unwrap()
-        .splitn(3, "\r\n")
-        .collect();
-    assert!(written[0].starts_with("BEAT"));
-    assert!(written[1].starts_with("BEAT"));
-    assert_eq!(written[2], "END\r\n");
+    let msgs = "\
+                BEAT {\"wid\":\"wid\"}\r\n\
+                BEAT {\"wid\":\"wid\"}\r\n\
+                END\r\n";
+    assert_eq!(std::str::from_utf8(&written[..]).unwrap(), msgs);
 
     // each worker should have fetched once, and acked once
     for i in 0..2 {
@@ -528,33 +499,27 @@ async fn terminate() {
     assert_eq!(details.reason, StopReason::ServerInstruction);
     assert_eq!(details.workers_still_running, 1);
 
-    // Heartbeat Thread (stream with index 0). Note that with "sysinfo" feature enabled the
-    // heartbeat message will also include "rss_kb".
+    // Heartbeat Thread (stream with index 0).
     //
     // Heartbeat thread should have sent one BEAT command, then an immediate FAIL, and a final END:
     // <---------- BEAT ---------><---------------------------- FAIL JOB -----------------------------------------><-END->
     // "BEAT {\"wid\":\"wid\"}\r\nFAIL {\"jid\":\"forever\",\"errtype\":\"unknown\",\"message\":\"terminated\"}\r\nEND\r\n"
-    //
-    // We will now parse out the FAIL payload and inspect it.
     let written = s.pop_bytes_written(0);
-    let written = std::str::from_utf8(written.as_slice()).unwrap();
-    let parts: Vec<_> = written.splitn(2, "\r\n").collect();
-    // e.g.: BEAT {\"wid\":\"wid\"} or BEAT {\"wid\":\"wid\",\"rss_kb\": 7000}
-    let _beat = parts[0];
-    // FAIL {\"jid\":\"forever\",\"errtype\":\"unknown\",\"message\":\"terminated\"}\r\nEND\r\n
-    let fail_and_end = parts[1];
-    // FAIL {\"jid\":\"forever\",\"errtype\":\"unknown\",\"message\":\"terminated\"}
-    let fail = fail_and_end.splitn(2, "\r\n").collect::<Vec<_>>()[0];
-    let fail: serde_json::Value =
-        serde_json::from_str(fail.strip_prefix("FAIL ").unwrap()).unwrap();
+    let beat = b"BEAT {\"wid\":\"wid\"}\r\nFAIL ";
+    assert_eq!(&written[0..beat.len()], &beat[..]);
+    assert!(written.ends_with(b"\r\nEND\r\n"));
+    let written: serde_json::Value =
+        serde_json::from_slice(&written[beat.len()..(written.len() - b"\r\nEND\r\n".len())])
+            .unwrap();
     assert_eq!(
-        fail.as_object()
+        written
+            .as_object()
             .and_then(|o| o.get("jid"))
             .and_then(|v| v.as_str()),
         Some("forever")
     );
-    assert_eq!(fail.get("errtype").unwrap().as_str(), Some("unknown"));
-    assert_eq!(fail.get("message").unwrap().as_str(), Some("terminated"));
+    assert_eq!(written.get("errtype").unwrap().as_str(), Some("unknown"));
+    assert_eq!(written.get("message").unwrap().as_str(), Some("terminated"));
 
     // Let's give the worker's client a chance to complete clean up on Client's drop (effectively send `END\r\n`),
     // and only after that pop bytes written into its stream. If we do not do this, we will end up with a flaky

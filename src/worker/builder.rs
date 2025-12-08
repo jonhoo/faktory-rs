@@ -281,6 +281,23 @@ impl<E: 'static> WorkerBuilder<E> {
         self
     }
 
+    /// TODO: Docs
+    #[cfg(feature = "sysinfo")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
+    pub fn with_sysinfo(mut self) -> Self {
+        // we are running tests on latest ubuntu, macos, and windows runners (see
+        // "test.yml" workflow) which account for the majority of use-cases;
+        // Linux, macOS, and Windows _are_ in the sysinfo's list of suported OSes:
+        // https://docs.rs/sysinfo/0.37.2/sysinfo/index.html#supported-oses
+        if sysinfo::IS_SUPPORTED_SYSTEM {
+            let sys = sysinfo::System::new();
+            let sys = std::sync::Mutex::new(sys);
+            let sys = std::sync::Arc::new(sys);
+            self.opts.system = Some(sys);
+        }
+        self
+    }
+
     /// Connect to a Faktory server with a non-standard stream.
     ///
     /// In case you've got a `stream` that doesn't already implement `AsyncBufRead`, you will
