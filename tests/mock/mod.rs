@@ -85,8 +85,7 @@ impl Stream {
                 if let Some((iters, salt)) = salt {
                     // include salt for pwdhash
                     s.push_bytes_to_read(
-                        format!("+HI {{\"v\":2,\"i\":{},\"s\":\"{}\"}}\r\n", iters, salt)
-                            .as_bytes(),
+                        format!("+HI {{\"v\":2,\"i\":{iters},\"s\":\"{salt}\"}}\r\n").as_bytes(),
                     )
                 } else {
                     s.push_bytes_to_read(b"+HI {\"v\":2,\"i\":1}\r\n");

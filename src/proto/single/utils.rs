@@ -64,7 +64,7 @@ pub(crate) fn ser_server_time<S>(value: &NaiveTime, serializer: S) -> Result<S::
 where
     S: Serializer,
 {
-    serializer.serialize_str(&format!("{} UTC", value))
+    serializer.serialize_str(&format!("{value} UTC"))
 }
 
 pub(crate) fn deser_server_time<'de, D>(value: D) -> Result<NaiveTime, D::Error>

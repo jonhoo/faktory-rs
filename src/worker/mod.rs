@@ -369,7 +369,7 @@ impl<E: StdError + 'static + Send> Worker<E> {
             }
             Err(e) => {
                 let fail = match e {
-                    Failed::BadJobType(jt) => Fail::generic(jid, format!("No handler for {}", jt)),
+                    Failed::BadJobType(jt) => Fail::generic(jid, format!("No handler for {jt}")),
                     Failed::Application(e) => Fail::generic_with_backtrace(jid, e),
                     Failed::HandlerPanic(e) => {
                         if e.is_cancelled() {

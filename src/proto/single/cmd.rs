@@ -158,11 +158,11 @@ impl Fail {
     where
         E: StdError,
     {
-        let mut f = Fail::generic(jid, format!("{}", e));
+        let mut f = Fail::generic(jid, format!("{e}"));
         let mut root = e.source();
         let mut lines = Vec::new();
         while let Some(r) = root.take() {
-            lines.push(format!("{}", r));
+            lines.push(format!("{r}"));
             root = r.source();
         }
         f.set_backtrace(lines);
@@ -253,7 +253,7 @@ impl Hello {
         for _ in 1..hi.iterations.unwrap_or(1) {
             hash = Sha256::digest(&hash[..]);
         }
-        self.password_hash = Some(format!("{:x}", hash));
+        self.password_hash = Some(format!("{hash:x}"));
     }
 }
 

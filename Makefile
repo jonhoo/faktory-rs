@@ -20,7 +20,7 @@ fmt:
 .PHONY: check
 check:
 	cargo fmt --check
-	cargo clippy --all-features
+	cargo clippy --all-features --all-targets
 	cargo d --no-deps --all-features
 
 .PHONY: doc

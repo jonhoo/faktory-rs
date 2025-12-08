@@ -33,16 +33,13 @@ async fn main() {
 
     let jobs: usize = *matches.get_one("jobs").expect("default_value is set");
     let threads: usize = *matches.get_one("threads").expect("default_value is set");
-    println!(
-        "Running loadtest with {} jobs and {} threads",
-        jobs, threads
-    );
+    println!("Running loadtest with {jobs} jobs and {threads} threads");
 
     // ensure that we can actually connect to the server;
     // will create a client, run a handshake with Faktory,
     // and drop the cliet immediately afterwards;
     if let Err(e) = Client::connect().await {
-        println!("{}", e);
+        println!("{e}");
         process::exit(1);
     }
 
@@ -64,7 +61,7 @@ async fn main() {
                     Box::pin(async move {
                         let mut rng = rand::rng();
                         if rng.random_bool(0.01) {
-                            Err(io::Error::new(io::ErrorKind::Other, "worker closed"))
+                            Err(io::Error::other("worker closed"))
                         } else {
                             Ok(())
                         }
@@ -118,8 +115,5 @@ async fn main() {
         stop_secs,
         jobs as f64 / stop_secs,
     );
-    println!(
-        "Number of operations (pushes and pops) per thread: {:?}",
-        ops_count
-    );
+    println!("Number of operations (pushes and pops) per thread: {ops_count:?}");
 }

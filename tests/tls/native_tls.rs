@@ -90,7 +90,7 @@ mod fixtures {
 
             async fn process_one(&self, job: Job) -> io::Result<()> {
                 time::sleep(Duration::from_millis(100)).await;
-                eprintln!("{:?}", job);
+                eprintln!("{job:?}");
                 self.chan.lock().unwrap().send(job).unwrap();
                 Ok(())
             }

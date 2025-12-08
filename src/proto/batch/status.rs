@@ -33,7 +33,7 @@ impl std::fmt::Display for CallbackState {
             Enqueued => "Enqueued",
             FinishedOk => "FinishedOk",
         };
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 

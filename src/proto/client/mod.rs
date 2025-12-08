@@ -10,7 +10,6 @@ use super::{single, Info, Push, QueueAction, QueueControl};
 use super::{utils, PushBulk};
 use crate::error::{self, Error};
 use crate::{Job, Reconnect, WorkerId};
-use semver::Op;
 use std::collections::HashMap;
 use tokio::io::{AsyncBufRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
