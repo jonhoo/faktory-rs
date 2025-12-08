@@ -29,9 +29,6 @@ pub(crate) struct ClientOptions {
 
     /// Whether this client is instatianted for a worker (i.e. to consume jobs).
     pub(crate) is_worker: bool,
-
-    #[cfg(feature = "sysinfo")]
-    pub(crate) system: Option<std::sync::Arc<std::sync::Mutex<sysinfo::System>>>,
 }
 
 impl Default for ClientOptions {
@@ -43,8 +40,6 @@ impl Default for ClientOptions {
             labels: vec!["rust".to_string()],
             password: None,
             is_worker: false,
-            #[cfg(feature = "sysinfo")]
-            system: None,
         }
     }
 }

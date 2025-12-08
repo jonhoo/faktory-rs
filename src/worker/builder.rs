@@ -34,6 +34,8 @@ pub struct WorkerBuilder<E> {
     shutdown_timeout: Option<Duration>,
     shutdown_signal: Option<ShutdownSignal>,
     tls_kind: TlsKind,
+    #[cfg(feature = "sysinfo")]
+    sys: Option<sysinfo::System>,
 }
 
 impl<E> Default for WorkerBuilder<E> {
@@ -55,6 +57,8 @@ impl<E> Default for WorkerBuilder<E> {
             shutdown_timeout: None,
             shutdown_signal: None,
             tls_kind: TlsKind::None,
+            #[cfg(feature = "sysinfo")]
+            sys: None,
         }
     }
 }
@@ -290,10 +294,7 @@ impl<E: 'static> WorkerBuilder<E> {
         // Linux, macOS, and Windows _are_ in the sysinfo's list of suported OSes:
         // https://docs.rs/sysinfo/0.37.2/sysinfo/index.html#supported-oses
         if sysinfo::IS_SUPPORTED_SYSTEM {
-            let sys = sysinfo::System::new();
-            let sys = std::sync::Mutex::new(sys);
-            let sys = std::sync::Arc::new(sys);
-            self.opts.system = Some(sys);
+            self.sys = Some(sysinfo::System::new());
         }
         self
     }
@@ -319,6 +320,8 @@ impl<E: 'static> WorkerBuilder<E> {
             self.callbacks,
             self.shutdown_timeout,
             self.shutdown_signal,
+            #[cfg(feature = "sysinfo")]
+            self.sys,
         );
         Ok(worker)
     }

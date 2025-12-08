@@ -10,6 +10,7 @@ use super::{single, Info, Push, QueueAction, QueueControl};
 use super::{utils, PushBulk};
 use crate::error::{self, Error};
 use crate::{Job, Reconnect, WorkerId};
+use semver::Op;
 use std::collections::HashMap;
 use tokio::io::{AsyncBufRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream as TokioStream;
@@ -154,7 +155,7 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// ```
 pub struct Client {
     stream: BoxedConnection,
-    opts: ClientOptions,
+    pub(crate) opts: ClientOptions,
 }
 impl Client {
     pub(crate) async fn connect_again(&mut self) -> Result<Self, Error> {
@@ -297,28 +298,16 @@ impl Client {
             .await
     }
 
-    pub(crate) async fn heartbeat(&mut self) -> Result<HeartbeatStatus, Error> {
+    pub(crate) async fn heartbeat(
+        &mut self,
+        rss_kb: Option<u64>,
+    ) -> Result<HeartbeatStatus, Error> {
         let wid = self
             .opts
             .wid
             .as_ref()
             .expect("every worker to have wid")
             .clone();
-
-        let rss_kb = if cfg!(feature = "sysinfo") {
-            use sysinfo::{Pid, ProcessesToUpdate};
-            self.opts.system.as_ref().map(|sys| {
-                let pid = Pid::from(self.opts.pid.expect("every worker to have pid"));
-                let mut sys = sys.lock().expect("TODO: we do not neede on every client!");
-                sys.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
-                let process_stats = sys.process(pid).expect("current process to exist");
-                let rss_bytes = process_stats.memory();
-                rss_bytes >> 10
-            })
-        } else {
-            None
-        };
-
         single::write_command(&mut self.stream, &single::Heartbeat::new(wid, rss_kb)).await?;
 
         match single::read_json::<_, serde_json::Value>(&mut self.stream).await? {

@@ -173,6 +173,14 @@ pub struct Worker<E> {
     // NOTE: this is always `Some` if `self.terminated == false` whenever any `pub` function
     // on this type returns. it is `Some(std::future::pending())` if no shutdown signaler is set.
     shutdown_signal: Option<ShutdownSignal>,
+
+    // NOTE: we are storing quite a few worker-related things on the ClientOptions
+    // (e.g. wid, hostname), but not doing so with `System`, because
+    // 1) it's not `Clone` and so we would an Arc
+    // 2) we need it mutable and so we would need a Mutex
+    // 3) it's actually only coordinator who should have access to it anyways
+    #[cfg(feature = "sysinfo")]
+    sys: Option<sysinfo::System>,
 }
 
 impl Worker<()> {
@@ -197,6 +205,7 @@ impl<E> Worker<E> {
         callbacks: CallbacksRegistry<E>,
         shutdown_timeout: Option<Duration>,
         shutdown_signal: Option<ShutdownSignal>,
+        #[cfg(feature = "sysinfo")] sys: Option<sysinfo::System>,
     ) -> Self {
         Worker {
             c,
@@ -208,6 +217,8 @@ impl<E> Worker<E> {
             shutdown_signal: Some(
                 shutdown_signal.unwrap_or_else(|| Box::pin(std::future::pending())),
             ),
+            #[cfg(feature = "sysinfo")]
+            sys,
         }
     }
 
@@ -411,6 +422,7 @@ impl<E: StdError + 'static + Send> Worker<E> {
             forever: self.forever,
             shutdown_timeout: self.shutdown_timeout,
             shutdown_signal: Some(Box::pin(std::future::pending())),
+            sys: None,
         })
     }
 
