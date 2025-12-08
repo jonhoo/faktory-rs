@@ -103,11 +103,11 @@ pub(crate) struct Heartbeat {
 
     // https://github.com/contribsys/faktory/blob/a06554f89c0a0baf19a75fa2e16720ece614d1fb/server/commands.go#L328
     #[serde(skip_serializing_if = "Option::is_none")]
-    rss_kb: Option<u32>,
+    rss_kb: Option<u64>,
 }
 
 impl Heartbeat {
-    pub fn new<S: Into<WorkerId>>(wid: S, rss_kb: Option<u32>) -> Heartbeat {
+    pub fn new<S: Into<WorkerId>>(wid: S, rss_kb: Option<u64>) -> Heartbeat {
         Heartbeat {
             wid: wid.into(),
             rss_kb,
@@ -362,7 +362,7 @@ mod test {
         assert_eq!(ser, format!(r#"{{"wid":"{}"}}"#, *wid));
 
         let wid = WorkerId::random();
-        let rss_kb = rand::random::<u32>();
+        let rss_kb = rand::random::<u64>();
         let action = Heartbeat::new(wid.clone(), Some(rss_kb));
         let ser = serde_json::to_string(&action).unwrap();
         assert_eq!(ser, format!(r#"{{"wid":"{}","rss_kb":{}}}"#, *wid, rss_kb));

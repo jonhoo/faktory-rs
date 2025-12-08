@@ -298,34 +298,37 @@ impl Client {
     }
 
     pub(crate) async fn heartbeat(&mut self) -> Result<HeartbeatStatus, Error> {
-        single::write_command(
-            &mut self.stream,
-            &single::Heartbeat::new(
-                self.opts
-                    .wid
-                    .as_ref()
-                    .expect("every worker to have an ID")
-                    .clone(),
-                // TODO: consider using `sysinfo` which _requires 1.88_ rustc though.
-                // The crate is well-maintained and modular so we can do:
-                // ```
-                // if sysinfo::IS_SUPPORTED_SYSTEM {
-                //  use sysinfo::{System, ProcessesToUpdate, Pid};
-                //  let mut sys = System::new();
-                //  let pid = Pid::from(std::process::id());
-                //  sys.refresh_processes(ProcessesToUpdate::Some(&[pid.clone()]), true);
-                //  if let Some(p) = sys.process(pid) {
-                //    let _rss_bytes = p.memory();
-                //  }
-                // }
-                // ```
-                // We can keep `System` on the worker to not re-create every
-                // every heartbeat cycle, but we will still need to call
-                // `System::refresh_processes` and send fresh data to Faktory
-                None,
-            ),
-        )
-        .await?;
+        let wid = self
+            .opts
+            .wid
+            .as_ref()
+            .expect("every worker to have wid")
+            .clone();
+
+        #[cfg(feature = "sysinfo")]
+        let rss_kb = {
+            use sysinfo::{Pid, ProcessesToUpdate, System};
+            // we are running tests on latest ubuntu, macos, and windows runners (see
+            // "test.yml" workflow) which account for the majority of use-cases;
+            // Linux, macOS, and Windows _are_ in the sysinfo's list of suported OSes:
+            // https://docs.rs/sysinfo/0.37.2/sysinfo/index.html#supported-oses
+            if sysinfo::IS_SUPPORTED_SYSTEM {
+                let mut sys = System::new();
+                let pid = Pid::from(self.opts.pid.expect("every worker to have pid"));
+                sys.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+                let process_stats = sys.process(pid).expect("current process to exist");
+                let rss_bytes = process_stats.memory();
+                let rss_kb = rss_bytes >> 10;
+                Some(rss_kb)
+            } else {
+                tracing::warn!(r#"feature "sysinfo" is enabled, but this OS is not supported."#);
+                None
+            }
+        };
+        #[cfg(not(feature = "sysinfo"))]
+        let rss_kb = None;
+
+        single::write_command(&mut self.stream, &single::Heartbeat::new(wid, rss_kb)).await?;
 
         match single::read_json::<_, serde_json::Value>(&mut self.stream).await? {
             None => Ok(HeartbeatStatus::Ok),
@@ -338,7 +341,7 @@ impl Client {
                 Some("quiet") => Ok(HeartbeatStatus::Quiet),
                 _ => Err(error::Protocol::BadType {
                     expected: "heartbeat response",
-                    received: format!("{}", s),
+                    received: s.to_string(),
                 }
                 .into()),
             },
