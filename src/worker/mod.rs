@@ -178,7 +178,7 @@ pub struct Worker<E> {
 
     // NOTE: we are storing quite a few worker-related things on the ClientOptions
     // (e.g. wid, hostname), but not doing so with `System`, because
-    // 1) it's not `Clone` and so we would an Arc
+    // 1) it's not `Clone` and so we would need an Arc
     // 2) we need it mutable and so we would need a Mutex
     // 3) it's actually only coordinator who should have access to it anyways
     #[cfg(feature = "sysinfo")]

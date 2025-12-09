@@ -154,7 +154,7 @@ fn check_protocols_match(ver: usize) -> Result<(), Error> {
 /// ```
 pub struct Client {
     stream: BoxedConnection,
-    pub(crate) opts: ClientOptions,
+    opts: ClientOptions,
 }
 impl Client {
     pub(crate) async fn connect_again(&mut self) -> Result<Self, Error> {

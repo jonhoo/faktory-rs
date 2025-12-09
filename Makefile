@@ -71,11 +71,6 @@ test/e2e/ignored:
 	cargo test --locked --all-features --all-targets -- \
 	--nocapture --include-ignored queue_control_actions_wildcard
 
-.PHONY: test/e2e/sysinfo
-test/e2e/sysinfo:
-	FAKTORY_URL=tcp://:${FAKTORY_PASSWORD}@${FAKTORY_HOST}:${FAKTORY_PORT} \
-	cargo test --locked --features sysinfo --test sysinfo -- --nocapture $(pattern)
-
 .PHONY: test/e2e/tls
 test/e2e/tls:
 	FAKTORY_URL_SECURE=tcp://:${FAKTORY_PASSWORD}@${FAKTORY_HOST}:${FAKTORY_PORT_SECURE} \
