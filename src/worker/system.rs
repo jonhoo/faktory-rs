@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub(crate) struct System {
     sys: sysinfo::System,
     pid: sysinfo::Pid,
