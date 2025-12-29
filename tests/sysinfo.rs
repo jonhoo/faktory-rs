@@ -8,7 +8,21 @@ use tokio::io::BufStream;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn well_behaved() {
-    let mut s = mock::Stream::new(2); // main plus worker
+    // let's first verify that collecting and sending mem stats
+    // to Faktory is _not_ enabled by default
+    {
+        let s = mock::Stream::new_unchecked(2);
+        let w = WorkerBuilder::default()
+            .wid(WorkerId::new("wid_without_sysinfo"))
+            .register_fn("foobar", |_| async move { Ok::<(), io::Error>(()) })
+            .connect_with(BufStream::new(s.clone()), None)
+            .await
+            .unwrap();
+        assert!(!w.is_sysinfo_enabled());
+    }
+
+    // let's now construct a worker with sysinfo enabled
+    let mut s = mock::Stream::new(2);
     let mut w = WorkerBuilder::default()
         .wid(WorkerId::new("wid"))
         .register_fn("foobar", |_| async move {
@@ -20,6 +34,8 @@ async fn well_behaved() {
         .connect_with(BufStream::new(s.clone()), None)
         .await
         .unwrap();
+    assert!(w.is_sysinfo_enabled()); // NB
+
     s.ignore(0);
 
     // push a job that'll take a while to run
@@ -74,6 +90,7 @@ async fn well_behaved() {
         serde_json::from_str(cmds[0].strip_prefix("BEAT ").unwrap()).unwrap();
     assert_eq!(first_beat["wid"], "wid");
     assert!(first_beat["rss_kb"].is_number()); // NB
+    assert!(first_beat["rss_kb"].as_number().unwrap().as_u64().unwrap() > 0);
     let second_beat: serde_json::Value =
         serde_json::from_str(cmds[1].strip_prefix("BEAT ").unwrap()).unwrap();
     assert_eq!(second_beat["wid"], "wid");

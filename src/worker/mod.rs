@@ -185,6 +185,19 @@ pub struct Worker<E> {
     sys: Option<system::System>,
 }
 
+#[cfg(feature = "sysinfo")]
+impl<E> Worker<E> {
+    /// Whether resources consumption stats will be collected and sent to Faktory.
+    ///
+    /// This will return `true` if [`WorkerBuilder::with_sysinfo`] was called
+    /// when constructing this worker the target OS is among those supported by the
+    /// [`sysinfo`](https://docs.rs/sysinfo/latest/sysinfo/index.html#supported-oses)
+    /// crate which is being used internally.
+    pub fn is_sysinfo_enabled(&self) -> bool {
+        self.sys.is_some()
+    }
+}
+
 impl Worker<()> {
     /// Creates an ergonomic constructor for a new [`Worker`].
     ///
