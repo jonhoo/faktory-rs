@@ -31,6 +31,6 @@ impl System {
             .process(self.pid)
             .expect("current process to exist");
         let rss_bytes = pstats.memory();
-        rss_bytes >> 10
+        rss_bytes / 1024
     }
 }
