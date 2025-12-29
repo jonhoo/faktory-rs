@@ -90,7 +90,7 @@ async fn well_behaved() {
         serde_json::from_str(cmds[0].strip_prefix("BEAT ").unwrap()).unwrap();
     assert_eq!(first_beat["wid"], "wid");
     assert!(first_beat["rss_kb"].is_number()); // NB
-    assert!(first_beat["rss_kb"].as_number().unwrap().as_u64().unwrap() > 0);
+    assert!(first_beat["rss_kb"].as_u64().unwrap() > 0);
     let second_beat: serde_json::Value =
         serde_json::from_str(cmds[1].strip_prefix("BEAT ").unwrap()).unwrap();
     assert_eq!(second_beat["wid"], "wid");
