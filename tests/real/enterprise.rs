@@ -8,7 +8,8 @@ use std::io;
 use tokio::time;
 
 async fn print_job(j: Job) -> io::Result<()> {
-    Ok(eprintln!("{:?}", j))
+    eprintln!("{j:?}");
+    Ok(())
 }
 macro_rules! assert_had_one {
     ($c:expr, $q:expr) => {
@@ -220,7 +221,7 @@ async fn ent_unique_job_until_success() {
                 let sleep_secs =
                     serde_json::from_value::<i64>(diffuculty_level).expect("a valid number");
                 time::sleep(time::Duration::from_secs(sleep_secs as u64)).await;
-                eprintln!("{:?}", job);
+                eprintln!("{job:?}");
                 Ok::<(), io::Error>(())
             })
             .connect_to(&url1)
@@ -302,7 +303,7 @@ async fn ent_unique_job_until_start() {
                 let sleep_secs =
                     serde_json::from_value::<i64>(diffuculty_level).expect("a valid number");
                 time::sleep(time::Duration::from_secs(sleep_secs as u64)).await;
-                eprintln!("{:?}", job);
+                eprintln!("{job:?}");
                 Ok::<(), io::Error>(())
             })
             .connect_to(&url1)
@@ -475,7 +476,8 @@ async fn test_tracker_can_send_and_retrieve_job_execution_progress() {
                 assert!(result.updated_at.is_some());
                 assert_eq!(result.percent, Some(33));
                 // considering the job done
-                Ok::<(), io::Error>(eprintln!("{:?}", job))
+                eprintln!("{job:?}");
+                Ok::<(), io::Error>(())
             })
         })
         .connect_to(&url)
@@ -938,8 +940,7 @@ async fn test_callback_will_be_queued_upon_commit_even_if_batch_is_empty() {
     let mut w = WorkerBuilder::default()
         .register_fn(complete_cb_jobtype, |_job| async { Ok(()) })
         .register_fn(success_cb_jobtype, |_job| async {
-            Err(io::Error::new(
-                io::ErrorKind::Other,
+            Err(io::Error::other(
                 "we want this one to fail to test the 'CallbackState' behavior",
             ))
         })

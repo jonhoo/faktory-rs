@@ -16,6 +16,8 @@ mod health;
 mod runner;
 mod state;
 mod stop;
+#[cfg(feature = "sysinfo")]
+mod system;
 
 pub use builder::WorkerBuilder;
 pub use runner::JobRunner;
@@ -173,6 +175,27 @@ pub struct Worker<E> {
     // NOTE: this is always `Some` if `self.terminated == false` whenever any `pub` function
     // on this type returns. it is `Some(std::future::pending())` if no shutdown signaler is set.
     shutdown_signal: Option<ShutdownSignal>,
+
+    // NOTE: we are storing quite a few worker-related things on the ClientOptions
+    // (e.g. wid, hostname), but not doing so with `System`, because
+    // 1) it's not `Clone` and so we would need an Arc
+    // 2) we need it mutable and so we would need a Mutex
+    // 3) it's actually only coordinator who should have access to it anyways
+    #[cfg(feature = "sysinfo")]
+    sys: Option<system::System>,
+}
+
+#[cfg(feature = "sysinfo")]
+impl<E> Worker<E> {
+    /// Whether resources consumption stats will be collected and sent to Faktory.
+    ///
+    /// This will return `true` if [`WorkerBuilder::with_sysinfo`] was called
+    /// when constructing this worker and the target OS is among those supported
+    /// [`sysinfo`](https://docs.rs/sysinfo/latest/sysinfo/index.html#supported-oses)
+    /// and the process has got necessary permissions to access stas files.
+    pub fn is_sysinfo_enabled(&self) -> bool {
+        self.sys.is_some()
+    }
 }
 
 impl Worker<()> {
@@ -197,6 +220,7 @@ impl<E> Worker<E> {
         callbacks: CallbacksRegistry<E>,
         shutdown_timeout: Option<Duration>,
         shutdown_signal: Option<ShutdownSignal>,
+        #[cfg(feature = "sysinfo")] sys: Option<system::System>,
     ) -> Self {
         Worker {
             c,
@@ -208,6 +232,8 @@ impl<E> Worker<E> {
             shutdown_signal: Some(
                 shutdown_signal.unwrap_or_else(|| Box::pin(std::future::pending())),
             ),
+            #[cfg(feature = "sysinfo")]
+            sys,
         }
     }
 
@@ -358,7 +384,7 @@ impl<E: StdError + 'static + Send> Worker<E> {
             }
             Err(e) => {
                 let fail = match e {
-                    Failed::BadJobType(jt) => Fail::generic(jid, format!("No handler for {}", jt)),
+                    Failed::BadJobType(jt) => Fail::generic(jid, format!("No handler for {jt}")),
                     Failed::Application(e) => Fail::generic_with_backtrace(jid, e),
                     Failed::HandlerPanic(e) => {
                         if e.is_cancelled() {
@@ -411,6 +437,8 @@ impl<E: StdError + 'static + Send> Worker<E> {
             forever: self.forever,
             shutdown_timeout: self.shutdown_timeout,
             shutdown_signal: Some(Box::pin(std::future::pending())),
+            #[cfg(feature = "sysinfo")]
+            sys: None,
         })
     }
 

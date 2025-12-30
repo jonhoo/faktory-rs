@@ -70,8 +70,5 @@ async fn main() {
     // wait for processing results
     let res = rx.recv().await.expect("some calculation result");
 
-    println!(
-        "Send a job with args `vec![5, 8]`. Received result `{}`",
-        res
-    );
+    println!("Send a job with args `vec![5, 8]`. Received result `{res}`");
 }

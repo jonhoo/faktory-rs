@@ -152,7 +152,7 @@ impl Protocol {
             #[cfg(feature = "ent")]
             Some("NOTUNIQUE") => Protocol::UniqueConstraintViolation { msg: error },
             Some(c) => Protocol::Internal {
-                msg: format!("{} {}", c, error),
+                msg: format!("{c} {error}"),
             },
             None => Protocol::Internal {
                 msg: "empty error response".to_string(),

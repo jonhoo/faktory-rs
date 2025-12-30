@@ -22,7 +22,7 @@ pub fn bad(expected: &'static str, got: &RawResponse) -> error::Protocol {
         },
         None => error::Protocol::BadType {
             expected,
-            received: format!("{:?}", got),
+            received: format!("{got:?}"),
         },
     }
 }
