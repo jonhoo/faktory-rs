@@ -321,8 +321,8 @@ impl<E: 'static> WorkerBuilder<E> {
     #[cfg_attr(docsrs, doc(cfg(feature = "sysinfo")))]
     pub fn with_sysinfo(mut self) -> Self {
         match super::system::System::try_new() {
-            Err(_) => {
-                tracing::warn!("cannot install sysinfo component: the target OS is supported but access to stats files is denied");
+            Err(()) => {
+                tracing::warn!("cannot install sysinfo component: the target OS is supported but access to stats failed");
             }
             Ok(None) => {
                 tracing::warn!("cannot install sysinfo component: the target OS is not supported");
