@@ -309,14 +309,28 @@ impl<E: 'static> WorkerBuilder<E> {
     /// No system-wide or other processes data gets collected. Furthermore, it is
     /// only the minimal amount of data (RSS as of Faktory v1.9.3) about the current
     /// process that gets scraped and sent over to the Faktory server periodically.
+    /// In case the process lacks permissions, this will emit a warning and will
+    /// not install the sysinfo component inside of the worker, i.e. will not be
+    /// sending stats to the Faktory server.
     ///
-    /// Also note that this does nothing in case the target OS is not supported by the
+    /// Also note that this does nothing (other than emitting a warning) in case
+    /// the target OS is not supported by the
     /// [`sysinfo`](https://docs.rs/sysinfo/latest/sysinfo/index.html#supported-oses)
     /// crate which is being used internally.
     #[cfg(feature = "sysinfo")]
     #[cfg_attr(docsrs, doc(cfg(feature = "sysinfo")))]
     pub fn with_sysinfo(mut self) -> Self {
-        self.sys = super::system::System::new_if_os_supported();
+        match super::system::System::try_new() {
+            Err(_) => {
+                tracing::warn!("cannot install sysinfo component: the target OS is supported but access to stats files is denied");
+            }
+            Ok(None) => {
+                tracing::warn!("cannot install sysinfo component: the target OS is not supported");
+            }
+            Ok(Some(system)) => {
+                self.sys = Some(system);
+            }
+        }
         self
     }
 
