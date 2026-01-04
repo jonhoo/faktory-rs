@@ -1,3 +1,5 @@
+#![cfg(feature = "worker")]
+
 mod community;
 mod utils;
 

@@ -1,3 +1,5 @@
+#![cfg(feature = "worker")]
+
 /// This sketch should help appreciate how mock streams are being distributed across workers.
 ///
 /// Side-note. Note how `CLIENT` (another node), `WEB UI` (browser), `FAKTORY SERVER` (contribsys Faktory binary),

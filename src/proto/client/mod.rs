@@ -9,7 +9,6 @@ use super::utils::{get_env_url, url_parse};
 use super::{single, Info, Push, QueueAction, QueueControl};
 use super::{utils, PushBulk};
 use crate::error::{self, Error};
-use crate::worker::WorkerId;
 use crate::{Job, Reconnect};
 use std::collections::HashMap;
 use tokio::io::{AsyncBufRead, AsyncWrite, BufStream};
@@ -157,6 +156,8 @@ pub struct Client {
     stream: BoxedConnection,
     opts: ClientOptions,
 }
+
+#[cfg(feature = "worker")]
 impl Client {
     pub(crate) async fn connect_again(&mut self) -> Result<Self, Error> {
         let s = self.stream.reconnect().await?;
@@ -181,6 +182,7 @@ impl Drop for Client {
     }
 }
 
+#[cfg(feature = "worker")]
 pub(crate) enum HeartbeatStatus {
     Ok,
     Terminate,
@@ -250,6 +252,7 @@ impl Client {
             }
         }
 
+        #[cfg(feature = "worker")]
         if self.opts.is_worker {
             // fill in any missing options, and remember them for re-connect
             let hostname = self
@@ -261,7 +264,11 @@ impl Client {
             self.opts.hostname = Some(hostname);
             let pid = self.opts.pid.unwrap_or_else(|| std::process::id() as usize);
             self.opts.pid = Some(pid);
-            let wid = self.opts.wid.clone().unwrap_or_else(WorkerId::random);
+            let wid = self
+                .opts
+                .wid
+                .clone()
+                .unwrap_or_else(crate::worker::WorkerId::random);
             self.opts.wid = Some(wid);
 
             hello.hostname = Some(self.opts.hostname.clone().unwrap());
@@ -288,6 +295,7 @@ impl Client {
         Ok(ReadToken(self))
     }
 
+    #[cfg(feature = "worker")]
     pub(crate) async fn fetch<Q>(&mut self, queues: &[Q]) -> Result<Option<Job>, Error>
     where
         Q: AsRef<str> + Sync,
@@ -298,6 +306,7 @@ impl Client {
             .await
     }
 
+    #[cfg(feature = "worker")]
     pub(crate) async fn heartbeat(
         &mut self,
         rss_kb: Option<u64>,

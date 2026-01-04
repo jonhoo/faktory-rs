@@ -104,6 +104,7 @@ pub mod error;
 
 mod proto;
 
+#[cfg(feature = "worker")]
 #[path = "./worker/mod.rs"]
 mod worker_module;
 
@@ -114,6 +115,8 @@ pub use crate::proto::{
     ServerSnapshot,
 };
 
+#[cfg(feature = "worker")]
+#[cfg_attr(docsrs, doc(cfg(feature = "worker")))]
 /// Faktory worker related logic.
 pub mod worker {
     pub use crate::proto::WorkerId;

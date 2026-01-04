@@ -50,7 +50,7 @@ If you want to **accept** jobs from Faktory, use `Worker`.
 
 ```rust
 use async_trait::async_trait;
-use faktory::{JobRunner, Worker};
+use faktory::worker::{JobRunner, Worker}; // available on `worker` feature only
 use std::io;
 
 struct DomainEntity(i32);
@@ -110,7 +110,7 @@ cargo run --example example_name
 For instance, to run a `run_to_completion` example in release mode, hit:
 
 ```bash
-cargo run --example run_to_completion --release
+cargo run --example run_to_completion --features worker --release
 ```
 
 Make sure you've got Faktory server up-and-running. See [instructions](#run-test-suite-locally) on how to spin up Faktory locally.
