@@ -1,8 +1,8 @@
-#![cfg(feature = "sysinfo")]
+#![cfg(all(feature = "worker", feature = "sysinfo"))]
 
 mod mock;
 
-use faktory::{StopReason, WorkerBuilder, WorkerId};
+use faktory::worker::{StopReason, WorkerBuilder, WorkerId};
 use std::{io, time::Duration};
 use tokio::io::BufStream;
 

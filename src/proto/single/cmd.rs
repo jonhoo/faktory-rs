@@ -1,7 +1,12 @@
 use super::mutation::{Filter, JobSet};
 use super::utils::Empty;
 use crate::error::Error;
-use crate::proto::{Job, JobId, WorkerId};
+use crate::proto::Job;
+#[cfg(feature = "worker")]
+use crate::proto::JobId;
+#[cfg(feature = "worker")]
+use crate::proto::WorkerId;
+#[cfg(feature = "worker")]
 use std::error::Error as StdError;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
@@ -82,21 +87,24 @@ self_to_cmd!(Info);
 
 // -------------------- ACK ----------------------
 
+#[cfg(feature = "worker")]
 #[derive(Serialize)]
 pub(crate) struct Ack {
     jid: JobId,
 }
 
+#[cfg(feature = "worker")]
 impl Ack {
     pub fn new<J: Into<JobId>>(jid: J) -> Ack {
         Ack { jid: jid.into() }
     }
 }
 
+#[cfg(feature = "worker")]
 self_to_cmd!(Ack, "ACK");
 
 // -------------------- BEAT ------------------
-
+#[cfg(feature = "worker")]
 #[derive(Serialize)]
 pub(crate) struct Heartbeat {
     wid: WorkerId,
@@ -106,6 +114,7 @@ pub(crate) struct Heartbeat {
     rss_kb: Option<u64>,
 }
 
+#[cfg(feature = "worker")]
 impl Heartbeat {
     pub fn new<S: Into<WorkerId>>(wid: S, rss_kb: Option<u64>) -> Heartbeat {
         Heartbeat {
@@ -115,10 +124,12 @@ impl Heartbeat {
     }
 }
 
+#[cfg(feature = "worker")]
 self_to_cmd!(Heartbeat, "BEAT");
 
 // -------------------- FAIL ---------------------
 
+#[cfg(feature = "worker")]
 #[derive(Serialize, Clone)]
 pub(crate) struct Fail {
     #[serde(rename = "jid")]
@@ -130,6 +141,7 @@ pub(crate) struct Fail {
     backtrace: Vec<String>,
 }
 
+#[cfg(feature = "worker")]
 impl Fail {
     pub(crate) fn new(job_id: JobId, kind: impl Into<String>, message: impl Into<String>) -> Self {
         Fail {
@@ -170,6 +182,7 @@ impl Fail {
     }
 }
 
+#[cfg(feature = "worker")]
 self_to_cmd!(Fail, "FAIL");
 
 // ---------------------- END --------------------
@@ -212,12 +225,19 @@ where
 
 #[derive(Serialize)]
 pub(crate) struct Hello {
+    #[cfg(feature = "worker")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hostname: Option<String>,
+
+    #[cfg(feature = "worker")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wid: Option<WorkerId>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg(feature = "worker")]
     pub pid: Option<usize>,
+
+    #[cfg(feature = "worker")]
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub labels: Vec<String>,
 
@@ -233,12 +253,16 @@ pub(crate) struct Hello {
 impl Default for Hello {
     fn default() -> Self {
         Hello {
+            #[cfg(feature = "worker")]
             hostname: None,
+            #[cfg(feature = "worker")]
             wid: None,
+            #[cfg(feature = "worker")]
             pid: None,
+            #[cfg(feature = "worker")]
             labels: Vec::new(),
-            password_hash: None,
             version: crate::proto::EXPECTED_PROTOCOL_VERSION,
+            password_hash: None,
         }
     }
 }
@@ -349,9 +373,12 @@ self_to_cmd!(MutationAction<'_>, "MUTATE");
 
 #[cfg(test)]
 mod test {
-    use super::{Heartbeat, MutationAction, MutationType};
-    use crate::proto::{Filter, JobSet, WorkerId};
+    #[cfg(feature = "worker")]
+    use super::{Heartbeat, WorkerId};
+    use super::{MutationAction, MutationType};
+    use crate::proto::{Filter, JobSet};
 
+    #[cfg(feature = "worker")]
     #[test]
     fn heartbeat_is_serialized_correctly() {
         let wid = WorkerId::random();

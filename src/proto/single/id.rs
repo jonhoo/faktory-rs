@@ -69,10 +69,12 @@ string_wrapper_impls!(JobId);
 ///
 /// If you do not have any domain, product or organisation specific requirements, you may prefer
 /// to have a random job identifier generated for you with [`random`](WorkerId::random).
+#[cfg(feature = "worker")]
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct WorkerId(String);
 
+#[cfg(feature = "worker")]
 impl WorkerId {
     /// Internally, generates a 32-char long random ASCII string.
     pub fn random() -> Self {
@@ -80,6 +82,7 @@ impl WorkerId {
     }
 }
 
+#[cfg(feature = "worker")]
 string_wrapper_impls!(WorkerId);
 
 // -----------------------------------------------------
