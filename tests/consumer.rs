@@ -56,6 +56,7 @@
 ///    vector of streams, we panic to indicate that we mis-planned things when setting up the test;
 mod mock;
 
+use faktory::worker::*;
 use faktory::*;
 use std::{io, sync::Arc, time::Duration};
 use tokio::io::BufStream;

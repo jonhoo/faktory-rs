@@ -2,6 +2,7 @@ use crate::skip_if_not_enterprise;
 use crate::utils::learn_faktory_url;
 use chrono::Utc;
 use faktory::ent::*;
+use faktory::worker::*;
 use faktory::*;
 use serde_json::Value;
 use std::io;

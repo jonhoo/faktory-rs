@@ -1,5 +1,6 @@
 use async_trait::async_trait;
-use faktory::{Client, Job, JobRunner, Worker};
+use faktory::worker::{JobRunner, Worker};
+use faktory::{Client, Job};
 use std::io::{Error as IOError, Result as IOResult};
 use std::sync::Arc;
 use tokio::sync::mpsc;

@@ -27,7 +27,7 @@
 //!
 //! To connect to a Faktory server hosted over TLS, add the `tls` feature, and see the
 //! documentation for `TlsStream`, which can be supplied to [`Client::connect_with`] and
-//! [`WorkerBuilder::connect_with`].
+//! [`worker::WorkerBuilder::connect_with`].
 //!
 //! # Examples
 //!
@@ -49,7 +49,8 @@
 //! ```no_run
 //! # tokio_test::block_on(async {
 //! use async_trait::async_trait;
-//! use faktory::{Job, JobRunner, Worker};
+//! use faktory::Job;
+//! use faktory::worker::{JobRunner, Worker};
 //! use std::io;
 //!
 //! struct DomainEntity(i32);
@@ -102,21 +103,27 @@ extern crate serde_derive;
 pub mod error;
 
 mod proto;
-mod worker;
+
+#[path = "./worker/mod.rs"]
+mod worker_module;
 
 pub use crate::error::Error;
 
 pub use crate::proto::{
     Client, Connection, DataSnapshot, Failure, FaktoryState, Job, JobBuilder, JobId, Reconnect,
-    ServerSnapshot, WorkerId,
+    ServerSnapshot,
 };
+
+/// Faktory worker related logic.
+pub mod worker {
+    pub use crate::proto::WorkerId;
+    pub use crate::worker_module::{JobRunner, StopDetails, StopReason, Worker, WorkerBuilder};
+}
 
 /// Constructs used to mutate queues on the Faktory server.
 pub mod mutate {
     pub use crate::proto::{Filter, JobSet};
 }
-
-pub use crate::worker::{JobRunner, StopDetails, StopReason, Worker, WorkerBuilder};
 
 #[cfg(feature = "ent")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ent")))]

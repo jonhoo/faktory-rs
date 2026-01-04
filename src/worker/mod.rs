@@ -117,7 +117,7 @@ type CallbacksRegistry<E> = FnvHashMap<String, Callback<E>>;
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// use faktory::{Worker, Job};
+/// use faktory::{worker::Worker, Job};
 /// use std::io;
 ///
 /// async fn process_job(job: Job) -> io::Result<()> {
@@ -148,7 +148,7 @@ type CallbacksRegistry<E> = FnvHashMap<String, Callback<E>>;
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// # use faktory::Worker;
+/// # use faktory::worker::Worker;
 /// # use std::io;
 /// let _w = Worker::builder()
 ///     .register_fn("bar", |job| async move {

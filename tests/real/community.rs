@@ -2,9 +2,8 @@ use crate::utils::launch_isolated_faktory;
 use crate::{assert_gt, assert_gte, assert_lt, skip_check, skip_if_containers_not_enabled};
 use chrono::Utc;
 use faktory::mutate::{Filter, JobSet};
-use faktory::{
-    Client, Job, JobBuilder, JobId, JobRunner, StopReason, Worker, WorkerBuilder, WorkerId,
-};
+use faktory::worker::{JobRunner, StopReason, Worker, WorkerBuilder, WorkerId};
+use faktory::{Client, Job, JobBuilder, JobId};
 use rand::Rng;
 use serde_json::Value;
 use std::collections::HashMap;

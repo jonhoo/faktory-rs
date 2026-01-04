@@ -1,4 +1,4 @@
-use faktory::Worker;
+use faktory::worker::Worker;
 use std::io::Error as IOError;
 
 #[tokio::main]
