@@ -24,14 +24,14 @@ pub(crate) struct ClientOptions {
     #[cfg(feature = "worker")]
     pub(crate) labels: Vec<String>,
 
-    /// Whether this client is instatianted for a worker (i.e. to consume jobs).
-    #[cfg(feature = "worker")]
-    pub(crate) is_worker: bool,
-
     /// Password to authenticate with.
     ///
     /// Defaults to None.
     pub(crate) password: Option<String>,
+
+    /// Whether this client is instatianted for a worker (i.e. to consume jobs).
+    #[cfg(feature = "worker")]
+    pub(crate) is_worker: bool,
 }
 
 impl Default for ClientOptions {
@@ -45,9 +45,9 @@ impl Default for ClientOptions {
             wid: None,
             #[cfg(feature = "worker")]
             labels: vec!["rust".to_string()],
+            password: None,
             #[cfg(feature = "worker")]
             is_worker: false,
-            password: None,
         }
     }
 }
