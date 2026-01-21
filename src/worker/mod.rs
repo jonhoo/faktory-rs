@@ -19,6 +19,7 @@ mod stop;
 #[cfg(feature = "sysinfo")]
 mod system;
 
+pub use crate::proto::WorkerId; // re-exporting `WorkerId`
 pub use builder::WorkerBuilder;
 pub use runner::JobRunner;
 pub use stop::{StopDetails, StopReason};

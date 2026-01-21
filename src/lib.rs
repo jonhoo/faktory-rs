@@ -105,8 +105,9 @@ pub mod error;
 mod proto;
 
 #[cfg(feature = "worker")]
-#[path = "./worker/mod.rs"]
-mod worker_module;
+#[cfg_attr(docsrs, doc(cfg(feature = "worker")))]
+/// Faktory worker related logic.
+pub mod worker;
 
 pub use crate::error::Error;
 
@@ -114,14 +115,6 @@ pub use crate::proto::{
     Client, Connection, DataSnapshot, Failure, FaktoryState, Job, JobBuilder, JobId, Reconnect,
     ServerSnapshot,
 };
-
-#[cfg(feature = "worker")]
-#[cfg_attr(docsrs, doc(cfg(feature = "worker")))]
-/// Faktory worker related logic.
-pub mod worker {
-    pub use crate::proto::WorkerId;
-    pub use crate::worker_module::{JobRunner, StopDetails, StopReason, Worker, WorkerBuilder};
-}
 
 /// Constructs used to mutate queues on the Faktory server.
 pub mod mutate {
