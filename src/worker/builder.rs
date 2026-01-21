@@ -31,7 +31,6 @@ pub struct WorkerBuilder<E> {
     shutdown_timeout: Option<Duration>,
     shutdown_signal: Option<ShutdownSignal>,
     tls_kind: TlsKind,
-    #[cfg(feature = "sysinfo")]
     sys: Option<super::system::System>,
 }
 
@@ -54,7 +53,6 @@ impl<E> Default for WorkerBuilder<E> {
             shutdown_timeout: None,
             shutdown_signal: None,
             tls_kind: TlsKind::None,
-            #[cfg(feature = "sysinfo")]
             sys: None,
         }
     }
@@ -316,8 +314,6 @@ impl<E: 'static> WorkerBuilder<E> {
     /// the target OS is not supported by the
     /// [`sysinfo`](https://docs.rs/sysinfo/latest/sysinfo/index.html#supported-oses)
     /// crate which is being used internally.
-    #[cfg(feature = "sysinfo")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "sysinfo")))]
     pub fn with_sysinfo(mut self) -> Self {
         match super::system::System::try_new() {
             Err(()) => {
@@ -354,7 +350,6 @@ impl<E: 'static> WorkerBuilder<E> {
             self.callbacks,
             self.shutdown_timeout,
             self.shutdown_signal,
-            #[cfg(feature = "sysinfo")]
             self.sys,
         );
         Ok(worker)

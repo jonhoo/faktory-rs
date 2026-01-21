@@ -9,8 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- sysinfo: support opting into memory stats collection and sending over to Faktory ([#106])
-
 ### Changed
 
 - Update dependencies: `hostname`, `tokio-rustls`, `thiserror`, `rand`, `derive_builder` ([#82])
@@ -30,7 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [#82]: https://github.com/jonhoo/faktory-rs/pull/82
 [#97]: https://github.com/jonhoo/faktory-rs/pull/97
-[#106]: https://github.com/jonhoo/faktory-rs/pull/106
 [#109]: https://github.com/jonhoo/faktory-rs/pull/109
 
 ## [0.13.1] - 2025-07-06

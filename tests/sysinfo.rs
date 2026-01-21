@@ -1,4 +1,4 @@
-#![cfg(all(feature = "worker", feature = "sysinfo"))]
+#![cfg(feature = "worker")]
 
 mod mock;
 
