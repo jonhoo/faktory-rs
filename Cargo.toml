@@ -52,9 +52,7 @@ rustls-platform-verifier = { version = "0.6", optional = true }
 tracing = "0.1"
 url = "2"
 semver = { version = "1.0.23", features = ["serde"] }
-sysinfo = { version = "0.37.2", default-features = false, features = [
-  "system",
-] }
+sysinfo = { version = "0.38.0", default-features = false, features = ["system"] }
 
 [dev-dependencies]
 dockerfile-parser = "0.9.0"
