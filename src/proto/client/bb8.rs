@@ -1,22 +1,19 @@
-use bb8::ManageConnection;
-use super::{Client, utils::get_env_url};
+use super::{utils::get_env_url, Client};
 use crate::Error;
+use bb8::ManageConnection;
 
 #[cfg(any(feature = "native_tls", feature = "rustls"))]
 use tokio::io::BufStream;
 
 #[cfg(feature = "rustls")]
 use {
-    std::sync::Arc,
     crate::tls::rustls::TlsStream as RustlsStream,
-    tokio_rustls::rustls::{ClientConfig, RootCertStore}
+    std::sync::Arc,
+    tokio_rustls::rustls::{ClientConfig, RootCertStore},
 };
 
 #[cfg(feature = "native_tls")]
-use {
-    crate::tls::native_tls::TlsStream as NativeTlsStream,
-    tokio_native_tls::native_tls
-};
+use {crate::tls::native_tls::TlsStream as NativeTlsStream, tokio_native_tls::native_tls};
 
 /// A BB8 connection pool for Faktory clients.
 ///
@@ -102,7 +99,7 @@ pub struct ClientConnectionManager {
     /// The Faktory server URL to connect to
     url: String,
     /// TLS configuration for the connection
-    tls: TlsConnector
+    tls: TlsConnector,
 }
 
 impl ClientConnectionManager {
@@ -123,7 +120,7 @@ impl ClientConnectionManager {
     pub fn new(url: &str, tls: TlsConnector) -> Self {
         Self {
             url: url.to_string(),
-            tls
+            tls,
         }
     }
 
@@ -171,7 +168,7 @@ impl ClientConnectionManager {
 
         Ok(Self {
             url: get_env_url(),
-            tls
+            tls,
         })
     }
 }
@@ -187,25 +184,21 @@ impl ManageConnection for ClientConnectionManager {
     /// specified when creating the manager.
     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
         match self.tls {
-            TlsConnector::NoTls => {
-                Client::connect_to(self.url.as_str()).await
-            },
+            TlsConnector::NoTls => Client::connect_to(self.url.as_str()).await,
             #[cfg(feature = "rustls")]
             TlsConnector::Rustls(ref connector) => {
-                let stream = RustlsStream::with_connector(
-                    connector.clone(),
-                    Some(self.url.as_str())
-                ).await?;
+                let stream =
+                    RustlsStream::with_connector(connector.clone(), Some(self.url.as_str()))
+                        .await?;
 
                 let buffered = BufStream::new(stream);
                 Client::connect_with(buffered, None).await
             }
             #[cfg(feature = "native_tls")]
             TlsConnector::NativeTls(ref connector) => {
-                let stream = NativeTlsStream::with_connector(
-                    connector.clone(),
-                    Some(self.url.as_str())
-                ).await?;
+                let stream =
+                    NativeTlsStream::with_connector(connector.clone(), Some(self.url.as_str()))
+                        .await?;
 
                 let buffered = BufStream::new(stream);
                 Client::connect_with(buffered, None).await

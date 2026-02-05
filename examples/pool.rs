@@ -1,8 +1,8 @@
 use async_trait::async_trait;
-use tokio::time;
-use faktory::bb8::{PooledClient, ClientConnectionManager};
+use faktory::bb8::{ClientConnectionManager, PooledClient};
 use faktory::{Job, JobRunner, Worker};
 use std::io::{Error as IOError, Result as IOResult};
+use tokio::time;
 
 pub struct JobHandler;
 
@@ -43,8 +43,7 @@ async fn main() {
             let mut client = pool.get().await.expect("get client from pool");
 
             client
-                .enqueue(Job::builder("job_type")
-                    .args(vec![5, 8]).build())
+                .enqueue(Job::builder("job_type").args(vec![5, 8]).build())
                 .await
                 .expect("enqueued ok");
         });
@@ -59,7 +58,7 @@ async fn main() {
     tokio::spawn(async move {
         w.run(&["default"]).await.expect("Worker run succeeded");
     });
-    
+
     // wait some time to let jobs be processed
     time::sleep(time::Duration::from_secs(5)).await;
 }
