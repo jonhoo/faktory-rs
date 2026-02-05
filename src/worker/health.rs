@@ -58,7 +58,7 @@ where
                 continue;
             }
 
-            match self.c.heartbeat().await {
+            match self.heartbeat().await {
                 Ok(hb) => {
                     match hb {
                         HeartbeatStatus::Ok => {
@@ -93,5 +93,14 @@ where
             }
             last = time::Instant::now();
         }
+    }
+
+    async fn heartbeat(&mut self) -> Result<HeartbeatStatus, Error> {
+        #[cfg(feature = "sysinfo")]
+        let rss_kb = self.sys.as_mut().map(|sys| sys.rss_kb());
+        #[cfg(not(feature = "sysinfo"))]
+        let rss_kb = None;
+
+        self.c.heartbeat(rss_kb).await
     }
 }

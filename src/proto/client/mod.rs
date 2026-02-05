@@ -301,12 +301,17 @@ impl Client {
             .await
     }
 
-    pub(crate) async fn heartbeat(&mut self) -> Result<HeartbeatStatus, Error> {
-        single::write_command(
-            &mut self.stream,
-            &single::Heartbeat::new(self.opts.wid.as_ref().unwrap().clone()),
-        )
-        .await?;
+    pub(crate) async fn heartbeat(
+        &mut self,
+        rss_kb: Option<u64>,
+    ) -> Result<HeartbeatStatus, Error> {
+        let wid = self
+            .opts
+            .wid
+            .as_ref()
+            .expect("every worker to have wid")
+            .clone();
+        single::write_command(&mut self.stream, &single::Heartbeat::new(wid, rss_kb)).await?;
 
         match single::read_json::<_, serde_json::Value>(&mut self.stream).await? {
             None => Ok(HeartbeatStatus::Ok),
@@ -319,7 +324,7 @@ impl Client {
                 Some("quiet") => Ok(HeartbeatStatus::Quiet),
                 _ => Err(error::Protocol::BadType {
                     expected: "heartbeat response",
-                    received: format!("{}", s),
+                    received: s.to_string(),
                 }
                 .into()),
             },

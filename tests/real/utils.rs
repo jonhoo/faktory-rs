@@ -150,7 +150,7 @@ pub async fn launch_isolated_faktory(container_name: Option<String>) -> TestCont
         .expect("post to have been published")
         .map_to_host_port_ipv4(7419)
         .expect("host post to have been assigned by OS");
-    let faktory_url = format!("tcp://localhost:{}", port);
+    let faktory_url = format!("tcp://localhost:{port}");
     TestContext {
         _container_handle: faktory_container,
         faktory_url,

@@ -13,7 +13,7 @@ async fn main() {
     // - worker panic;
     Worker::builder()
         .register_fn("job_type", |j| async move {
-            println!("{:?}", j);
+            println!("{j:?}");
             Ok::<(), IOError>(())
         })
         .connect()

@@ -147,7 +147,7 @@ async fn dequeue() {
     );
     s.ok(0); // for the ACK
     if let Err(e) = w.run_one(0, &["default"]).await {
-        println!("{:?}", e);
+        println!("{e:?}");
         unreachable!();
     }
 
@@ -192,7 +192,7 @@ async fn dequeue_first_empty() {
     match w.run_one(0, &["default"]).await {
         Ok(did_work) => assert!(!did_work),
         Err(e) => {
-            println!("{:?}", e);
+            println!("{e:?}");
             unreachable!();
         }
     }
@@ -200,7 +200,7 @@ async fn dequeue_first_empty() {
     match w.run_one(0, &["default"]).await {
         Ok(did_work) => assert!(did_work),
         Err(e) => {
-            println!("{:?}", e);
+            println!("{e:?}");
             unreachable!();
         }
     }
@@ -561,11 +561,11 @@ async fn heart_broken() {
     let w: Worker<io::Error> = Worker::builder()
         .with_graceful_shutdown(signal)
         .shutdown_timeout(Duration::from_millis(500))
-        .register_fn("foobar", |_j| async move {
+        .register_fn("foobar", |j| async move {
             // this magic 7 means: give the coordinating worker (and namely its heartbeat task)
             // just enough time to send a heartbeat message to the server and get disappointed
             // with the server response
-            println!("{:?}", _j);
+            println!("{j:?}");
             sleep(Duration::from_secs(7)).await;
             Ok(())
         })

@@ -251,7 +251,7 @@ async fn fail() {
             let tx = sync::Arc::clone(&tx);
             Box::pin(async move {
                 tx.lock().unwrap().send(j).unwrap();
-                Err(io::Error::new(io::ErrorKind::Other, "nope"))
+                Err(io::Error::other("nope"))
             })
         })
         .connect()
@@ -616,12 +616,14 @@ async fn test_jobs_pushed_in_bulk() {
 
 async fn assert_args_empty(j: Job) -> io::Result<()> {
     assert!(j.args().is_empty());
-    Ok(eprintln!("{:?}", j))
+    eprintln!("{j:?}");
+    Ok(())
 }
 
 async fn assert_args_not_empty(j: Job) -> io::Result<()> {
     assert!(!j.args().is_empty());
-    Ok(eprintln!("{:?}", j))
+    eprintln!("{j:?}");
+    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -681,7 +683,7 @@ use tokio::sync::mpsc::{self, Sender};
 type PinnedFut = Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send>>;
 type BoxedHandler = Box<dyn Fn(Job) -> PinnedFut + Send + Sync + 'static>;
 fn process_hard_task(sender: sync::Arc<mpsc::Sender<bool>>) -> BoxedHandler {
-    return Box::new(move |j: Job| {
+    Box::new(move |j: Job| {
         let sender = sync::Arc::clone(&sender);
         Box::pin(async move {
             let complexity = j.args()[0].as_u64().unwrap();
@@ -689,7 +691,7 @@ fn process_hard_task(sender: sync::Arc<mpsc::Sender<bool>>) -> BoxedHandler {
             tokio::time::sleep(tokio::time::Duration::from_millis(complexity)).await;
             Ok::<(), io::Error>(())
         })
-    });
+    })
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -814,7 +816,7 @@ async fn test_panic_and_errors_in_handler() {
     // force-rescheduling and immediatey dropping any remainders
     let local = "test_panic_and_errors_in_handler";
     let mut c = Client::connect().await.unwrap();
-    let pattern = format!(r#"*\"args\":\[\"{}\"\]*"#, local);
+    let pattern = format!(r#"*\"args\":\[\"{local}\"\]*"#);
     c.requeue(JobSet::Retries, Filter::from_pattern(pattern.as_str()))
         .await
         .unwrap();
@@ -832,10 +834,7 @@ async fn test_panic_and_errors_in_handler() {
             panic_any(0);
         })
         .register_blocking_fn("error_from_SYNC_handler", |_j| {
-            Err::<(), io::Error>(io::Error::new(
-                io::ErrorKind::Other,
-                "error_from_SYNC_handler",
-            ))
+            Err::<(), io::Error>(io::Error::other("error_from_SYNC_handler"))
         })
         // async handlers
         .register_fn("panic_ASYNC_handler_str", |_j| async move {
@@ -848,10 +847,7 @@ async fn test_panic_and_errors_in_handler() {
             panic_any(0);
         })
         .register_fn("error_from_ASYNC_handler", |_j| async move {
-            Err::<(), io::Error>(io::Error::new(
-                io::ErrorKind::Other,
-                "error_from_ASYNC_handler",
-            ))
+            Err::<(), io::Error>(io::Error::other("error_from_ASYNC_handler"))
         })
         .connect()
         .await

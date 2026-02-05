@@ -82,6 +82,7 @@
 //!         Ok::<(), io::Error>(())
 //!     })
 //!     .with_rustls() // available on `rustls` feature only
+//!     .with_sysinfo() // available on `sysinfo` feature only
 //!     .connect()
 //!     .await
 //!     .unwrap();
