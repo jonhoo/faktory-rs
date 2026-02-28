@@ -1,5 +1,6 @@
 use clap::value_parser;
 use clap::{Arg, Command};
+use faktory::worker::*;
 use faktory::*;
 use rand::prelude::*;
 use std::io;

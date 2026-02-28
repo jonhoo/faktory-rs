@@ -25,7 +25,7 @@ check:
 
 .PHONY: doc
 doc:
-	RUSTDOCFLAGS='--cfg docsrs' cargo +nightly d --all-features --open
+	RUSTDOCFLAGS='--cfg docsrs' cargo +nightly d --all-features --no-deps --open
 
 .PHONY: faktory
 faktory:
@@ -75,16 +75,16 @@ test/e2e/ignored:
 test/e2e/tls:
 	FAKTORY_URL_SECURE=tcp://:${FAKTORY_PASSWORD}@${FAKTORY_HOST}:${FAKTORY_PORT_SECURE} \
 	FAKTORY_URL=tcp://:${FAKTORY_PASSWORD}@${FAKTORY_HOST}:${FAKTORY_PORT} \
-	cargo test --locked --features native_tls,rustls --test tls -- \
+	cargo test --locked --features worker,native_tls,rustls --test tls -- \
 	--nocapture $(pattern)
 
 .PHONY: test/load
 test/load:
-	cargo run --release --features binaries $(jobs) $(threads)
+	cargo run --release --features binaries,worker $(jobs) $(threads)
 
 .PHONY: test/perf
 test/perf:
-	CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph -o perf.flamegraph.svg -f binaries -b loadtest
+	CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph -o perf.flamegraph.svg -f binaries,worker -b loadtest
 
 .PHONY: test/perf/clean
 test/perf/clean:

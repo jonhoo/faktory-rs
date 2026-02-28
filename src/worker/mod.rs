@@ -16,9 +16,9 @@ mod health;
 mod runner;
 mod state;
 mod stop;
-#[cfg(feature = "sysinfo")]
 mod system;
 
+pub use crate::proto::WorkerId; // re-exporting `WorkerId`
 pub use builder::WorkerBuilder;
 pub use runner::JobRunner;
 pub use stop::{StopDetails, StopReason};
@@ -117,7 +117,7 @@ type CallbacksRegistry<E> = FnvHashMap<String, Callback<E>>;
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// use faktory::{Worker, Job};
+/// use faktory::{worker::Worker, Job};
 /// use std::io;
 ///
 /// async fn process_job(job: Job) -> io::Result<()> {
@@ -148,7 +148,7 @@ type CallbacksRegistry<E> = FnvHashMap<String, Callback<E>>;
 ///
 /// ```no_run
 /// # tokio_test::block_on(async {
-/// # use faktory::Worker;
+/// # use faktory::worker::Worker;
 /// # use std::io;
 /// let _w = Worker::builder()
 ///     .register_fn("bar", |job| async move {
@@ -181,11 +181,9 @@ pub struct Worker<E> {
     // 1) it's not `Clone` and so we would need an Arc
     // 2) we need it mutable and so we would need a Mutex
     // 3) it's actually only coordinator who should have access to it anyways
-    #[cfg(feature = "sysinfo")]
     sys: Option<system::System>,
 }
 
-#[cfg(feature = "sysinfo")]
 impl<E> Worker<E> {
     /// Whether resources consumption stats will be collected and sent to Faktory.
     ///
@@ -220,7 +218,7 @@ impl<E> Worker<E> {
         callbacks: CallbacksRegistry<E>,
         shutdown_timeout: Option<Duration>,
         shutdown_signal: Option<ShutdownSignal>,
-        #[cfg(feature = "sysinfo")] sys: Option<system::System>,
+        sys: Option<system::System>,
     ) -> Self {
         Worker {
             c,
@@ -232,7 +230,6 @@ impl<E> Worker<E> {
             shutdown_signal: Some(
                 shutdown_signal.unwrap_or_else(|| Box::pin(std::future::pending())),
             ),
-            #[cfg(feature = "sysinfo")]
             sys,
         }
     }
@@ -437,7 +434,6 @@ impl<E: StdError + 'static + Send> Worker<E> {
             forever: self.forever,
             shutdown_timeout: self.shutdown_timeout,
             shutdown_signal: Some(Box::pin(std::future::pending())),
-            #[cfg(feature = "sysinfo")]
             sys: None,
         })
     }

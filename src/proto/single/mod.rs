@@ -11,7 +11,9 @@ mod resp;
 mod utils;
 
 pub use cmd::*;
-pub use id::{JobId, WorkerId};
+pub use id::JobId;
+#[cfg(feature = "worker")]
+pub use id::WorkerId;
 pub use resp::*;
 
 pub mod mutation;

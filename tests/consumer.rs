@@ -1,3 +1,5 @@
+#![cfg(feature = "worker")]
+
 /// This sketch should help appreciate how mock streams are being distributed across workers.
 ///
 /// Side-note. Note how `CLIENT` (another node), `WEB UI` (browser), `FAKTORY SERVER` (contribsys Faktory binary),
@@ -56,6 +58,7 @@
 ///    vector of streams, we panic to indicate that we mis-planned things when setting up the test;
 mod mock;
 
+use faktory::worker::*;
 use faktory::*;
 use std::{io, sync::Arc, time::Duration};
 use tokio::io::BufStream;

@@ -1,6 +1,6 @@
 [package]
 name = "faktory"
-version = "0.14.0-rc.2"
+version = "0.14.0-rc.3"
 authors = ["Jon Gjengset <jon@thesquareplanet.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -15,7 +15,7 @@ exclude = [".github", "docker", ".gitignore", "Makefile"]
 
 [features]
 default = []
-sysinfo = ["dep:sysinfo"]
+worker = ["dep:fnv", "dep:hostname"]
 native_tls = ["dep:pin-project", "dep:tokio-native-tls"]
 rustls = ["dep:pin-project", "dep:tokio-rustls", "dep:rustls-platform-verifier"]
 binaries = ["dep:clap", "tokio/macros"]
@@ -29,8 +29,8 @@ chrono = { version = "0.4", features = [
   "clock",
 ], default-features = false }
 derive_builder = "0.20"
-fnv = "1.0.5"
-hostname = "0.4"
+fnv = { version = "1.0.5", optional = true }
+hostname = { version = "0.4", optional = true }
 pin-project = { version = "1.1.4", optional = true }
 rand = "0.9"
 serde = "1.0"
@@ -52,9 +52,7 @@ rustls-platform-verifier = { version = "0.6", optional = true }
 tracing = "0.1"
 url = "2"
 semver = { version = "1.0.23", features = ["serde"] }
-sysinfo = { version = "0.37.2", default-features = false, features = [
-  "system",
-], optional = true }
+sysinfo = { version = "0.38.0", default-features = false, features = ["system"] }
 
 [dev-dependencies]
 dockerfile-parser = "0.9.0"
@@ -91,7 +89,17 @@ serde = "1.0.186"
 [[bin]]
 name = "loadtest"
 path = "src/bin/loadtest.rs"
-required-features = ["binaries"]
+required-features = ["binaries", "worker"]
+
+[[example]]
+name = "run"
+path = "examples/run.rs"
+required-features = ["worker"]
+
+[[example]]
+name = "run_to_completion"
+path = "examples/run_to_completion.rs"
+required-features = ["worker"]
 
 [package.metadata.docs.rs]
 all-features = true

@@ -1,5 +1,6 @@
 use faktory::native_tls::TlsStream;
-use faktory::{Client, Job, Worker, WorkerId};
+use faktory::worker::{Worker, WorkerId};
+use faktory::{Client, Job};
 use serde_json::Value;
 use std::{env, sync};
 use tokio::io::BufStream;
@@ -69,7 +70,8 @@ mod fixtures {
 
     mod handler {
         use async_trait::async_trait;
-        use faktory::{Job, JobRunner};
+        use faktory::worker::JobRunner;
+        use faktory::Job;
         use std::{
             io,
             sync::{mpsc::Sender, Arc, Mutex},
