@@ -660,12 +660,12 @@ async fn heart_broken() {
 mod utils {
     /// Try to interpret given `value` as a beat from `wid` worker.
     ///
-    /// Internally, with strip the `BEAT` command's prefix and - in any trailing -
-    /// suffix, interpret it as a generic `serde_json::Value` which is expected
+    /// Internally, will strip the `BEAT` command's prefix and - if any trailing -
+    /// suffix, interpret it as a generic [`serde_json::Value`] which is expected
     /// though to have `wid` and `rss_kb` fields and - furthermore - `wid` in the
-    /// message should match the provided `wid`. As the `rss_kb` field (which appears
-    /// on each beat message since we integrated sysinfo functionality) - we only
-    /// assert that it is a number greater than zero.
+    /// message should match the provided `wid`. As for the `rss_kb` field (which
+    /// appears on each beat message since we integrated sysinfo functionality),
+    /// we only assert that it is a number greater than zero.
     pub(super) fn assert_worker_beat(value: &str, wid: &str) {
         let beat_str = value
             .strip_prefix("BEAT ")

@@ -225,13 +225,10 @@ where
 pub(crate) struct Hello {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hostname: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wid: Option<WorkerId>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pid: Option<usize>,
-
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub labels: Vec<String>,
 
@@ -251,8 +248,8 @@ impl Default for Hello {
             wid: None,
             pid: None,
             labels: Vec::new(),
-            version: crate::proto::EXPECTED_PROTOCOL_VERSION,
             password_hash: None,
+            version: crate::proto::EXPECTED_PROTOCOL_VERSION,
         }
     }
 }
