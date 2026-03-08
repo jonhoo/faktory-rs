@@ -69,7 +69,6 @@ string_wrapper_impls!(JobId);
 ///
 /// If you do not have any domain, product or organisation specific requirements, you may prefer
 /// to have a random job identifier generated for you with [`random`](WorkerId::random).
-#[cfg(feature = "worker")]
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct WorkerId(String);

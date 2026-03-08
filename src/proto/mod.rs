@@ -12,7 +12,6 @@ pub(crate) use client::{ClientOptions, HeartbeatStatus}; // WorkerBuilder needs 
 
 mod single;
 
-#[cfg(feature = "worker")]
 pub use single::WorkerId;
 pub use single::{DataSnapshot, Failure, FaktoryState, Job, JobBuilder, JobId, ServerSnapshot};
 

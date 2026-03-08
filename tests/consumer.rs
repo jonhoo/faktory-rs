@@ -270,11 +270,11 @@ async fn well_behaved() {
 
     // heartbeat should have seen two beats (quiet + terminate)
     let written = s.pop_bytes_written(0);
-    let msgs = "\
-                BEAT {\"wid\":\"wid\"}\r\n\
-                BEAT {\"wid\":\"wid\"}\r\n\
-                END\r\n";
-    assert_eq!(std::str::from_utf8(&written[..]).unwrap(), msgs);
+    let written_str = std::str::from_utf8(&written[..]).unwrap();
+    let cmds: Vec<_> = written_str.splitn(3, "\r\n").collect();
+    utils::assert_worker_beat(cmds[0], "wid"); // first beat
+    utils::assert_worker_beat(cmds[1], "wid"); // second beat
+    assert_eq!(cmds[2], "END\r\n");
 
     // worker should have fetched once, and acked once
     let written = s.pop_bytes_written(1);
@@ -339,11 +339,11 @@ async fn no_first_job() {
 
     // heartbeat should have seen two beats (quiet + terminate)
     let written = s.pop_bytes_written(0);
-    let msgs = "\
-                BEAT {\"wid\":\"wid\"}\r\n\
-                BEAT {\"wid\":\"wid\"}\r\n\
-                END\r\n";
-    assert_eq!(std::str::from_utf8(&written[..]).unwrap(), msgs);
+    let written_str = std::str::from_utf8(&written[..]).unwrap();
+    let cmds: Vec<_> = written_str.splitn(3, "\r\n").collect();
+    utils::assert_worker_beat(cmds[0], "wid"); // first beat
+    utils::assert_worker_beat(cmds[1], "wid"); // second beat
+    assert_eq!(cmds[2], "END\r\n");
 
     // worker should have fetched twice, and acked once
     let written = s.pop_bytes_written(1);
@@ -416,13 +416,13 @@ async fn well_behaved_many() {
     assert_eq!(details.reason, StopReason::ServerInstruction);
     assert_eq!(details.workers_still_running, 0);
 
-    // heartbeat should have seen two beats (quiet + terminate)
+    // heartbeat should have seen two beats (quiet + terminate):
     let written = s.pop_bytes_written(0);
-    let msgs = "\
-                BEAT {\"wid\":\"wid\"}\r\n\
-                BEAT {\"wid\":\"wid\"}\r\n\
-                END\r\n";
-    assert_eq!(std::str::from_utf8(&written[..]).unwrap(), msgs);
+    let written_str = std::str::from_utf8(&written[..]).unwrap();
+    let cmds: Vec<_> = written_str.splitn(3, "\r\n").collect();
+    utils::assert_worker_beat(cmds[0], "wid"); // first beat
+    utils::assert_worker_beat(cmds[1], "wid"); // second beat
+    assert_eq!(cmds[2], "END\r\n");
 
     // each worker should have fetched once, and acked once
     for i in 0..2 {
@@ -506,23 +506,22 @@ async fn terminate() {
     //
     // Heartbeat thread should have sent one BEAT command, then an immediate FAIL, and a final END:
     // <---------- BEAT ---------><---------------------------- FAIL JOB -----------------------------------------><-END->
-    // "BEAT {\"wid\":\"wid\"}\r\nFAIL {\"jid\":\"forever\",\"errtype\":\"unknown\",\"message\":\"terminated\"}\r\nEND\r\n"
+    // "BEAT {\"wid\":\"wid\",\"rss_kb\":7320}\r\nFAIL {\"jid\":\"forever\",\"errtype\":\"unknown\",\"message\":\"terminated\"}\r\nEND\r\n"
     let written = s.pop_bytes_written(0);
-    let beat = b"BEAT {\"wid\":\"wid\"}\r\nFAIL ";
-    assert_eq!(&written[0..beat.len()], &beat[..]);
-    assert!(written.ends_with(b"\r\nEND\r\n"));
-    let written: serde_json::Value =
-        serde_json::from_slice(&written[beat.len()..(written.len() - b"\r\nEND\r\n".len())])
-            .unwrap();
-    assert_eq!(
-        written
-            .as_object()
-            .and_then(|o| o.get("jid"))
-            .and_then(|v| v.as_str()),
-        Some("forever")
-    );
-    assert_eq!(written.get("errtype").unwrap().as_str(), Some("unknown"));
-    assert_eq!(written.get("message").unwrap().as_str(), Some("terminated"));
+    let written_str = std::str::from_utf8(&written[..]).unwrap();
+    let cmds: Vec<_> = written_str.splitn(3, "\r\n").collect();
+    // BEAT
+    utils::assert_worker_beat(cmds[0], "wid");
+    // FAIL
+    let fail_str = cmds[1]
+        .strip_prefix("FAIL ")
+        .expect("FAIL command name as prefix");
+    let fail: serde_json::Value = serde_json::from_str(fail_str).unwrap();
+    assert_eq!(fail["jid"], "forever");
+    assert_eq!(fail["errtype"], "unknown");
+    assert_eq!(fail["message"], "terminated");
+    // END
+    assert_eq!(cmds[2], "END\r\n");
 
     // Let's give the worker's client a chance to complete clean up on Client's drop (effectively send `END\r\n`),
     // and only after that pop bytes written into its stream. If we do not do this, we will end up with a flaky
@@ -656,4 +655,26 @@ async fn heart_broken() {
     assert_eq!(stop_details.reason, StopReason::GracefulShutdown);
     // the worker was still processing the job
     assert_eq!(stop_details.workers_still_running, 1);
+}
+
+mod utils {
+    /// Try to interpret given `value` as a beat from `wid` worker.
+    ///
+    /// Internally, with strip the `BEAT` command's prefix and - in any trailing -
+    /// suffix, interpret it as a generic `serde_json::Value` which is expected
+    /// though to have `wid` and `rss_kb` fields and - furthermore - `wid` in the
+    /// message should match the provided `wid`. As the `rss_kb` field (which appears
+    /// on each beat message since we integrated sysinfo functionality) - we only
+    /// assert that it is a number greater than zero.
+    pub(super) fn assert_worker_beat(value: &str, wid: &str) {
+        let beat_str = value
+            .strip_prefix("BEAT ")
+            .expect("BEAT command name as prefix");
+        let beat_str = beat_str.strip_suffix("\r\n").unwrap_or(beat_str);
+        let beat: serde_json::Value = serde_json::from_str(beat_str).unwrap();
+
+        assert_eq!(beat["wid"], wid);
+        assert!(beat["rss_kb"].is_number());
+        assert!(beat["rss_kb"].as_u64().unwrap() > 0);
+    }
 }

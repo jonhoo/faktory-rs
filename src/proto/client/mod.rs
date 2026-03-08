@@ -252,24 +252,36 @@ impl Client {
             }
         }
 
-        #[cfg(feature = "worker")]
         if self.opts.is_worker {
             // fill in any missing options, and remember them for re-connect
-            let hostname = self
-                .opts
-                .hostname
-                .clone()
-                .or_else(|| hostname::get().ok()?.into_string().ok())
-                .unwrap_or_else(|| "local".to_string());
-            self.opts.hostname = Some(hostname);
-            let pid = self.opts.pid.unwrap_or_else(|| std::process::id() as usize);
-            self.opts.pid = Some(pid);
-            let wid = self
-                .opts
-                .wid
-                .clone()
-                .unwrap_or_else(crate::worker::WorkerId::random);
-            self.opts.wid = Some(wid);
+            #[cfg(not(feature = "worker"))]
+            let hostname = None;
+            #[cfg(feature = "worker")]
+            let hostname = Some(
+                self.opts
+                    .hostname
+                    .clone()
+                    .or_else(|| hostname::get().ok()?.into_string().ok())
+                    .unwrap_or_else(|| "local".to_string()),
+            );
+            self.opts.hostname = hostname;
+
+            #[cfg(not(feature = "worker"))]
+            let pid = None;
+            #[cfg(feature = "worker")]
+            let pid = Some(self.opts.pid.unwrap_or_else(|| std::process::id() as usize));
+            self.opts.pid = pid;
+
+            #[cfg(not(feature = "worker"))]
+            let wid = None;
+            #[cfg(feature = "worker")]
+            let wid = Some(
+                self.opts
+                    .wid
+                    .clone()
+                    .unwrap_or_else(crate::worker::WorkerId::random),
+            );
+            self.opts.wid = wid;
 
             hello.hostname = Some(self.opts.hostname.clone().unwrap());
             hello.wid = Some(self.opts.wid.clone().unwrap());

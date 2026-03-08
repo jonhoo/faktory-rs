@@ -1,11 +1,9 @@
 use super::mutation::{Filter, JobSet};
 use super::utils::Empty;
 use crate::error::Error;
-use crate::proto::Job;
 #[cfg(feature = "worker")]
 use crate::proto::JobId;
-#[cfg(feature = "worker")]
-use crate::proto::WorkerId;
+use crate::proto::{Job, WorkerId};
 #[cfg(feature = "worker")]
 use std::error::Error as StdError;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
@@ -225,19 +223,15 @@ where
 
 #[derive(Serialize)]
 pub(crate) struct Hello {
-    #[cfg(feature = "worker")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hostname: Option<String>,
 
-    #[cfg(feature = "worker")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wid: Option<WorkerId>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg(feature = "worker")]
     pub pid: Option<usize>,
 
-    #[cfg(feature = "worker")]
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub labels: Vec<String>,
 
@@ -253,13 +247,9 @@ pub(crate) struct Hello {
 impl Default for Hello {
     fn default() -> Self {
         Hello {
-            #[cfg(feature = "worker")]
             hostname: None,
-            #[cfg(feature = "worker")]
             wid: None,
-            #[cfg(feature = "worker")]
             pid: None,
-            #[cfg(feature = "worker")]
             labels: Vec::new(),
             version: crate::proto::EXPECTED_PROTOCOL_VERSION,
             password_hash: None,

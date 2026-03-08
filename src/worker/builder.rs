@@ -46,7 +46,7 @@ impl<E> Default for WorkerBuilder<E> {
     ///  - `labels` is `["rust"]`.
     ///
     fn default() -> Self {
-        WorkerBuilder {
+        let buider = WorkerBuilder {
             opts: ClientOptions::default(),
             workers_count: 1,
             callbacks: CallbacksRegistry::default(),
@@ -54,7 +54,8 @@ impl<E> Default for WorkerBuilder<E> {
             shutdown_signal: None,
             tls_kind: TlsKind::None,
             sys: None,
-        }
+        };
+        buider.with_sysinfo()
     }
 }
 
@@ -281,54 +282,6 @@ impl<E: 'static> WorkerBuilder<E> {
         self
     }
 
-    /// Send resources consumption stats to Faktory.
-    ///
-    /// Faktory currently accepts memory stats (specifically, RSS in kilobytes)
-    /// from workers. This data is then made available in the Web UI. Call this
-    /// method on the builder in order to opt into collecting and sending stats
-    /// to the server.
-    ///
-    /// ```no_run
-    /// # use faktory::worker::Worker;
-    /// # tokio_test::block_on(async {
-    /// let _w = Worker::builder()
-    ///     .register_fn("jobtype", move |_| async { Ok::<(), std::io::Error>(()) })
-    ///     .with_sysinfo()
-    ///     .connect()
-    ///     .await
-    ///     .unwrap();
-    /// # });
-    /// ```
-    ///
-    /// Note that enabling this behavior might imply that the running program
-    /// may need some extra capabilities, e.g. - for Linix platform - permissions
-    /// to read `/proc/[PID]/statm` file, where PID is your running program's id.
-    /// No system-wide or other processes data gets collected. Furthermore, it is
-    /// only the minimal amount of data (RSS as of Faktory v1.9.3) about the current
-    /// process that gets scraped and sent over to the Faktory server periodically.
-    /// In case the process lacks permissions, this will emit a warning and will
-    /// not install the sysinfo component inside of the worker, i.e. will not be
-    /// sending stats to the Faktory server.
-    ///
-    /// Also note that this does nothing (other than emitting a warning) in case
-    /// the target OS is not supported by the
-    /// [`sysinfo`](https://docs.rs/sysinfo/latest/sysinfo/index.html#supported-oses)
-    /// crate which is being used internally.
-    pub fn with_sysinfo(mut self) -> Self {
-        match super::system::System::try_new() {
-            Err(()) => {
-                tracing::warn!("cannot install sysinfo component: the target OS is supported but access to stats failed");
-            }
-            Ok(None) => {
-                tracing::warn!("cannot install sysinfo component: the target OS is not supported");
-            }
-            Ok(Some(system)) => {
-                self.sys = Some(system);
-            }
-        }
-        self
-    }
-
     /// Connect to a Faktory server with a non-standard stream.
     ///
     /// In case you've got a `stream` that doesn't already implement `AsyncBufRead`, you will
@@ -400,5 +353,43 @@ impl<E: 'static> WorkerBuilder<E> {
                 self.connect_with(buffered, password).await
             }
         }
+    }
+}
+
+impl<E> WorkerBuilder<E> {
+    /// Send resources consumption stats to Faktory.
+    ///
+    /// Faktory currently accepts memory stats (specifically, RSS in kilobytes)
+    /// from workers. This data is then made available in the Web UI. Call this
+    /// method on the builder in order to opt into collecting and sending stats
+    /// to the server.
+    ///
+    /// Note that enabling this behavior might imply that the running program
+    /// may need some extra capabilities, e.g. - for Linix platform - permissions
+    /// to read `/proc/[PID]/statm` file, where PID is your running program's id.
+    /// No system-wide or other processes data gets collected. Furthermore, it is
+    /// only the minimal amount of data (RSS as of Faktory v1.9.3) about the current
+    /// process that gets scraped and sent over to the Faktory server periodically.
+    /// In case the process lacks permissions, this will emit a warning and will
+    /// not install the sysinfo component inside of the worker, i.e. will not be
+    /// sending stats to the Faktory server.
+    ///
+    /// Also note that this does nothing (other than emitting a warning) in case
+    /// the target OS is not supported by the
+    /// [`sysinfo`](https://docs.rs/sysinfo/latest/sysinfo/index.html#supported-oses)
+    /// crate which is being used internally.
+    pub(crate) fn with_sysinfo(mut self) -> Self {
+        match super::system::System::try_new() {
+            Err(()) => {
+                tracing::warn!("cannot install sysinfo component: the target OS is supported but access to stats failed");
+            }
+            Ok(None) => {
+                tracing::warn!("cannot install sysinfo component: the target OS is not supported");
+            }
+            Ok(Some(system)) => {
+                self.sys = Some(system);
+            }
+        }
+        self
     }
 }

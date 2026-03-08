@@ -187,8 +187,8 @@ pub struct Worker<E> {
 impl<E> Worker<E> {
     /// Whether resources consumption stats will be collected and sent to Faktory.
     ///
-    /// This will return `true` if [`WorkerBuilder::with_sysinfo`] was called
-    /// when constructing this worker and the target OS is among those supported
+    /// This will return `true` if sysinfo was successfully installed when constructing
+    /// this worker and the target OS is among those supported
     /// [`sysinfo`](https://docs.rs/sysinfo/latest/sysinfo/index.html#supported-oses)
     /// and the process has got necessary permissions to access stas files.
     pub fn is_sysinfo_enabled(&self) -> bool {
