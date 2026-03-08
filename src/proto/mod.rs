@@ -4,20 +4,22 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream as TokioStream;
 
 mod client;
-pub(crate) use client::{
-    BoxedConnection, ClientOptions, HeartbeatStatus, EXPECTED_PROTOCOL_VERSION,
-};
+
+pub(crate) use client::{BoxedConnection, EXPECTED_PROTOCOL_VERSION};
 pub use client::{Client, Connection};
+#[cfg(feature = "worker")]
+pub(crate) use client::{ClientOptions, HeartbeatStatus}; // WorkerBuilder needs ClientOptions
 
 mod single;
 
-pub use single::{
-    DataSnapshot, Failure, FaktoryState, Job, JobBuilder, JobId, ServerSnapshot, WorkerId,
-};
+pub use single::WorkerId;
+pub use single::{DataSnapshot, Failure, FaktoryState, Job, JobBuilder, JobId, ServerSnapshot};
 
 pub use single::mutation::{Filter, JobSet};
 
-pub(crate) use single::{Ack, Fail, Info, Push, PushBulk, QueueAction, QueueControl};
+#[cfg(feature = "worker")]
+pub(crate) use single::{Ack, Fail};
+pub(crate) use single::{Info, Push, PushBulk, QueueAction, QueueControl};
 
 pub(crate) mod utils;
 

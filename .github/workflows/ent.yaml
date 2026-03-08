@@ -35,4 +35,4 @@ jobs:
         env:
           FAKTORY_URL: tcp://127.0.0.1:7419
           FAKTORY_ENT: true
-        run: cargo test --locked --features ent --all-targets
+        run: cargo test --locked --features worker,ent --all-targets

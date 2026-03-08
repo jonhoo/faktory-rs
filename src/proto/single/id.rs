@@ -73,6 +73,7 @@ string_wrapper_impls!(JobId);
 #[serde(transparent)]
 pub struct WorkerId(String);
 
+#[cfg(feature = "worker")]
 impl WorkerId {
     /// Internally, generates a 32-char long random ASCII string.
     pub fn random() -> Self {
@@ -80,6 +81,7 @@ impl WorkerId {
     }
 }
 
+#[cfg(feature = "worker")]
 string_wrapper_impls!(WorkerId);
 
 // -----------------------------------------------------

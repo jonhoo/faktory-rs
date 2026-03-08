@@ -1,5 +1,5 @@
 #[cfg(doc)]
-use crate::{Client, WorkerBuilder};
+use crate::{worker::WorkerBuilder, Client};
 
 use crate::error::Stream;
 use crate::proto::{self, utils};
