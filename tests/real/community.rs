@@ -4,7 +4,7 @@ use chrono::Utc;
 use faktory::mutate::{Filter, JobSet};
 use faktory::worker::{JobRunner, StopReason, Worker, WorkerBuilder, WorkerId};
 use faktory::{Client, Job, JobBuilder, JobId};
-use rand::Rng;
+use rand::RngExt as _;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::panic::panic_any;

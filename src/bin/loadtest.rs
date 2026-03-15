@@ -3,6 +3,7 @@ use clap::{Arg, Command};
 use faktory::worker::*;
 use faktory::*;
 use rand::prelude::*;
+use rand::rngs::{StdRng, SysRng};
 use std::io;
 use std::process;
 use std::sync::{self, atomic};
@@ -72,7 +73,7 @@ async fn main() {
                 .await
                 .unwrap();
 
-            let mut rng = rand::rngs::StdRng::from_os_rng();
+            let mut rng = StdRng::try_from_rng(&mut SysRng).unwrap();
             let mut random_queues = Vec::from(QUEUES);
             random_queues.shuffle(&mut rng);
             for idx in 0..jobs {

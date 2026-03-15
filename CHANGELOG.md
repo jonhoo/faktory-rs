@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Update dependencies: `hostname`, `tokio-rustls`, `thiserror`, `rand`, `derive_builder` ([#82])
+- Update dependencies: `hostname`, `tokio-rustls`, `thiserror`, `rand`, `derive_builder` ([#82], [#112])
 - rustls: use `rustls-platform-verifier` to load certificates ([#82])
 - `Job::retry` is now `Option<usize>` and `JobBuilder::retry` is `usize` ([#97])
 - worker: all job dequeuing and worker related logic is now gated with `worker` feature ([#109])

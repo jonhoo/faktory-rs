@@ -1,5 +1,5 @@
 use chrono::naive::NaiveTime;
-use rand::{distr::Alphanumeric, rng, Rng};
+use rand::{distr::Alphanumeric, rng, RngExt as _};
 use serde::{de::Deserializer, Deserialize, Serializer};
 use std::time::Duration;
 
