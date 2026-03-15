@@ -4,6 +4,8 @@ use serde::{de::Deserializer, Deserialize, Serializer};
 use std::time::Duration;
 
 const JOB_ID_LENGTH: usize = 16;
+
+#[cfg(feature = "worker")]
 const WORKER_ID_LENGTH: usize = 32;
 
 fn gen_random_id(length: usize) -> String {
@@ -18,6 +20,7 @@ pub(crate) fn gen_random_jid() -> String {
     gen_random_id(JOB_ID_LENGTH)
 }
 
+#[cfg(feature = "worker")]
 pub(crate) fn gen_random_wid() -> String {
     gen_random_id(WORKER_ID_LENGTH)
 }
@@ -106,6 +109,7 @@ mod test {
     use super::*;
     use std::collections::HashSet;
 
+    #[cfg(feature = "worker")]
     #[test]
     fn test_id_of_known_size_generated() {
         let id1 = gen_random_id(WORKER_ID_LENGTH);

@@ -1,5 +1,3 @@
-use crate::proto::WorkerId;
-
 #[derive(Clone, Debug)]
 pub(crate) struct ClientOptions {
     /// Hostname to advertise to server.
@@ -15,7 +13,7 @@ pub(crate) struct ClientOptions {
     /// Worker ID to advertise to server.
     ///
     /// Defaults to a GUID.
-    pub(crate) wid: Option<WorkerId>,
+    pub(crate) wid: Option<crate::proto::WorkerId>,
 
     /// Labels to advertise to server.
     ///
