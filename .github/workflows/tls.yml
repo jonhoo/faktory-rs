@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     name: ubuntu-latest / stable / tls
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: true
       - name: Launch Faktory behind NGINX
