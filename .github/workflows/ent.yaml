@@ -15,7 +15,7 @@ jobs:
   test:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install redis
         run: brew install redis
       - name: Download Faktory binary
