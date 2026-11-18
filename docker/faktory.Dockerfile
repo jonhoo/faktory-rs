@@ -1,1 +1,1 @@
-FROM contribsys/faktory:1.9.4
+FROM contribsys/faktory:1.10.0
