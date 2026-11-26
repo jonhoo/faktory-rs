@@ -657,6 +657,48 @@ async fn heart_broken() {
     assert_eq!(stop_details.workers_still_running, 1);
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn shutdown_timeout_reports_the_worker_with_an_outstanding_job() {
+    let mut s = mock::Stream::new(3).pend_at_eof();
+    let shutdown = CancellationToken::new();
+    let signal = shutdown.clone();
+    let mut worker: Worker<io::Error> = Worker::builder()
+        .workers(2)
+        .with_graceful_shutdown(async move { signal.cancelled().await })
+        .shutdown_timeout(Duration::from_millis(50))
+        .register_fn("foobar", move |_| {
+            let shutdown = shutdown.clone();
+            async move {
+                shutdown.cancel();
+                std::future::pending().await
+            }
+        })
+        .connect_with(BufStream::new(s.clone()), None)
+        .await
+        .unwrap();
+
+    let job = serde_json::json!({
+        "jid": "outstanding",
+        "queue": "default",
+        "jobtype": "foobar",
+        "args": [],
+        "reserve_for": 600,
+    })
+    .to_string();
+    s.push_bytes_to_read(1, format!("${}\r\n{job}\r\n", job.len()).as_bytes());
+    s.ignore(0);
+
+    // Leave the coordinator's FAIL reply pending so shutdown hits the timeout.
+    let details = tokio::time::timeout(Duration::from_secs(5), worker.run(&["default"]))
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(details.reason, StopReason::GracefulShutdown);
+    assert!(s.pop_bytes_written(0).starts_with(b"FAIL "));
+    assert_eq!(details.workers_still_running, 1);
+}
+
 mod utils {
     /// Try to interpret given `value` as a beat from `wid` worker.
     ///

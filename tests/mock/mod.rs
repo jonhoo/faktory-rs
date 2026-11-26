@@ -13,6 +13,7 @@ pub struct Stream {
     mine: inner::MockStream,
     all: Arc<Mutex<inner::Inner>>,
     check_count: bool,
+    pend_at_eof: bool,
 }
 
 impl Default for Stream {
@@ -34,6 +35,7 @@ impl Reconnect for Stream {
             mine,
             all: Arc::clone(&self.all),
             check_count: self.check_count,
+            pend_at_eof: self.pend_at_eof,
         })))
     }
 }
@@ -45,6 +47,9 @@ impl AsyncRead for Stream {
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<io::Result<()>> {
         let mut duplex = self.mine.du.lock().unwrap();
+        if self.pend_at_eof && duplex.reader.position() == duplex.reader.get_ref().len() as u64 {
+            return std::task::Poll::Pending;
+        }
         Pin::new(&mut duplex.reader).poll_read(cx, buf)
     }
 }
@@ -109,11 +114,19 @@ impl Stream {
             mine,
             all: Arc::new(Mutex::new(inner)),
             check_count,
+            pend_at_eof: false,
         }
     }
 
     pub fn new(streams: usize) -> Self {
         Self::make(None, streams, true)
+    }
+
+    /// Keep the mock connection open after the scripted replies have been read.
+    #[allow(unused)]
+    pub fn pend_at_eof(mut self) -> Self {
+        self.pend_at_eof = true;
+        self
     }
 
     /// Use this method if you want to opt out of comparing the number of used streams with the number of
