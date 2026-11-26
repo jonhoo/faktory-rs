@@ -15,8 +15,8 @@ impl WorkerState {
         self.last_job_result.take()
     }
 
-    pub(crate) fn take_currently_running(&mut self) -> Option<JobId> {
-        self.running_job.take()
+    pub(crate) fn running_job(&self) -> Option<&JobId> {
+        self.running_job.as_ref()
     }
 
     pub(crate) fn save_last_result(&mut self, res: Result<JobId, Fail>) {

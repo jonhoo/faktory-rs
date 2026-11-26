@@ -332,7 +332,9 @@ impl<E: StdError + 'static + Send> Worker<E> {
     async fn force_fail_all_workers(&mut self, reason: &str) -> usize {
         let mut running = 0;
         for wstate in &*self.worker_states {
-            let may_be_jid = wstate.lock().unwrap().take_currently_running();
+            // Keep the job registered while reporting FAIL so a shutdown timeout can
+            // still count this worker. The processing worker clears it after reporting.
+            let may_be_jid = wstate.lock().unwrap().running_job().cloned();
             if let Some(jid) = may_be_jid {
                 running += 1;
                 let f = Fail::generic(jid, reason);
@@ -469,8 +471,9 @@ impl<E: StdError + 'static + Send> Worker<E> {
     /// supplied to [`WorkerBuilder::with_graceful_shutdown`](`Ok` is returned).
     ///
     /// The value in an `Ok` holds [`details`](StopDetails) about the reason why the run has discontinued (see [`StopReason`])
-    /// and the number of workers that may still be processing jobs. Note that `0` in [`StopDetails::workers_still_running`]
-    /// can also indicate that the [graceful shutdown period](WorkerBuilder::shutdown_timeout) has been exceeded.
+    /// and the number of workers that may still be processing jobs. If the
+    /// [graceful shutdown period](WorkerBuilder::shutdown_timeout) expires, the count is
+    /// estimated from the workers with outstanding jobs at that point.
     ///
     /// If an error occurred while reporting a job success or failure, the result will be re-reported to the server
     /// without re-executing the job. If the worker was terminated (i.e., `run` returns  with an `Ok` response),
@@ -524,7 +527,10 @@ impl<E: StdError + 'static + Send> Worker<E> {
             _ = &mut shutdown_signal => {
                 let nrunning = tokio::select! {
                      _ = async { tokio_sleep(maybe_shutdown_timeout.unwrap()).await; }, if maybe_shutdown_timeout.is_some() => {
-                        0
+                        self.worker_states
+                            .iter()
+                            .filter(|state| state.lock().unwrap().running_job().is_some())
+                            .count()
                     },
                     nrunning = self.force_fail_all_workers("termination signal received from user space") => {
                         nrunning
